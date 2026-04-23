@@ -56,3 +56,36 @@ Rewant flagged that patients get asked the same questions daily by doctors — r
 - [Engaging AI-based chatbots in digital health: systematic review — PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC12900317/)
 
 Key principles synthesized into the scoping doc (§ Conversation design principles). These are POC targets — we validate in Claude Chat before building.
+
+---
+
+## 2026-04-23 — Session 2: Day 2 waitlist shipped
+
+**Deliverable:** waitlist live on Vercel, handbook Day 2 spec met (email → Convex).
+
+**Stack locked in this push:**
+- Next.js 16.2.4 (App Router, Turbopack) + Tailwind 4
+- Convex (dev: `hardy-hamster-888`, prod: `usable-zebra-515`)
+- Vercel (project `autoimmune-health-companion` under `rewant24s-projects`)
+
+**Live URLs:**
+- App: https://autoimmune-health-companion.vercel.app
+- Repo: https://github.com/rewant24/autoimmune-health-companion
+- Convex dashboard (dev): https://dashboard.convex.dev/d/hardy-hamster-888
+- Convex prod URL: https://usable-zebra-515.convex.cloud
+
+**What ships:**
+- Landing: headline, 3 bullets (check-in / patterns / doctor report), teal accent
+- `waitlist` table (`email`, `createdAt`) with `by_email` index for dedupe
+- `addEmail` mutation: validates format, lowercases, dedupes; returns `{ ok, alreadyOnList }`
+- `WaitlistForm` client component with inline success / duplicate / error states
+- Smoke-tested: first insert accepted, second returns `alreadyOnList: true`
+
+**Route taken vs plan:**
+- Initial plan was Google Form iframe placeholder — rejected. Rewant's direction: handbook is source of truth, no placeholders. Swapped to native Convex-backed form before first deploy.
+- Missed 11am IST deadline while realigning. Shipped ~12:40 IST.
+
+**Open items (next session):**
+- **GitHub ↔ Vercel auto-deploy:** Vercel CLI couldn't connect the repo automatically (app install step missing). One-time dashboard action — install the Vercel GitHub App on `rewant24`, then future pushes auto-deploy without manual `vercel --prod`.
+- Handbook Day 2 bonus: LinkedIn launch post ("I've launched X" format) with live link.
+- Resume scoping: doctor report flow, edge cases, out-of-scope section.
