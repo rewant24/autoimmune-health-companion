@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Autoimmune Health Companion — daily health journal",
+  title: "Sakhi — a voice-first health companion for autoimmune patients",
   description:
-    "A daily health journal for people living with autoimmune conditions — so your next doctor visit starts with data, not memory.",
+    "A voice-first health companion for people living with autoimmune conditions. So your next doctor visit starts with data, not memory.",
 };
 
 export default function RootLayout({
