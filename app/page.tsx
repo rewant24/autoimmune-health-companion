@@ -1,3 +1,5 @@
+import { WaitlistForm } from "./WaitlistForm";
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-zinc-50 font-sans dark:bg-zinc-950">
@@ -44,19 +46,7 @@ export default function Home() {
               We&apos;ll email you when early access opens.
             </p>
           </div>
-          <div className="overflow-hidden rounded-lg">
-            <iframe
-              src="https://docs.google.com/forms/d/e/1FAIpQLSex-kdpv3Z5xuiI5zjNDwIq2wU0vVOeyn-lQB0gbodYdxmkCw/viewform?embedded=true"
-              width="100%"
-              height="520"
-              frameBorder={0}
-              marginHeight={0}
-              marginWidth={0}
-              title="Autoimmune Health Companion — waitlist signup"
-            >
-              Loading…
-            </iframe>
-          </div>
+          <WaitlistForm />
         </section>
 
         <footer className="flex flex-col gap-1 border-t border-zinc-200 pt-6 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-500">
