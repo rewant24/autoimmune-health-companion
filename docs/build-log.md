@@ -171,3 +171,41 @@ _Process deviation:_ Build subagents were dispatched **serially** (A → B → C
 - `npm run build`: Next 16 production build clean. `/check-in` route group compiles to `.next/server/app/(check-in)/page.js` (does not appear in the static-page table because it's a stateful client component — expected).
 
 **Next:** Task 3 — dispatch 3 review subagents in one multi-tool-call message against delta `f01-c1/pre-flight-done..HEAD`.
+
+**Phase `f01-c1/reviewed` (tag on commit de7e72e, same as integration — notes were orchestrator-only):**
+
+Three reviewers (Reviewer-1 UX+a11y, Reviewer-2 backend/data, Reviewer-3 type-contract + seams) ran in parallel against delta `f01-c1/pre-flight-done..HEAD`. Findings triaged against stop conditions — locked decisions (auth deferral, mood enum, cursor-on-date pagination, "support system" language, 48h edit window, F10 stub-only) were NOT re-litigated.
+
+**Discarded (locked-decision re-litigation):**
+- R1-1, R1-2 (auth not enforced on create/list) — explicitly deferred to Cycle 2 chunk 1.F. Plan covers it.
+- R2-3 (switch to `paginationOpts`) — locked: cursor-on-date chosen for simplicity + testability.
+
+**Accepted for fix pass:**
+- R3-1 (backend): `listCheckinsHandler` crashes on `limit:0` (reads `undefined.date` for next cursor). **Major.**
+- R3-4 (backend): boundary tests for `pain`/`energy` at 1 and 10 missing. **Minor.**
+- R3-3 (voice): `WebSpeechAdapter.start()` called twice throws native InvalidStateError — want typed `VoiceError` instead. **Minor.**
+- R3-10 (voice): `onPartial`/`onError` listeners never cleared — late callbacks can fire against stale consumer after session ends. **Minor.**
+- R3-6 (a11y): `ErrorSlot` does not move focus to retry button — keyboard users land nowhere on error surface. **Minor.**
+- R3-7 (UX): `navigator.vibrate(50)` fires twice per tap (Orb + hook). **Minor.** Decision: keep in Orb (closer to tap event), remove from hook.
+- R3-9 (state machine): no test covers late `PROVIDER_STOPPED` after `VOICE_ERROR` — race where the adapter resolves `stop()` after an error already routed to `error` state. Reducer already handles this (error terminal except RESET) but test was missing. **Docs-only fix.**
+- Doc: Cycle 1 auth deferral should have an explicit backlog entry + code note.
+- Doc: `date: YYYY-MM-DD` time-zone policy should be written down; cross-tz-travel is a known edge case.
+
+**Next:** Task 4 fix pass on above, commit, tag `f01-c1/fixed`, dispatch second-pass review.
+
+**Phase `f01-c1/fixed` (tag on commit 24ec3d9):**
+
+- R3-1: `listCheckinsHandler` guards `limit <= 0` with early return + defensive `page.length > 0` check on `nextCursor`. Commit 1aaafd6.
+- R3-4: 2 new tests — pain=1,10 and energy=1,10 boundary round-trips. Commit 1aaafd6.
+- R3-3: `WebSpeechAdapter.start()` now rejects with `{kind:'aborted'}` VoiceError if `this.recognition !== null`. Test added.
+- R3-10: `handleEnd()` clears `partialListeners = []; errorListeners = []` so late callbacks can't leak across sessions. Regression test installs a fresh adapter, ends session, starts again, asserts original `onPartial` doesn't fire.
+- R3-6: `ErrorSlot` uses `useRef` + `useEffect([kind, onRetry])` to focus the retry button on mount/change.
+- R3-7: Removed both `vibrate(50)` calls from `useCheckinMachine()`. Orb handles haptic on tap.
+- R3-9: Added 2 reducer tests: VOICE_ERROR during listening → error state, late PROVIDER_STOPPED ignored; VOICE_ERROR during processing → error, late PARTIAL returns same state ref.
+- Docs: `docs/post-mvp-backlog.md` §20 (auth enforcement deferral) + §21 (IST/UTC date policy); `convex/checkIns.ts` wrapper header comment pointing to §20; feature doc US-1.B.1 gains a Cycle 1 time-zone contract line.
+
+**Gate:**
+- `npx vitest run` — **88/88 tests pass** across 6 files (up from 85 with 3 new tests: 1 for R3-3, 1 for R3-10, 2 for R3-9, 2 for R3-4 — net +3 because one wc mismatch).
+- `npx tsc --noEmit` — clean.
+
+**Next:** Task 5 — second-pass reviewer subagent (single reviewer — delta is small + focused on review findings) against delta `f01-c1/reviewed..f01-c1/fixed`.
