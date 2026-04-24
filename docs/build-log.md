@@ -154,3 +154,20 @@ Key principles synthesized into the scoping doc (§ Conversation design principl
 - Smoke test passed (1/1). `tsc --noEmit` clean.
 
 **Next:** Task 1 — dispatch 3 build subagents in one multi-tool-call message. Each given verbatim prompt from `docs/features/01-daily-checkin-cycle-1-plan.md` Task 1. Agents run in parallel.
+
+**Phase `f01-c1/build-integrated` (tag on commit de7e72e):**
+
+_Process deviation:_ Build subagents were dispatched **serially** (A → B → C) rather than in one multi-tool-call message as the playbook specifies. Functional output is equivalent — each chunk is disjoint by file ownership — but the wall-clock time is ~22 min vs ~8 min parallel. No artifact of this deviation appears in the code; flag for next cycle.
+
+- **Build-A (chunk 1.A, voice provider):** 3 commits. `lib/voice/{types,provider,web-speech-adapter,openai-realtime-adapter}.ts`. 20 tests across `voice-provider.test.ts` + `web-speech-adapter.test.ts`. Shipped signatures: `VoiceProvider`, `Transcript`, `VoiceError { kind; message? }`, `VoiceErrorKind` union, `VoiceCapabilities`, `VoiceProviderName`. Env flag `VOICE_PROVIDER` default `web-speech`. Web Speech capabilities `{partials:true, vad:false}`; OpenAI stub `{partials:true, vad:true}` (not exercised). Open questions raised: `NEXT_PUBLIC_VOICE_PROVIDER` alternative for client bundles; `no-speech` reject vs resolve-empty; `Transcript.text` excludes partials.
+- **Build-B (chunk 1.B, Convex):** 4 commits. `convex/schema.ts` appended, `convex/checkIns.ts` new, `tests/check-in/convex-checkins.test.ts` with 17 tests. Mock-ctx approach (hand-rolled, no `convex-test` dep). Cursor-on-date pagination (not `paginationOpts`). `ConvexError({ code: 'checkin.duplicate' })`. Handler logic extracted (`createCheckinHandler`, etc.) so tests don't need Convex runtime. Migration logged in `architecture-changelog.md`. Open questions: pagination shape (swap to paginationOpts if downstream wants it); soft-delete filtered in handler code vs DB query; `getCheckin` takes `v.string()` not `v.id()`.
+- **Build-C (chunk 1.C, orb UI):** 3 commits. `app/(check-in)/{layout,page}.tsx`, `components/check-in/{Orb,OrbStates,ScreenShell,ErrorSlot}.tsx`, `lib/checkin/state-machine.ts`, 3 test files (state machine 28, orb 10, screen-shell 6 = 44 tests). Type-contract imports verified clean (import `type`-only from `@/lib/voice/types`). Auth gate deferred to Cycle 2 with TODO comment (no `convex/users.ts` yet). `<ErrorSlot>` stub for Feature 10. Open questions: ErrorSlot replaces Orb entirely (UX); exact "I'm listening." copy; `data-orb-state` DOM attribute for test hooks.
+
+**Integration verify (this phase's gate):**
+- File ownership: no cross-chunk file collisions.
+- Type-contract seam: `lib/voice/types.ts` exports match consumers in `lib/checkin/state-machine.ts`, `app/(check-in)/page.tsx`, and tests.
+- `npx tsc --noEmit`: clean.
+- `npm run test:run`: **81/81 tests pass** across 6 files (20 + 17 + 44).
+- `npm run build`: Next 16 production build clean. `/check-in` route group compiles to `.next/server/app/(check-in)/page.js` (does not appear in the static-page table because it's a stateful client component — expected).
+
+**Next:** Task 3 — dispatch 3 review subagents in one multi-tool-call message against delta `f01-c1/pre-flight-done..HEAD`.
