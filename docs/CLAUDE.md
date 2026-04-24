@@ -1,11 +1,23 @@
-# Autoimmune Health Companion
+# Autoimmune Health Companion (Sakhi)
+
+> **On session start, read these files first — in this order:**
+> 1. `docs/scoping.md` — canonical product spec (Rewant-authored). Primary source of truth.
+> 2. `docs/build-plan.md` — active build plan. Structure, conventions, feature breakdowns.
+> 3. `docs/system-map.md` — current visual state: features, subagents, status.
+> 4. `docs/product-taxonomy.md` — capability-level view of what Sakhi does.
+> 5. `docs/tech-stack.md` — current versions + upgrade rules.
+> 6. If the user mentions a specific feature (e.g., "Check-in"), also read `docs/features/NN-slug.md`.
+>
+> These files are the working context for every conversation about this project. Do not skip step 1 — scoping.md is the authoritative spec and overrides any stale understanding. When scoping.md and any other doc conflict, scoping.md wins.
+>
+> **Also maintained continuously:** `docs/architecture-decisions.md` (ADRs, append-only), `docs/architecture-changelog.md` (dated changes), `docs/post-mvp-backlog.md` (deferred items), `docs/build-log.md` (session chronicle), `docs/features/*.md` (per-feature chunks + stories + acceptance).
 
 ## What this app does
 Helps people living with autoimmune diseases log symptoms, pain, and medication daily — then surfaces patterns and correlations so patients can have better conversations with their doctors. Think of it as a personal health journal that thinks for you.
 
 ## Who it's for
 - **Primary:** Patients with autoimmune diseases (e.g. arthritis, lupus) — managing variable symptoms and rotating medications
-- **Secondary:** Caregivers who want a shared view of the patient's condition
+- **Secondary:** Members of the patient's support system (spouse / parent / adult child) who want a shared, patient-granted view of her condition
 - **Tertiary:** Doctors who need longitudinal data at appointments, not just "how do you feel today"
 
 ## The core problem (from user research)

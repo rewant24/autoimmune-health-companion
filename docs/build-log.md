@@ -89,3 +89,44 @@ Key principles synthesized into the scoping doc (§ Conversation design principl
 - **GitHub ↔ Vercel auto-deploy:** Vercel CLI couldn't connect the repo automatically (app install step missing). One-time dashboard action — install the Vercel GitHub App on `rewant24`, then future pushes auto-deploy without manual `vercel --prod`.
 - Handbook Day 2 bonus: LinkedIn launch post ("I've launched X" format) with live link.
 - Resume scoping: doctor report flow, edge cases, out-of-scope section.
+
+---
+
+## 2026-04-25 — Session 3: Wholesome build plan + living docs scaffolded
+
+**Deliverable:** full product build plan + 3 living docs + 10 feature MDs + session-start context rule. Plan approved; ready for Phase 1 build (Feature 01 Cycle 1) in a new tab.
+
+**Locked decisions (7):**
+1. Plan depth — structure + Features 01/02 fully broken down; 03–10 sketched with chunking cycle as first build task.
+2. Build order — dependency-driven: 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10.
+3. Memory edit window — **48 hours**.
+4. Feature 10 timing — stub in F01 C1, finalize last.
+5. Parallel lanes — decide each time (I ask at each phase's review step).
+6. F03–10 chunking authorship — agent drafts; 3 reviewer subagents check the draft in parallel with Rewant review; merged fix list applied before feature enters `ready`.
+7. Session-start context rule — every new session auto-loads 5 canonical docs (scoping, build-plan, system-map, product-taxonomy, tech-stack) via `docs/CLAUDE.md` header + memory pointer.
+
+**New files created (15):**
+- `docs/build-plan.md` — master plan (sections 1–9 + Appendices A & B). Source of truth for the build.
+- `docs/system-map.md` — living visual map (5 Mermaid diagrams: feature deps, subagent topology, chunking cycle, status lifecycle, docs topology).
+- `docs/product-taxonomy.md` — living capability mindmap + capability→feature table.
+- `docs/tech-stack.md` — living stack layer diagram + dependency ledger + upgrade rules + breaking-change watchlist.
+- `docs/features/README.md` — index, status vocabulary, build cycle pattern, feature MD template.
+- `docs/features/01-daily-checkin.md` — full breakdown (6 chunks, 14 stories, 4-lane acceptance).
+- `docs/features/02-memory.md` — full breakdown (6 chunks, 12 stories, 4-lane acceptance).
+- `docs/features/03-patterns.md` through `10-edge-case-templates.md` — 8 stubs (status: scoped; first build task = chunking cycle).
+
+**Files updated (1):**
+- `docs/CLAUDE.md` — prepended session-start checklist so every new conversation auto-loads canonical context.
+
+**Memory updates (2):**
+- `~/.claude/projects/-Users-rewantprakash-1/memory/autoimmune_companion.md` — session-start pointer added.
+- `~/.claude/projects/-Users-rewantprakash-1/memory/MEMORY.md` — living docs listed in the Autoimmune section.
+
+**Process adopted (from verbatim brief, preserved as Appendix B in build-plan.md):**
+- Hierarchy: feature → chunks → user stories → 4-lane acceptance (UX / UI / backend-data / UX copy).
+- Parallel dispatch: 3 build subagents per cycle, each with disjoint file ownership, dispatched via a single multi-tool-call message.
+- 3 review subagents after build: brief alignment / spec+regression / edge cases.
+- Second-pass reviewer catches the 1–2 things pass one missed; "decisions already made — don't re-litigate".
+- Chunking cycles (for F03–10) use the same dual-track: Plan subagent drafts + 3 reviewer subagents check + Rewant review, all in parallel.
+
+**Next step:** open a new tab in `/Volumes/Coding Projects + Docker/autoimmune-health-companion/` → Phase 1 = Feature 01 Cycle 1 build dispatch (chunks 1.A, 1.B, 1.C in parallel).
