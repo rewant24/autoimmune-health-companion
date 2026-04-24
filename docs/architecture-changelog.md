@@ -9,6 +9,24 @@
 
 ---
 
+## 2026-04-25 — F01 C1 shipped: voice check-in foundation
+
+**Scope.** Feature 01 Cycle 1 (chunks 1.A voice provider, 1.B Convex data, 1.C orb UI) shipped on branch `feat/f01-cycle-1`. Tagged `f01-c1/shipped`.
+
+**What landed.**
+- `lib/voice/` — `VoiceProvider` contract + `WebSpeechAdapter` (`en-IN`, continuous + interim) + `OpenAIRealtimeAdapter` stub. Provider resolved from `VOICE_PROVIDER` env, defaults to `web-speech`.
+- `convex/schema.ts` + `convex/checkIns.ts` — `checkIns` table, `by_user_date` index, `createCheckin` / `listCheckins` / `getCheckin`. Cursor-on-date pagination. `ConvexError({code,message})` for `checkin.duplicate` / `checkin.invalid_range`. Handlers extracted as plain functions (mock-ctx testable).
+- `app/(check-in)/` + `components/check-in/` + `lib/checkin/state-machine.ts` — 7-state reducer (idle → requesting-permission → listening → processing → confirming → saving → saved|error), orb component with 4 visual states + motion-safe animations, `ScreenShell`, `ErrorSlot` (Feature 10 stub).
+- `vitest.config.ts` + `tests/setup.ts` + `package.json` scripts — test infra wired.
+
+**Gate at ship.** 88/88 tests pass across 6 files; `tsc --noEmit` clean; `next build` clean. Two rounds of parallel-subagent review (3 reviewers first pass + 1 reviewer second pass). Fix-pass addressed R3-1/3/4/6/7/9/10.
+
+**Deferred to Cycle 2.** Auth enforcement (chunk 1.F — currently trusts `userId` arg), scripted-metric conversation (chunk 1.D), save wiring + confirmation screen (chunk 1.E). See `docs/post-mvp-backlog.md` §20 for auth note, §21 for tz/IST policy.
+
+**Related ADR.** ADR-005 (skip Stage 2 when open-first covers all 5 metrics) — implemented per lock.
+
+---
+
 ## 2026-04-25 — F01 C1: checkIns table
 - New table `checkIns` with index `by_user_date` on (userId, date).
 - Enum `mood`: heavy | flat | okay | bright | great.
