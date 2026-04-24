@@ -160,6 +160,12 @@ export async function listCheckinsHandler(
 ): Promise<{ items: CheckinRow[]; nextCursor: string | null }> {
   const limit = args.limit ?? 20;
 
+  // Guard: non-positive limit returns empty page immediately.
+  // (Review finding R3-1: limit:0 previously crashed on nextCursor = undefined.date.)
+  if (limit <= 0) {
+    return { items: [], nextCursor: null };
+  }
+
   const all = await ctx.db
     .query("checkIns")
     .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
@@ -180,7 +186,7 @@ export async function listCheckinsHandler(
 
   const page = filtered.slice(0, limit);
   const hasMore = filtered.length > limit;
-  const nextCursor = hasMore ? page[page.length - 1].date : null;
+  const nextCursor = hasMore && page.length > 0 ? page[page.length - 1].date : null;
 
   return { items: page, nextCursor };
 }

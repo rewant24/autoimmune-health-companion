@@ -130,6 +130,26 @@ describe('createCheckinHandler', () => {
     ).rejects.toThrow(/Invalid range for pain\/energy/)
   })
 
+  it('accepts pain=1 and energy=1 at lower boundary', async () => {
+    const { ctx, rows } = makeCtx()
+    await createCheckinHandler(
+      ctx as unknown as Parameters<typeof createCheckinHandler>[0],
+      baseArgs({ pain: 1, energy: 1, clientRequestId: 'req_low' }),
+    )
+    expect(rows[0].pain).toBe(1)
+    expect(rows[0].energy).toBe(1)
+  })
+
+  it('accepts pain=10 and energy=10 at upper boundary', async () => {
+    const { ctx, rows } = makeCtx()
+    await createCheckinHandler(
+      ctx as unknown as Parameters<typeof createCheckinHandler>[0],
+      baseArgs({ pain: 10, energy: 10, clientRequestId: 'req_high' }),
+    )
+    expect(rows[0].pain).toBe(10)
+    expect(rows[0].energy).toBe(10)
+  })
+
   it('idempotent: same (userId, date, clientRequestId) returns existing id', async () => {
     const { ctx, rows } = makeCtx()
     const first = await createCheckinHandler(
@@ -180,6 +200,23 @@ describe('listCheckinsHandler', () => {
     const { ctx } = makeCtx()
     const result = await listCheckinsHandler(ctx as unknown as Parameters<typeof createCheckinHandler>[0], {
       userId: 'user_A',
+    })
+    expect(result.items).toEqual([])
+    expect(result.nextCursor).toBeNull()
+  })
+
+  it('limit:0 returns empty without throwing (review R3-1)', async () => {
+    const { ctx } = makeCtx()
+    // Seed some rows so we know limit:0 doesn't just hit the empty path.
+    for (const date of ['2026-04-23', '2026-04-24']) {
+      await createCheckinHandler(
+        ctx as unknown as Parameters<typeof createCheckinHandler>[0],
+        baseArgs({ date, clientRequestId: `req_${date}` }),
+      )
+    }
+    const result = await listCheckinsHandler(ctx as unknown as Parameters<typeof createCheckinHandler>[0], {
+      userId: 'user_A',
+      limit: 0,
     })
     expect(result.items).toEqual([])
     expect(result.nextCursor).toBeNull()
