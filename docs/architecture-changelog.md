@@ -9,6 +9,14 @@
 
 ---
 
+## 2026-04-25 — F01 C1: checkIns table
+- New table `checkIns` with index `by_user_date` on (userId, date).
+- Enum `mood`: heavy | flat | okay | bright | great.
+- `clientRequestId` for idempotent create. Soft delete via `deletedAt`.
+- Existing `waitlist` untouched.
+
+---
+
 ## 2026-04-24 — Q1 closed: "support system" is Sonakshi's word
 
 **Related ADR:** none — this is a language/copy decision that aligns with the already-locked § Language conventions.
