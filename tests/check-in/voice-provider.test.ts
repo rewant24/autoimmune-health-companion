@@ -35,6 +35,12 @@ describe('getVoiceProvider factory', () => {
   it('returns an OpenAIRealtimeAdapter when requested', () => {
     const provider = getVoiceProvider('openai-realtime')
     expect(provider).toBeInstanceOf(OpenAIRealtimeAdapter)
+    expect(provider.capabilities).toEqual({ partials: true, vad: true })
+  })
+
+  it('stub adapter throws NotImplementedError on start()', async () => {
+    const provider = getVoiceProvider('openai-realtime')
+    await expect(provider.start()).rejects.toThrow(/NotImplementedError/)
   })
 
   it('returns fresh instances on each call (no singleton)', () => {
