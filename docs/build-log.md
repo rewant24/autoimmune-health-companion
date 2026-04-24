@@ -130,3 +130,27 @@ Key principles synthesized into the scoping doc (§ Conversation design principl
 - Chunking cycles (for F03–10) use the same dual-track: Plan subagent drafts + 3 reviewer subagents check + Rewant review, all in parallel.
 
 **Next step:** open a new tab in `/Volumes/Coding Projects + Docker/autoimmune-health-companion/` → Phase 1 = Feature 01 Cycle 1 build dispatch (chunks 1.A, 1.B, 1.C in parallel).
+
+---
+
+## 2026-04-25 — Session 4: Overnight — F01 Cycle 1 build (in progress)
+
+**Mode:** orchestrator autonomous. Branch `feat/f01-cycle-1` off `main@1a4ab10`. Phase-boundary annotated tags; no push.
+
+**Phase `f01-c1/plan-saved` (commit 82473e5):**
+- Plan doc `docs/features/01-daily-checkin-cycle-1-plan.md` written and committed. Resume guide + tag table + verbatim dispatch prompts + locked-decision list embedded.
+- Session-start repo was dirty (planning docs from Session 3). Committed on main as `1a4ab10` before branching.
+- Stale `.git/index.lock` from Apr 23 removed (no live git process).
+- Tag created.
+
+**Next:** Task 0 pre-flight — vitest + RTL + jsdom install, smoke test, commit, tag `f01-c1/pre-flight-done`.
+
+**Phase `f01-c1/pre-flight-done` (commit d2de361):**
+- `npm install -D vitest @vitejs/plugin-react @testing-library/react @testing-library/jest-dom @testing-library/user-event jsdom` — 103 packages added, 2 moderate vulnerabilities (not blocking).
+- `vitest.config.ts` — jsdom env, React plugin, `tests/**/*.test.{ts,tsx}` glob, `@/` alias.
+- `tests/setup.ts` — `@testing-library/jest-dom/vitest` import.
+- `tsconfig.json` — added `"types": ["vitest/globals", "@testing-library/jest-dom"]` so agents can write `describe`/`it`/`expect` globally without imports.
+- Scripts added: `test`, `test:run`, `typecheck`.
+- Smoke test passed (1/1). `tsc --noEmit` clean.
+
+**Next:** Task 1 — dispatch 3 build subagents in one multi-tool-call message. Each given verbatim prompt from `docs/features/01-daily-checkin-cycle-1-plan.md` Task 1. Agents run in parallel.
