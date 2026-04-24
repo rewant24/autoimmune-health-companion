@@ -161,6 +161,7 @@ tests/check-in/*.test.ts
   - **UX:** n/a.
   - **UI:** n/a.
   - **Backend / data:** index on `(userId, date)` unique-ish (one check-in per user per IST day; conflict handled in 1.F). Validators enforce ranges. Schema migration documented in `architecture-changelog.md`.
+  - **Time-zone contract (Cycle 1):** `date` is a bare `YYYY-MM-DD` string chosen by the *client* against the device's wall clock. Cycle 1 assumes the user is IST-fixed (Sonakshi). Cross-tz travel is a known edge case — see `post-mvp-backlog.md` §21 ("Check-in date time-zone policy").
   - **UX copy:** none.
 
 ### US-1.B.2 — `createCheckin` mutation

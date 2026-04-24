@@ -191,6 +191,26 @@ This is the **only backlog item that needs a first pass before Saturday**, becau
 
 ---
 
+## 20. Auth enforcement for check-in endpoints
+
+**Why out of MVP (Cycle 1 only).** Feature 01 Cycle 1 ships the voice check-in flow against Convex without a live identity layer. `createCheckin`, `listCheckins`, and `getCheckin` trust the `userId` arg from the client. This is a *deliberate* Cycle 1 deferral — not a missed requirement. Cycle 2 adds the auth slice (chunk 1.F in `docs/features/01-daily-checkin.md`).
+
+**Post-Cycle-1 shape (i.e. what Cycle 2 does).** Swap the trusted arg for `ctx.auth.getUserIdentity()` — derive an app-level `userId` from the token identity inside the handler, drop the arg from the public validators, and add a reject path for unauthenticated callers (`ConvexError({ code: "auth.unauthenticated" })`). Also add an ownership check to `getCheckin` so a caller can't fetch another user's row by ID.
+
+**Architectural hook.** Handler bodies are already extracted as plain functions that take a `MutationHandlerCtx` / `QueryHandlerCtx` — Cycle 2 only changes the wrapper (where `userId` comes from), not the handler. Tests already exercise the handlers with a mock ctx and won't need rewriting when auth lands.
+
+---
+
+## 21. Check-in date time-zone policy (IST vs. UTC)
+
+**Why out of MVP (explicit note, not a deferred feature).** `checkIns.date` is a `YYYY-MM-DD` string. Cycle 1 trusts the *client* to choose the correct day boundary (midnight in the user's local time), and Sonakshi — the primary user — lives in IST. Spec'd behaviour: one check-in per *local* calendar day, where local = the device's wall clock.
+
+**Post-MVP shape / known edge case.** Users who travel across time zones mid-day can produce a `duplicate` error if their device ticks over a day while the previous day's check-in hasn't been cleared. The fix is to persist a `timeZone: string` alongside each check-in (IANA zone) and normalise the day boundary server-side — deferred because the target user is IST-fixed.
+
+**Architectural hook.** Add `timeZone: v.optional(v.string())` to the schema when this ships. The `by_user_date` index remains on the string date field; the tz is metadata for reconciliation.
+
+---
+
 ## Review cadence
 
 This backlog is reviewed at two points:

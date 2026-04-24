@@ -15,6 +15,8 @@
  * STUB: Feature 10 will replace with full edge-case templates.
  */
 
+import { useEffect, useRef } from 'react'
+
 export interface ErrorSlotProps {
   kind: string
   message?: string
@@ -26,6 +28,16 @@ export function ErrorSlot({
   message,
   onRetry,
 }: ErrorSlotProps): React.JSX.Element {
+  const retryRef = useRef<HTMLButtonElement | null>(null)
+
+  // R3-6: When the error surface appears (or its kind changes), move focus
+  // to the retry button so keyboard + screen-reader users land on the
+  // recovery action immediately. role="alert" handles the announcement;
+  // focus handles navigation.
+  useEffect(() => {
+    if (onRetry) retryRef.current?.focus()
+  }, [kind, onRetry])
+
   return (
     <section
       role="alert"
@@ -46,6 +58,7 @@ export function ErrorSlot({
       </p>
       {onRetry ? (
         <button
+          ref={retryRef}
           type="button"
           onClick={onRetry}
           className={

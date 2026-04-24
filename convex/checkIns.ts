@@ -202,6 +202,12 @@ export async function getCheckinHandler(
 }
 
 // ---- Convex wrappers ----
+//
+// AUTH (Cycle 2, chunk 1.F): these wrappers currently trust the `userId`
+// arg from the client. Cycle 2 replaces this with Convex auth —
+// `ctx.auth.getUserIdentity()` → tokenIdentifier → app userId, and the
+// `userId` arg is dropped. Tracked in docs/post-mvp-backlog.md
+// ("Auth enforcement for check-in endpoints").
 
 export const createCheckin = mutation({
   args: {

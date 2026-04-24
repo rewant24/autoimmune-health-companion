@@ -193,6 +193,42 @@ describe('reducer: RESET from every state returns to idle', () => {
   })
 })
 
+describe('R3-9: late event race — error state is terminal', () => {
+  // When the provider errors mid-stream, VOICE_ERROR fires first. The
+  // pending stop() may still resolve afterwards, dispatching a late
+  // PROVIDER_STOPPED. The reducer must not clobber the error state.
+  it('VOICE_ERROR during listening → error, late PROVIDER_STOPPED is ignored', () => {
+    const afterError = reducer(
+      { kind: 'listening', partial: 'halfway through' },
+      { type: 'VOICE_ERROR', error: voiceErr('network') },
+    )
+    expect(afterError).toEqual({
+      kind: 'error',
+      error: { kind: 'network' },
+    })
+
+    // Late PROVIDER_STOPPED arrives after the adapter finally winds down.
+    const afterLate = reducer(afterError, {
+      type: 'PROVIDER_STOPPED',
+      transcript,
+    })
+    expect(afterLate).toEqual(afterError)
+  })
+
+  it('VOICE_ERROR during processing → error, late events ignored', () => {
+    const afterError = reducer(
+      { kind: 'processing', transcript },
+      { type: 'VOICE_ERROR', error: voiceErr('aborted') },
+    )
+    expect(afterError.kind).toBe('error')
+    const afterLate = reducer(afterError, {
+      type: 'PARTIAL',
+      text: 'stragglers',
+    })
+    expect(afterLate).toBe(afterError)
+  })
+})
+
 describe('toOrbState mapping', () => {
   it('maps machine states to visual states', () => {
     expect(toOrbState({ kind: 'idle' })).toBe('idle')

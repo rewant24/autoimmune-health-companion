@@ -188,6 +188,37 @@ describe('WebSpeechAdapter — happy path', () => {
     const adapter = new WebSpeechAdapter()
     await expect(adapter.stop()).rejects.toMatchObject({ kind: 'aborted' })
   })
+
+  it('R3-3: start() while already active rejects with aborted', async () => {
+    const adapter = new WebSpeechAdapter()
+    const errors: VoiceError[] = []
+    adapter.onError((e) => errors.push(e))
+    await adapter.start()
+    await expect(adapter.start()).rejects.toMatchObject({ kind: 'aborted' })
+    expect(errors[0]?.kind).toBe('aborted')
+  })
+
+  it('R3-10: listeners are cleared after session ends (no stale callbacks)', async () => {
+    const adapter = new WebSpeechAdapter()
+    const partials: string[] = []
+    adapter.onPartial((p) => partials.push(p))
+    await adapter.start()
+
+    // Simulate clean session end via stop() + end.
+    const stopPromise = adapter.stop()
+    handle.emitEnd()
+    await stopPromise
+
+    // Start a new session on the same adapter. The previously registered
+    // onPartial listener should NOT fire for the new session — it belonged
+    // to the ended session.
+    const fresh = installFake()
+    await adapter.start()
+    fresh.emitResult(0, [
+      { isFinal: false, length: 1, 0: { transcript: 'leaked', confidence: 0.5 } },
+    ])
+    expect(partials).toEqual([])
+  })
 })
 
 describe('WebSpeechAdapter — error mapping', () => {

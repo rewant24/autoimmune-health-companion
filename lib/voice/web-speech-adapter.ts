@@ -125,6 +125,18 @@ export class WebSpeechAdapter implements VoiceProvider {
   }
 
   async start(): Promise<void> {
+    // R3-3: Guard against double-start. The native SpeechRecognition throws
+    // InvalidStateError if start() is called while already started, but we
+    // want a typed `aborted` VoiceError for consistent UI handling.
+    if (this.recognition !== null) {
+      const err: VoiceError = {
+        kind: 'aborted',
+        message: 'start() called while recognition is already active.',
+      }
+      this.emitError(err)
+      throw err
+    }
+
     const Ctor = resolveCtor()
     if (!Ctor) {
       const err: VoiceError = {
@@ -220,18 +232,21 @@ export class WebSpeechAdapter implements VoiceProvider {
   }
 
   private handleEnd(): void {
-    if (!this.stopPromise) {
-      // Ended without a pending stop() — user or browser killed the session.
-      return
+    if (this.stopPromise) {
+      const transcript: Transcript = {
+        text: this.finalText,
+        durationMs: Math.max(0, Date.now() - this.startedAt),
+        confidence: this.lastConfidence,
+      }
+      this.stopPromise.resolve(transcript)
+      this.stopPromise = null
     }
-    const transcript: Transcript = {
-      text: this.finalText,
-      durationMs: Math.max(0, Date.now() - this.startedAt),
-      confidence: this.lastConfidence,
-    }
-    this.stopPromise.resolve(transcript)
-    this.stopPromise = null
+    // R3-10: Clear listeners once the session has fully ended so late
+    // callbacks can't fire against a stale consumer. This runs whether we
+    // ended cleanly via stop() or the browser killed the session.
     this.recognition = null
+    this.partialListeners = []
+    this.errorListeners = []
   }
 
   private emitError(err: VoiceError): void {

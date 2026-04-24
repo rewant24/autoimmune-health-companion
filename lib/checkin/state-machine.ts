@@ -208,15 +208,9 @@ export function useCheckinMachine(
     p.onError((error) => dispatch({ type: 'VOICE_ERROR', error }))
   }, [])
 
-  // Safe wrapper for navigator.vibrate (best-effort haptic feedback).
-  const vibrate = (pattern: number): void => {
-    if (typeof navigator === 'undefined') return
-    try {
-      if (typeof navigator.vibrate === 'function') navigator.vibrate(pattern)
-    } catch {
-      // swallow — haptics are best-effort only.
-    }
-  }
+  // R3-7: Haptic feedback lives on the Orb component (closer to the tap
+  // event and present even when this hook isn't wired). Don't duplicate it
+  // here or each tap vibrates twice.
 
   const wrappedDispatch = (event: Event): void => {
     const current = stateRef.current
@@ -224,7 +218,6 @@ export function useCheckinMachine(
     // Intent interception for TAP_ORB — fire side effects, then dispatch.
     if (event.type === 'TAP_ORB') {
       if (current.kind === 'idle') {
-        vibrate(50)
         dispatch({ type: 'TAP_ORB' })
         // Kick off provider.start; resolve → PERMISSION_GRANTED.
         providerRef.current
@@ -241,7 +234,6 @@ export function useCheckinMachine(
         return
       }
       if (current.kind === 'listening') {
-        vibrate(50)
         providerRef.current
           .stop()
           .then((transcript) =>
