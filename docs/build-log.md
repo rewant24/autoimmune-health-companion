@@ -232,3 +232,38 @@ Final tally:
 - **Files created:** 14 new source + 6 test + 1 plan + 1 vitest config + 1 setup = 23.
 
 **Resume from any tag** if you want to re-run a phase: `git checkout <tag>` (detached), then cherry-pick forward or reset to it.
+
+---
+
+## 2026-04-25 — Session 5: F01 C1 merged to main, F02 C1 prep
+
+**Deliverable:** `feat/f01-cycle-1` merged to main (commit `e190a7b`, `--no-ff`); local dev verified up; 6 new ADRs locking F01 C2 / F02 C1 prep decisions.
+
+**Merge.**
+- Branch was 19 commits ahead, working tree clean, all 7 phase tags intact.
+- Merged with `--no-ff` to preserve the cycle as a discrete unit on main.
+- Not pushed (default policy — no `git push` without explicit ask).
+
+**Local dev verify.**
+- Convex `dev:hardy-hamster-888` — schema deployed, `checkIns.by_user_date` index live.
+- Next.js dev — `Ready in 3.3s`, `/check-in` route responds. Two harmless warnings: Convex 1.36.0 → 1.36.1 patch available; slow-FS warning expected (project on external volume).
+
+**Open questions answered (Rewant):**
+1. Sarvam swap — post-MVP. Web Speech stays through MVP.
+2. Auth + `userId` source — moves into F02 work, not F01 C2.
+3. LLM routing for `extractMetrics` — Vercel AI Gateway via AI SDK from Next.js (Option C). Default model `gpt-4o-mini`.
+4. `clientRequestId` idempotency — already shipped correctly at `convex/checkIns.ts:122-130`. No action.
+5. `stage` enum semantics — locked (open / hybrid / scripted definitions per ADR-021).
+6. Mood enum lock-in — already shipped at `schema.ts:19-25`. No action.
+7. Confirmation auto-route — `/check-in/saved` stable anchor with evolving CTAs (ADR-023).
+8. Save-later queue — yes, with localStorage backstop (ADR-022).
+9. ErrorSlot — stays stub through F01 ship (no new ADR; ADR-015 covers policy).
+10. IST timezone canary — skip (MVP testers may be outside India). Backlog §21 already covers the policy gap.
+
+**ADRs added (6):** 018 (Sarvam deferred), 019 (auth lands with F02), 020 (Vercel AI Gateway routing), 021 (stage enum semantics), 022 (save-later + localStorage), 023 (post-save terminal route).
+
+**Changelog updated.** Top entry summarises the 6-ADR batch + 2 confirmations of already-shipped behavior + 2 deliberate skips.
+
+**Scope drift flagged (open, not yet resolved):** `02-memory.md` diverges from `scoping.md` § Memory landing on five points — placement (Memory tab inside Journey vs. top-level `app/(memory)/`), calendar shape (week-at-a-time vs. 30-day strip), filter set (event types vs. check-in metadata), row visuals (task-state vocabulary vs. metric badges), and keyword search (in scoping, not in feature MD). Edit window already aligned at 48h per the locked decision. Reconciliation needed before F02 C1 build dispatch.
+
+**Next decision for Rewant:** reconcile `02-memory.md` against `scoping.md` (rewrite the feature MD to match canonical scoping), OR accept the divergence and treat current `02-memory.md` as the authoritative target for F02 C1 build. Conflict rule says scoping wins — but the feature MD's current shape may reflect post-scoping refinements that should flow back into scoping.md instead.

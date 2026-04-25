@@ -43,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local backups (e.g. handbook.backup-YYYYMMDD-HHMMSS from doc migrations)
+handbook.backup-*/

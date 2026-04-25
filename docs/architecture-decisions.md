@@ -281,3 +281,137 @@
 - **Native mobile (Expo / React Native)** — rejected for MVP: app-store review timeline doesn't clear the MVP launch window.
 - **Web-only, no PWA** — rejected: losing the home-screen-app feel hurts habit formation for a daily check-in app.
 - **React Native Web (shared codebase day 1)** — rejected for MVP: shared codebase is tempting but slows the MVP; simpler to ship web-only now and re-use backend + voice abstraction when native apps come later.
+
+---
+
+## ADR-018 — Voice provider for MVP: Web Speech only; Sarvam AI deferred post-MVP
+
+**Date:** 2026-04-25
+**Status:** accepted
+
+**Context.** Earlier scoping flagged Sarvam AI (`saarika:v2.5` / `saaras:v3`) as the multilingual voice path (12–23 Indic languages including `en-IN`). REST contract was confirmed but the streaming endpoint URL was not located, API-key handling was unscoped, and no server-side proxy path was designed. Building Sarvam now would expand F01 C2 scope and pull schedule into voice provider work that the MVP feature set doesn't strictly require.
+
+**Decision.** **Sarvam AI swap is deferred post-MVP.** Web Speech remains the active voice provider through MVP launch. `OpenAIRealtimeAdapter` stub is retained as the existing post-MVP placeholder; Sarvam adapter joins the same provider-interface seam later.
+
+**Consequences.**
+- Pros: F01 C2 ships against the already-shipped `WebSpeechAdapter` with no new provider work. Schedule clear.
+- Cons: MVP voice quality is constrained by browser STT (especially weaker on iOS Safari, accented English). We accept this for the MVP test pool.
+- The provider-interface seam (`lib/voice/provider.ts`) means swapping Sarvam in later is a config change, not a refactor — the cost of deferring is small.
+
+**Alternatives considered.** Building Sarvam adapter alongside F01 C2. Rejected: scope creep + 3 unresolved scoping questions blocking implementation.
+
+---
+
+## ADR-019 — Authentication lands with F02 work, not F01 Cycle 2
+
+**Date:** 2026-04-25
+**Status:** accepted
+
+**Context.** F01 C1 shipped with `userId` accepted as a client-trusted argument on `createCheckin` / `listCheckins` / `getCheckin`. The original plan (memory note + comment at `convex/checkIns.ts:206-210`) was to enforce auth in F01 C2 chunk 1.F. Sequencing review surfaced that the natural seam for auth is when Memory enters — Memory's tier-aware paywall query (US-2.A.1) already needs to read user state, and adding auth at that point is structurally cheaper than retrofitting it mid-F01 C2.
+
+**Decision.** **Auth introduction moves out of F01 Cycle 2 and into F02 work** (likely as a new pre-cycle chunk 2.0 or as a parallel lane during F02 C1). F01 C2 ships chunks 1.D / 1.E / 1.F (extract-metrics, scripted fallback, confirmation/save) with `userId` continuing as a client-trusted arg. When auth lands, it updates mutation/query handlers to read `ctx.auth.getUserIdentity()` and drops the `userId` arg in the same patch.
+
+**Consequences.**
+- Pros: F01 C2 stays focused on the conversation flow without an auth detour. F02 starts with a security primitive that all downstream features inherit.
+- Cons: F01 C2 ships with a known auth-trust gap. Mitigated by: dev-only deployment, no production users yet, single-test-user mode. Production launch is gated on F02 shipping with auth enforced.
+- F01 feature MD chunk list is now: 1.A/1.B/1.C (shipped) + 1.D/1.E/1.F (C2). The "1.F = auth" shorthand in earlier memory notes is retired.
+
+**Alternatives considered.** Keeping auth in F01 C2. Rejected: doubles C2's surface area; auth without Memory has nowhere to demonstrate tier gating. Auth before F01 C2. Rejected: blocks the conversation-flow work that's already plan-locked.
+
+---
+
+## ADR-020 — Metric extraction via Vercel AI Gateway + AI SDK from Next.js
+
+**Date:** 2026-04-25
+**Status:** accepted
+
+**Context.** F01 chunk 1.D (`extractMetrics`) needs an LLM call that takes a free-form transcript and emits structured JSON for the 5 required metrics (US-1.D.1). Three placement options were on the table: (A) Convex action, (B) Next.js Route Handler / Server Action with a direct provider SDK, (C) Vercel AI Gateway via the Vercel AI SDK from Next.js. Sakhi will need an LLM call in at least three places over the MVP roadmap — F01 metric extraction, F03 Patterns insights past 14 days, F06 Doctor Report narrative.
+
+**Decision.** **Option C: Vercel AI Gateway via the Vercel AI SDK, called from Next.js server-side handlers.**
+- **Default model:** `gpt-4o-mini` (reliable JSON-mode, ~50–100ms latency, ≈ $0.0001 per check-in).
+- **Routing:** Gateway sits between Next.js and the model provider — single API key (`AI_GATEWAY_API_KEY`), provider failover for free, cost tracking and observability built in.
+- **Cost guards (universal, regardless of model):** transcript truncated at 2000 input tokens; output capped at 200 tokens; per-user-per-day attempt counter in Convex with a hard ceiling on retries within the same calendar day.
+- **Server-side only.** API key never reaches the client. Convex action remains an option for callers that want a single-round-trip path; for now Next.js handler is the default.
+
+**Consequences.**
+- Pros: One Gateway billing/observability surface for F01, F03, F06 LLM work. Provider-agnostic — model swap is a config change. AI SDK fits the Next.js + Vercel stack already locked by ADR-002.
+- Cons: Small Gateway markup over direct provider pricing. Two network hops (client → Next.js → Gateway → provider) vs. one for the Convex-action path; acceptable given p50 budget of 3s in US-1.D.1.
+- Cost-guard counter requires a small Convex doc per (userId, date) — built alongside `extractMetrics` in chunk 1.D.
+
+**Alternatives considered.**
+- **Option A (Convex action).** Rejected: Sakhi will set up Gateway anyway for F03 / F06; running two LLM call paths increases ops surface.
+- **Option B (Next.js + direct OpenAI / Anthropic SDK).** Rejected: forfeits Gateway's failover, observability, and single-key model.
+
+---
+
+## ADR-021 — `stage` enum semantics for `checkIns` records
+
+**Date:** 2026-04-25
+**Status:** accepted
+
+**Context.** `checkIns.stage` is `v.union(v.literal("open"), v.literal("scripted"), v.literal("hybrid"))` per shipped C1 schema. The three values were locked at schema time without a written contract for when each is written. Without a contract, F01 C2 (which writes `stage`) and F03 / F08 (which read it for analytics on open-first sufficiency per ADR-005) can drift.
+
+**Decision.** **Lock the following definitions:**
+
+| Value | Means | Written when |
+|---|---|---|
+| `"open"` | User spoke freely; coverage check found all 5 metrics in the transcript. Stage 2 was skipped per ADR-005. | Open transcript → `extractMetrics` → `coverage(metrics).missing.length === 0`. |
+| `"hybrid"` | User spoke freely; some metrics extracted from transcript; remaining metrics filled via Stage 2 (voice or tap). | Open transcript → coverage gap → user answers remaining via `<ScriptedPrompt>` / `<TapInput>`. |
+| `"scripted"` | User did not produce a usable transcript (voice failed, permission denied, or chose tap-only). All 5 metrics came from Stage 2 tap inputs. | No usable transcript; everything via `<TapInput>`. |
+
+**Consequences.**
+- ADR-005's success metric becomes computable: open-first sufficiency rate = `count(open) / count(open + hybrid)`. If <50% after seed users, the open-first prompt or `coverage()` predicate needs work.
+- F01 C2 chunk 1.D / 1.E / 1.F sets `stage` per the table; reviewers check this contract during the C2 review pass.
+- Future enum expansion (e.g. a `"voice-failed-recovery"` substate) requires a new ADR + Convex schema migration.
+
+**Alternatives considered.** Leaving the enum semantically ambiguous and inferring from other fields. Rejected: turns `stage` into dead metadata and forces every analytics query to re-derive the bucket.
+
+---
+
+## ADR-022 — Save-later queue with localStorage backstop
+
+**Date:** 2026-04-25
+**Status:** accepted
+
+**Context.** US-1.F.2 specifies that on save failure (network / mutation error), the user can choose "save later" — the check-in queues for retry. Original spec said "in-memory for this session," meaning a tab close loses the queued check-in. For a daily habit app where the user may have spent 60s recording a transcript, losing that on tab close is a meaningful trust failure.
+
+**Decision.** **Save-later queue persists to `localStorage`** (not just in-memory). On save failure:
+1. Check-in payload (validated metrics + transcript + `clientRequestId`) is written to `localStorage` under a versioned key (e.g. `sakhi.saveLater.v1`).
+2. UI offers retry now or "keep this for later."
+3. On next app load (or on regaining network), a background hook reads the queue and retries each entry via `createCheckin`. Idempotency is already handled via `clientRequestId` (ADR not needed — shipped behavior at `convex/checkIns.ts:122-130`).
+4. Successful retries clear their entry; failures stay in the queue.
+
+**Consequences.**
+- Pros: Tab close, browser crash, or going offline mid-save no longer loses the check-in. Retry-on-reload is invisible to the user. Idempotent server contract means no duplicate-write risk.
+- Cons: localStorage is per-browser/per-device; a user who recorded on phone Safari and then opens desktop Chrome won't see the queued retry. Acceptable for MVP.
+- Schema: no new fields. The queued payload uses existing `CreateCheckinArgs` shape.
+- Versioned key (`v1`) means future format changes can co-exist without breaking old queue entries — bump to `v2` and migrate or drop.
+
+**Alternatives considered.**
+- **In-memory only** (original spec). Rejected per rationale above.
+- **Server-side outbox table.** Rejected: requires auth (which is moving to F02) and adds Convex schema surface; localStorage achieves 95% of the value at zero schema cost.
+
+---
+
+## ADR-023 — Post-save confirmation route: stable `/check-in/saved` anchor
+
+**Date:** 2026-04-25
+**Status:** accepted
+
+**Context.** After `createCheckin` succeeds, US-1.F.2 specifies a brief confirmation followed by routing to "home." But "home" is unstable through the MVP: F02 introduces Memory, F08 introduces Journey, and the natural post-save destination changes as features land. A direct route from save → `/memory` would force re-architecture each cycle.
+
+**Decision.** **Introduce `/check-in/saved` as a stable terminal screen.** The screen itself never changes; only what's behind its CTAs evolves.
+
+| Phase | Screen | CTAs / behavior |
+|---|---|---|
+| **F01 C2 ships, F02 not yet** | Settled-orb success + "Got it. See you tomorrow, Sakhi's here." Auto-dismiss to `/` after 2s. | "View memory" CTA hidden. Home `/` shows static "You checked in today." |
+| **After F02 C1** | Same screen. | "View memory" CTA enabled → `/memory`. Home shows status + tappable card. |
+| **After F08 (Journey)** | Same screen. | "View memory" → `/journey/memory` per scoping doc structure. Home gains wellness ring + streak bar. |
+
+**Consequences.**
+- Pros: Save flow never has to know which downstream features exist. CTA visibility is a feature-flag check, not a route change. F01 C2 ships a complete post-save UX without depending on F02.
+- Cons: One extra route in the app (low cost). The auto-dismiss timing (2s) needs validation in F01 C2 review pass.
+
+**Alternatives considered.**
+- **Direct route to `/` (home) and let home render appropriately.** Rejected: home is a multi-purpose surface that gets aggregated content over time; bouncing the user there immediately after save loses the "your check-in landed" moment.
+- **Direct route to Memory.** Rejected: Memory doesn't exist yet, and even after F02 it's the wrong default (post-save is about "today is logged," not about "browse past").

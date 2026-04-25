@@ -9,6 +9,23 @@
 
 ---
 
+## 2026-04-25 — F01 C2 prep: 6 ADRs locked
+
+**Scope.** Pre-F01-C2 open questions resolved into ADRs 018–023.
+
+- **ADR-018** Sarvam AI voice swap deferred post-MVP. Web Speech remains MVP voice provider.
+- **ADR-019** Auth introduction moves out of F01 C2 into F02 work. F01 C2 ships save/confirm/extract with `userId` continuing as a client-trusted arg. Production launch gated on F02 shipping with auth enforced.
+- **ADR-020** Metric extraction (`extractMetrics`, F01 chunk 1.D) routed via Vercel AI Gateway + AI SDK from Next.js. Default model `gpt-4o-mini`. Cost guards (input truncation 2000 tokens, output cap 200 tokens, per-user-per-day attempt counter).
+- **ADR-021** `stage` enum semantics locked: `"open"` (Stage 2 skipped), `"hybrid"` (transcript + Stage 2 fill), `"scripted"` (no usable transcript). Enables ADR-005 success metric (`count(open) / count(open+hybrid)`).
+- **ADR-022** Save-later queue persists to `localStorage` (versioned key `sakhi.saveLater.v1`). Retry-on-reload via shipped idempotency contract (`clientRequestId`).
+- **ADR-023** Post-save confirmation screen is `/check-in/saved` — stable anchor. CTAs evolve as F02 / F08 land; route does not.
+
+**Related.** No prior ADR superseded. Two pre-existing items confirmed (no new ADR needed): mood enum already locked at `convex/schema.ts:19-25`; idempotency already shipped at `convex/checkIns.ts:122-130`.
+
+**Skipped (deliberate, not punted):** IST timezone canary (post-MVP testers may be outside India; backlog §21 covers the policy gap); ErrorSlot finalization (stays stub through F01 ship per ADR-015 + project rule).
+
+---
+
 ## 2026-04-25 — F01 C1 shipped: voice check-in foundation
 
 **Scope.** Feature 01 Cycle 1 (chunks 1.A voice provider, 1.B Convex data, 1.C orb UI) shipped on branch `feat/f01-cycle-1`. Tagged `f01-c1/shipped`.
