@@ -1,10 +1,10 @@
 # Voice — Cycle 1 (Conversational, Sarvam STT + TTS) Build Plan
 
-> **For agentic workers:** This plan follows the **Project Process Playbook** (`~/.claude/projects/-Users-rewantprakash_1/memory/reference_project_process.md`) — scoping ✓ → pre-flight → parallel build subagents → parallel review subagents → fix → second pass → ship. Steps inside each chunk follow TDD inside the subagent.
+> **For agentic workers:** This plan follows the **Project Process Playbook** (`~/.claude/projects/-Users-rewantprakash-1/memory/reference_project_process.md`) — scoping ✓ → pre-flight → parallel build subagents → parallel review subagents → fix → second pass → ship. Steps inside each chunk follow TDD inside the subagent.
 >
 > **Branch:** `feat/voice-sarvam` off `main` (post `f01-c2/shipped` squash-merge `a5361ed`)
 > **Created:** 2026-04-25 · **Owner:** orchestrator (Claude Code main)
-> **Scoping status:** Architecture locked 2026-04-25 in `~/.claude/projects/-Users-rewantprakash_1/memory/project_sakhi_voice_sarvam.md` (STT path) + this doc (TTS + multi-turn dialog + bail-to-taps).
+> **Scoping status:** Architecture locked 2026-04-25 in `~/.claude/projects/-Users-rewantprakash-1/memory/project_sakhi_voice_sarvam.md` (STT path) + this doc (TTS + multi-turn dialog + bail-to-taps).
 > **Cycle position:** Originally "Cycle 4 / 5" (voice + save-later) in the 6-cycle plan. Pulled forward by Rewant 2026-04-25 with conversational scope. F02 pre-cycle 2.0 (auth) and F02 C2 follow this cycle.
 
 **Goal:** Ship a voice-first, multi-turn conversational check-in. Saha speaks the opener (Sarvam TTS), listens to the freeform reply (Sarvam STT), extracts as many of the 5 metrics as possible from the transcript, and then **speaks a follow-up question for each remaining metric** (Sarvam TTS) → listens for the answer (Sarvam STT) → repeats until covered or declined. Every screen during the dialog shows a single **"Switch to taps"** affordance that bails to the existing Stage 2 grid with the partial-metrics state preserved. Web Speech remains as the dev/test fallback for both STT and TTS.
@@ -24,13 +24,13 @@
 | Tag | What's in the tree |
 |---|---|
 | `voice-c1/plan-saved` | This file committed. Nothing built. |
-| `voice-c1/pre-flight-done` | ADR-025 written, SDKs installed, env scaffolded, audio-format spike done, TTS-format spike done, provider seams extended (STT + TTS), state-machine union extended, build green. |
+| `voice-c1/pre-flight-done` | ADR-026 written, SDKs installed, env scaffolded, audio-format spike done, TTS-format spike done, provider seams extended (STT + TTS), state-machine union extended, build green. |
 | `voice-c1/wave-1-integrated` | V.A (STT route) + V.B (STT adapter) + V.C (TTS route + adapter) + V.D (follow-up engine) merged. Tests + tsc + build green. |
 | `voice-c1/wave-2-integrated` | Page rewired for multi-turn dialog + bail-out + closer TTS; state-machine transitions implemented. |
 | `voice-c1/reviewed` | First-pass review findings collected (read-only). |
 | `voice-c1/fixed` | Fix pass applied, all green. |
 | `voice-c1/second-pass-clean` | Second reviewer returned clean. |
-| `voice-c1/shipped` | ADR-018 superseded by ADR-025; changelog + system-map + build-log updated; Vercel envs set; live conversational check-in verified on a deployed preview. |
+| `voice-c1/shipped` | ADR-018 superseded by ADR-026; changelog + system-map + build-log updated; Vercel envs set; live conversational check-in verified on a deployed preview. |
 
 A phase entry is appended to `docs/build-log.md` at every tag.
 
@@ -66,7 +66,7 @@ A phase entry is appended to `docs/build-log.md` at every tag.
 | State-machine extension for multi-turn dialog (orchestrator pre-flight) | Task 0 |
 | Page-level multi-turn loop in `app/check-in/page.tsx` (orchestrator integration) | Task 2 |
 | `<SwitchToTapsButton>` affordance always visible during voice dialog | Task 2 |
-| ADR-025 superseding ADR-018 on Sarvam deferral | Task 0 |
+| ADR-026 superseding ADR-018 on Sarvam deferral | Task 0 |
 
 ### Out of scope (deferred)
 - Hindi or other Indic languages at runtime — adapter takes `language_code: 'en-IN'` for MVP. Multilingual surfaces (string resources, PDF language param) are F03+ concerns.
@@ -192,7 +192,7 @@ The reducer keeps "unknown event in state X = return state" for safety. Tests in
 **Why:** ADR, SDK install, env scaffolding, both provider seams, state-machine extension, and the two format spikes must exist before parallel agents run.
 
 **Files touched (all by orchestrator):**
-- Create: `docs/architecture-decisions.md` — append ADR-025
+- Create: `docs/architecture-decisions.md` — append ADR-026
 - Modify: `package.json` — add `sarvamai`
 - Create or modify: `.env.local.example` — append `SARVAM_API_KEY=`, `VOICE_PROVIDER=`, `VOICE_TTS_PROVIDER=`
 - Modify: `lib/voice/types.ts` — extend `VoiceProviderName`; add `TtsProvider` interface + `TtsProviderName`
@@ -208,10 +208,10 @@ The reducer keeps "unknown event in state X = return state" for safety. Tests in
 
 - [ ] **0.1** — Verify clean tree on `feat/voice-sarvam` branched from `main` at `a5361ed` or later. Run `npm run test:run`, `npx tsc --noEmit`, `npm run build` — confirm baseline green (should match post-C2 baseline).
 
-- [ ] **0.2** — Write **ADR-025 — Voice provider for production: Sarvam AI streaming (STT + TTS) + multi-turn dialog**. Append to `docs/architecture-decisions.md`. Body:
+- [ ] **0.2** — Write **ADR-026 — Voice provider for production: Sarvam AI streaming (STT + TTS) + multi-turn dialog**. Append to `docs/architecture-decisions.md`. Body:
 
   ```markdown
-  ## ADR-025 — Voice provider for production: Sarvam AI streaming (STT + TTS) + multi-turn dialog
+  ## ADR-026 — Voice provider for production: Sarvam AI streaming (STT + TTS) + multi-turn dialog
 
   **Date:** 2026-04-25
   **Status:** accepted (supersedes ADR-018 on the deferral)
@@ -262,7 +262,7 @@ The reducer keeps "unknown event in state X = return state" for safety. Tests in
   - Option C (full duplex / barge-in): out of scope for cycle 1.
 
   **Supersedes:** ADR-018 on the deferral. ADR-018 stays in the record
-  as the point-in-time rationale; ADR-025 is the active decision.
+  as the point-in-time rationale; ADR-026 is the active decision.
   ```
 
 - [ ] **0.3** — Install SDK: `npm install sarvamai`. Verify import: `node -e "console.log(Object.keys(require('sarvamai')))"`. Commit `package.json` + `package-lock.json`.
@@ -330,7 +330,7 @@ The reducer keeps "unknown event in state X = return state" for safety. Tests in
   ```markdown
   ## 2026-MM-DD — Voice C1 pre-flight
 
-  - ADR-025 written (supersedes ADR-018).
+  - ADR-026 written (supersedes ADR-018).
   - `sarvamai` SDK installed.
   - `VoiceProviderName` extended to include `'sarvam'`.
   - New `TtsProvider` interface added; `tts-adapter.ts` renamed to
@@ -346,7 +346,7 @@ The reducer keeps "unknown event in state X = return state" for safety. Tests in
     `VOICE_TTS_PROVIDER` (all `web-speech` default).
   ```
 
-- [ ] **0.13** — Commit: `chore(voice-c1): pre-flight Task 0 — ADR-025, SDK install, provider seams, state-machine extension, format spikes`. Tag `voice-c1/pre-flight-done`. Append phase entry to `docs/build-log.md`. **Do not push yet — await Rewant signal to dispatch Wave 1.**
+- [ ] **0.13** — Commit: `chore(voice-c1): pre-flight Task 0 — ADR-026, SDK install, provider seams, state-machine extension, format spikes`. Tag `voice-c1/pre-flight-done`. Append phase entry to `docs/build-log.md`. **Do not push yet — await Rewant signal to dispatch Wave 1.**
 
 ---
 
@@ -541,7 +541,7 @@ All three read the delta `voice-c1/pre-flight-done..HEAD`.
 
 ### Review-1 prompt (brief alignment)
 - Every story's acceptance satisfied or explicitly deferred to backlog
-- ADR-025 written; supersedes ADR-018 on the deferral; ADR-018 not modified
+- ADR-026 written; supersedes ADR-018 on the deferral; ADR-018 not modified
 - `language_code` is mandatory in both `SarvamAdapter` and `SarvamTtsAdapter` constructors (no default fallback)
 - Web Speech adapters still work when env vars unset (regression check — both STT and TTS)
 - Follow-up question copy in `follow-up-variants.ts` matches the locked catalog in this plan **verbatim**, including punctuation and the em-dash "—"
@@ -556,7 +556,7 @@ All three read the delta `voice-c1/pre-flight-done..HEAD`.
 - `NEXT_PUBLIC_*` not used for any voice secret
 - Both routes validate content-type / body shape; STT route enforces byte + duration caps; TTS route enforces text-length cap
 - Both routes close upstream Sarvam connection on `request.signal` abort
-- ADR-025 referenced from `docs/architecture-changelog.md`
+- ADR-026 referenced from `docs/architecture-changelog.md`
 - `VoiceProvider` interface unchanged — no new methods, no breaking signature changes; `TtsProvider` interface added cleanly without disturbing C2 callers
 - `VoiceProviderName` and `TtsProviderName` unions are discriminated string unions; both resolvers default to `'web-speech'`
 - Multilingual readiness: `language_code` flows from adapter constructor → fetch URL/body → server route → Sarvam connect/convert args; trace it in tests for both STT and TTS
@@ -624,7 +624,7 @@ One Agent call. Prompt includes the locked-decisions list + first-pass summary. 
 - [ ] **6.7** — `docs/build-log.md` — session entry: what shipped, reviewer notes, surprises.
 - [ ] **6.8** — `docs/post-mvp-backlog.md` — confirm "Sarvam adapter" removed from post-MVP list (now shipped). Add follow-up entries: "Sarvam barge-in / full duplex", "Sarvam Hindi runtime toggle", "voice settings panel".
 - [ ] **6.9** — Update `~/.claude/projects/-Users-rewantprakash-1/memory/MEMORY.md`: voice swap status → shipped + conversational. Update linked `project_sakhi_voice_sarvam.md` to reflect ship.
-- [ ] **6.10** — Commit: `docs: ship voice C1 — Sarvam STT + TTS + multi-turn, ADR-025, system-map, build-log`. Tag `voice-c1/shipped`.
+- [ ] **6.10** — Commit: `docs: ship voice C1 — Sarvam STT + TTS + multi-turn, ADR-026, system-map, build-log`. Tag `voice-c1/shipped`.
 
 ---
 
@@ -648,7 +648,7 @@ One Agent call. Prompt includes the locked-decisions list + first-pass summary. 
 | `SARVAM_API_KEY` never reaches the browser | V.A + V.C (server-only) + Review-2 |
 | `VoiceProvider` interface unchanged so existing C1/C2 wiring still works | V.B + Review-2 |
 | Web Speech remains as fallback for both STT and TTS | pre-flight resolvers + Review-1 |
-| Multilingual-ready architecture (Hindi-next becomes config change) | V.B + V.C `language_code` flow + ADR-025 |
+| Multilingual-ready architecture (Hindi-next becomes config change) | V.B + V.C `language_code` flow + ADR-026 |
 | Conversational dialog: voice asks for missing metrics | V.D + Task 2 page wiring |
 | Bail-to-taps preserves partial state | Task 2 + state machine + Review-3 |
 | Strict turn-taking (no barge-in) | state machine (sequential states) + Review-3 |
