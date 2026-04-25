@@ -305,6 +305,51 @@ export const getCheckin = query({
   },
 });
 
+// ---- F01 Cycle 2 chunk 2.F: same-day re-entry detection ----
+//
+// `getTodayCheckin` is the additive Convex query owned by chunk 2.F. The
+// page calls it on mount with the device-local YYYY-MM-DD; if it returns
+// a row, the page picks the `re-entry-same-day` opener variant and — on
+// save — calls `buildAppendPayload(existing, ...)` to insert a new row
+// with `appendedTo` pointing at the original. Soft-deleted rows are
+// excluded so a discarded morning check-in doesn't trigger re-entry copy.
+
+export type GetTodayCheckinArgs = {
+  userId: string;
+  date: string;
+};
+
+export async function getTodayCheckinHandler(
+  ctx: QueryHandlerCtx,
+  args: GetTodayCheckinArgs,
+): Promise<CheckinRow | null> {
+  const candidates = await ctx.db
+    .query("checkIns")
+    .withIndex("by_user_date", (q) =>
+      q.eq("userId", args.userId).eq("date", args.date),
+    )
+    .collect();
+  // Skip soft-deleted rows (matches createCheckin / listCheckins policy).
+  // If multiple rows exist for (userId, date) — i.e. an append chain
+  // already started today — return the original (the row without
+  // `appendedTo` set). Re-entry past the second block still chains off
+  // the first row so the timestamped block list stays in order.
+  const live = candidates.filter((r) => r.deletedAt === undefined);
+  if (live.length === 0) return null;
+  const original = live.find((r) => r.appendedTo === undefined);
+  return original ?? live[0];
+}
+
+export const getTodayCheckin = query({
+  args: {
+    userId: v.string(),
+    date: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return getTodayCheckinHandler(ctx as unknown as QueryHandlerCtx, args);
+  },
+});
+
 // ---- F02 Memory: listEventsByRange ----
 //
 // Returns mixed MemoryEvents in [fromDate, toDate] reverse-chronological by
