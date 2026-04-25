@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 
 // Simple RFC-5322-ish check — good enough for a waitlist.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -32,5 +32,14 @@ export const addEmail = mutation({
     });
 
     return { ok: true, alreadyOnList: false };
+  },
+});
+
+export const count = query({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const all = await ctx.db.query("waitlist").collect();
+    return all.length;
   },
 });

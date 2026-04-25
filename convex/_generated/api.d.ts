@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as checkIns from "../checkIns.js";
 import type * as waitlist from "../waitlist.js";
 
 import type {
@@ -17,6 +18,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  checkIns: typeof checkIns;
   waitlist: typeof waitlist;
 }>;
 
