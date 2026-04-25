@@ -17,7 +17,7 @@ import type {
   VoiceError,
   VoiceProvider,
 } from '@/lib/voice/types'
-import CheckinPage from '@/app/(check-in)/page'
+import CheckinPage from '@/app/check-in/page'
 
 /**
  * Test-only stub that satisfies the VoiceProvider contract. Captures

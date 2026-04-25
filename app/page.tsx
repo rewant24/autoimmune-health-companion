@@ -98,12 +98,20 @@ export default function Home() {
               Saumya
             </span>
           </div>
-          <a
-            href="#waitlist"
-            className="type-label transition-colors hover:text-ink"
-          >
-            Join waitlist →
-          </a>
+          <div className="flex items-center gap-5">
+            <Link
+              href="/check-in"
+              className="type-label transition-colors hover:text-ink"
+            >
+              Try demo →
+            </Link>
+            <a
+              href="#waitlist"
+              className="type-label transition-colors hover:text-ink"
+            >
+              Join waitlist →
+            </a>
+          </div>
         </nav>
 
         {/* HERO — inline email, transcript on the right */}
@@ -235,7 +243,7 @@ export default function Home() {
               what I wanted to ask.&rdquo;
             </p>
             <p className="type-label mt-5">
-              From 12 patient interviews · 2026
+              Autoimmune patient · arthritis · 2/6
             </p>
           </blockquote>
         </section>
@@ -611,6 +619,12 @@ export default function Home() {
           <div className="md:col-span-8 grid grid-cols-2 gap-8 sm:grid-cols-3">
             <div className="flex flex-col gap-3">
               <p className="type-label">Product</p>
+              <Link href="/check-in" className="text-[14px] hover:underline" style={{ color: "var(--ink)" }}>
+                Try the demo
+              </Link>
+              <Link href="/memory" className="text-[14px] hover:underline" style={{ color: "var(--ink)" }}>
+                Memory
+              </Link>
               <a href="#waitlist" className="text-[14px] hover:underline" style={{ color: "var(--ink)" }}>
                 Join waitlist
               </a>
