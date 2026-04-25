@@ -56,7 +56,10 @@ export function EmailField({
   )
 }
 
-const EMAIL_REGEX = /^\S+@\S+\.\S+$/
+// Stricter than the prior /^\S+@\S+\.\S+$/ — that accepted `a@b@c.d` because
+// `\S` matches `@`. Local + domain must each be one-or-more non-whitespace,
+// non-`@` chars, with a dot before the TLD chunk.
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /** Pure validity check. Trims before matching. */
 export function isValidEmail(value: string): boolean {
