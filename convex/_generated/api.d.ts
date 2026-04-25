@@ -9,6 +9,8 @@
  */
 
 import type * as checkIns from "../checkIns.js";
+import type * as continuity from "../continuity.js";
+import type * as extractAttempts from "../extractAttempts.js";
 import type * as waitlist from "../waitlist.js";
 
 import type {
@@ -19,6 +21,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   checkIns: typeof checkIns;
+  continuity: typeof continuity;
+  extractAttempts: typeof extractAttempts;
   waitlist: typeof waitlist;
 }>;
 

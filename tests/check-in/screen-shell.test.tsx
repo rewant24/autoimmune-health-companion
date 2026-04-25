@@ -3,7 +3,10 @@
  *
  * Renders the /check-in page with a fake VoiceProvider so we can drive
  * state transitions without real mic access. Asserts:
- *   - idle copy renders ("How's today feeling?" + subcopy)
+ *   - idle copy renders (first-ever opener variant + subcopy — Convex
+ *     query is mocked to return undefined in tests/setup.ts, so the
+ *     page falls back to FALLBACK_CONTINUITY which has
+ *     `isFirstEverCheckin: true`)
  *   - tap transitions to listening (orb aria-label flips to "Stop check-in")
  *   - error state renders <ErrorSlot>
  *   - ScreenShell wrapper is present
@@ -50,7 +53,9 @@ describe('/check-in page', () => {
     const provider = new FakeVoiceProvider()
     render(<CheckinPage providerOverride={provider} />)
 
-    expect(screen.getByText("How's today feeling?")).toBeInTheDocument()
+    expect(
+      screen.getByText("Hey Sonakshi — glad you're here. How are you feeling today?"),
+    ).toBeInTheDocument()
     expect(
       screen.getByText('Tap the orb and tell me in your own words.'),
     ).toBeInTheDocument()

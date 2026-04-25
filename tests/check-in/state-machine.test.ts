@@ -243,3 +243,255 @@ describe('toOrbState mapping', () => {
     )
   })
 })
+
+// ---------------- C2 Wave 1 transitions ----------------
+
+describe('reducer: extraction transitions (2.B)', () => {
+  it('processing + EXTRACTION_START → extracting', () => {
+    const next = reducer(
+      { kind: 'processing', transcript },
+      { type: 'EXTRACTION_START' },
+    )
+    expect(next).toEqual({ kind: 'extracting', transcript })
+  })
+
+  it('extracting + EXTRACTION_DONE with all 5 covered → confirming (ADR-005 skip)', () => {
+    const metrics = {
+      pain: 4,
+      mood: 'okay' as const,
+      adherenceTaken: true,
+      flare: 'no' as const,
+      energy: 6,
+    }
+    const next = reducer(
+      { kind: 'extracting', transcript },
+      {
+        type: 'EXTRACTION_DONE',
+        metrics,
+        missing: [],
+        stage: 'open',
+      },
+    )
+    expect(next).toEqual({
+      kind: 'confirming',
+      transcript,
+      metrics,
+      declined: [],
+      stage: 'open',
+    })
+  })
+
+  it('extracting + EXTRACTION_DONE with some missing → stage-2', () => {
+    const next = reducer(
+      { kind: 'extracting', transcript },
+      {
+        type: 'EXTRACTION_DONE',
+        metrics: { pain: 5, mood: 'flat' },
+        missing: ['adherenceTaken', 'flare', 'energy'],
+        stage: 'hybrid',
+      },
+    )
+    expect(next).toMatchObject({
+      kind: 'stage-2',
+      transcript,
+      metrics: { pain: 5, mood: 'flat' },
+      missing: ['adherenceTaken', 'flare', 'energy'],
+      declined: [],
+    })
+  })
+
+  it('extracting + EXTRACTION_FAILED → stage-2 with all 5 missing', () => {
+    const next = reducer(
+      { kind: 'extracting', transcript },
+      { type: 'EXTRACTION_FAILED' },
+    )
+    expect(next).toEqual({
+      kind: 'stage-2',
+      transcript,
+      metrics: {},
+      missing: ['pain', 'mood', 'adherenceTaken', 'flare', 'energy'],
+      declined: [],
+    })
+  })
+})
+
+describe('reducer: stage-2 transitions (2.C)', () => {
+  const baseStage2: State = {
+    kind: 'stage-2',
+    transcript,
+    metrics: { pain: 5 },
+    missing: ['mood', 'adherenceTaken', 'flare', 'energy'],
+    declined: [],
+  }
+
+  it('METRIC_UPDATED sets the value and drops it from missing', () => {
+    const next = reducer(baseStage2, {
+      type: 'METRIC_UPDATED',
+      metric: 'mood',
+      value: 'okay',
+    })
+    expect(next).toMatchObject({
+      kind: 'stage-2',
+      metrics: { pain: 5, mood: 'okay' },
+      missing: ['adherenceTaken', 'flare', 'energy'],
+      declined: [],
+    })
+  })
+
+  it('METRIC_DECLINED writes null, drops from missing, adds to declined', () => {
+    const next = reducer(baseStage2, {
+      type: 'METRIC_DECLINED',
+      metric: 'mood',
+    })
+    expect(next).toMatchObject({
+      kind: 'stage-2',
+      metrics: { pain: 5, mood: null },
+      missing: ['adherenceTaken', 'flare', 'energy'],
+      declined: ['mood'],
+    })
+  })
+
+  it('METRIC_UPDATED on a previously-declined metric clears the decline', () => {
+    const declined: State = {
+      ...baseStage2,
+      metrics: { pain: 5, mood: null },
+      missing: ['adherenceTaken', 'flare', 'energy'],
+      declined: ['mood'],
+    }
+    const next = reducer(declined, {
+      type: 'METRIC_UPDATED',
+      metric: 'mood',
+      value: 'bright',
+    })
+    expect(next).toMatchObject({
+      metrics: { pain: 5, mood: 'bright' },
+      declined: [],
+    })
+  })
+
+  it('STAGE_2_CONTINUE → confirming, omitted metrics declined-by-omission', () => {
+    const next = reducer(baseStage2, { type: 'STAGE_2_CONTINUE' })
+    expect(next.kind).toBe('confirming')
+    if (next.kind !== 'confirming') return
+    expect(next.metrics).toEqual({
+      pain: 5,
+      mood: null,
+      adherenceTaken: null,
+      flare: null,
+      energy: null,
+    })
+    expect(next.declined).toEqual(['mood', 'adherenceTaken', 'flare', 'energy'])
+    expect(next.stage).toBe('hybrid')
+  })
+
+  it('STAGE_2_CONTINUE with all 5 declined → stage = scripted', () => {
+    const allDeclined: State = {
+      kind: 'stage-2',
+      transcript,
+      metrics: {
+        pain: null,
+        mood: null,
+        adherenceTaken: null,
+        flare: null,
+        energy: null,
+      },
+      missing: [],
+      declined: ['pain', 'mood', 'adherenceTaken', 'flare', 'energy'],
+    }
+    const next = reducer(allDeclined, { type: 'STAGE_2_CONTINUE' })
+    if (next.kind !== 'confirming') throw new Error('expected confirming')
+    expect(next.stage).toBe('scripted')
+  })
+
+  it('DISCARD_REQUEST from stage-2 → discarding, preserving previous', () => {
+    const next = reducer(baseStage2, { type: 'DISCARD_REQUEST' })
+    expect(next.kind).toBe('discarding')
+    if (next.kind !== 'discarding') return
+    expect(next.previous).toEqual(baseStage2)
+  })
+})
+
+describe('reducer: confirming transitions (2.D)', () => {
+  const baseConfirming: State = {
+    kind: 'confirming',
+    transcript,
+    metrics: {
+      pain: 4,
+      mood: 'okay',
+      adherenceTaken: true,
+      flare: 'no',
+      energy: 6,
+    },
+    declined: [],
+    stage: 'open',
+  }
+
+  it('METRIC_UPDATED edits a value in confirming', () => {
+    const next = reducer(baseConfirming, {
+      type: 'METRIC_UPDATED',
+      metric: 'pain',
+      value: 7,
+    })
+    expect(next.kind).toBe('confirming')
+    if (next.kind !== 'confirming' || !next.metrics) return
+    expect(next.metrics.pain).toBe(7)
+  })
+
+  it('METRIC_DECLINED in confirming nulls the value + records the decline', () => {
+    const next = reducer(baseConfirming, {
+      type: 'METRIC_DECLINED',
+      metric: 'pain',
+    })
+    expect(next.kind).toBe('confirming')
+    if (next.kind !== 'confirming' || !next.metrics) return
+    expect(next.metrics.pain).toBeNull()
+    expect(next.declined).toEqual(['pain'])
+  })
+
+  it('CONFIRM → saving', () => {
+    const next = reducer(baseConfirming, { type: 'CONFIRM' })
+    expect(next).toEqual({ kind: 'saving' })
+  })
+
+  it('DISCARD_REQUEST from confirming → discarding, previous = full state', () => {
+    const next = reducer(baseConfirming, { type: 'DISCARD_REQUEST' })
+    if (next.kind !== 'discarding') throw new Error('expected discarding')
+    expect(next.previous).toEqual(baseConfirming)
+  })
+})
+
+describe('reducer: discarding transitions (2.D)', () => {
+  const previous: State = {
+    kind: 'stage-2',
+    transcript,
+    metrics: { pain: 5 },
+    missing: ['mood', 'adherenceTaken', 'flare', 'energy'],
+    declined: [],
+  }
+
+  it('DISCARD_CONFIRM → idle', () => {
+    const next = reducer(
+      { kind: 'discarding', previous: previous as never },
+      { type: 'DISCARD_CONFIRM' },
+    )
+    expect(next).toEqual({ kind: 'idle' })
+  })
+
+  it('DISCARD_CANCEL → previous state restored verbatim', () => {
+    const next = reducer(
+      { kind: 'discarding', previous: previous as never },
+      { type: 'DISCARD_CANCEL' },
+    )
+    expect(next).toEqual(previous)
+  })
+})
+
+describe('reducer: milestone transitions (Wave 2 readiness)', () => {
+  it('saved + MILESTONE_DETECTED → celebrating', () => {
+    const next = reducer(
+      { kind: 'saved' },
+      { type: 'MILESTONE_DETECTED', milestone: 'day-7' },
+    )
+    expect(next).toEqual({ kind: 'celebrating', milestone: 'day-7' })
+  })
+})

@@ -457,3 +457,69 @@ Final tally:
 - `.env.local.example` → frozen; agents add new keys via the same file.
 
 **Next.** Tag `f01-c2/pre-flight-done` on the commit. Wave 1 dispatch — 4 parallel build agents (2.A opener/closer, 2.B extraction, 2.C Stage 2 UI, 2.D confirm/save) per `docs/features/01-daily-checkin-cycle-2-plan.md`.
+
+---
+
+## 2026-04-25 — Session 11: F01 C2 Wave 1 integration
+
+**Trigger.** Four parallel build agents (2.A opener/closer, 2.B extraction route, 2.C Stage 2 UI, 2.D confirm/save) finished in their own worktrees on disjoint file ownership. Task 2 is the orchestrator-only integration: merge all four branches into `feat/f01-cycle-2`, fill in the no-op reducer cases the pre-flight froze, wire `app/check-in/page.tsx` end-to-end, validate.
+
+**Branches merged (3-way, no conflicts).**
+- `feat/f01-c2/build-a` — opener/closer engine + `getContinuityState` query.
+- `feat/f01-c2/build-b` — `/api/check-in/extract` AI Gateway route + `coverage()` + `extractAttempts` cost guard.
+- `feat/f01-c2/build-c` — `<Stage2>` recap + tap-input column.
+- `feat/f01-c2/build-d` — `<ConfirmSummary>` review card + `/check-in/saved` terminal route + `saumya.saveLater.v1` queue.
+
+Branches A and B branched at `e8459f7` while C and D branched at `dd50aad` (a doc-update commit landed between), so A's and B's diff against the integration branch tip showed phantom changes to `docs/features/01-daily-checkin-cycle-2-plan.md` + `docs/system-map.md`. Their actual commits only touched owned files; the 3-way merge dropped the noise. Worth flagging for future Wave dispatches: snapshot the integration branch SHA before kicking agents off so all worktrees branch from the same parent.
+
+**Vitest pool pinned (`vitest.config.ts`).** Default `forks`/`threads` pools time out spawning workers when the project lives on a path with spaces or `+` (this volume: `/Volumes/Coding Projects + Docker/`). Set `pool: 'vmThreads'` permanently — no more `--pool=vmThreads` flag plumbing on every run. Comment in the config calls out the bug for future-us.
+
+**State-machine transitions implemented (`lib/checkin/state-machine.ts`).** Pre-flight froze the union; this session filled in the reducer cases for the events Wave 1 introduced.
+
+- New events: `EXTRACTION_START`, `EXTRACTION_DONE`, `EXTRACTION_FAILED`.
+- `processing + EXTRACTION_START → extracting`.
+- `extracting + EXTRACTION_DONE`: routes by `coverage().missing.length`. Empty → `confirming`; non-empty → `stage-2` (carries `metrics`, `missing`, `declined: []`, `stage`).
+- `extracting + EXTRACTION_FAILED → stage-2` with `missing = ALL_METRICS`, `stage: 'scripted'`. User can still complete the check-in by tap.
+- `stage-2 + METRIC_UPDATED / METRIC_DECLINED / STAGE_2_CONTINUE / DISCARD_REQUEST` — per-metric edits stay in `stage-2`; CONTINUE collapses to `confirming` carrying the same payload; DISCARD_REQUEST pushes to `discarding` keeping the previous state for restore-on-cancel.
+- `confirming + METRIC_UPDATED / METRIC_DECLINED / CONFIRM / DISCARD_REQUEST` — symmetric edits, CONFIRM → `saving`, discard branches to `discarding`.
+- `discarding + DISCARD_CONFIRM → idle` (with reset). `DISCARD_CANCEL` restores `previous` verbatim.
+- `saved + MILESTONE_DETECTED → celebrating` (Wave 2 will hook into this; for now the page routes to `/check-in/saved` before milestone has a chance to fire).
+
+`discarding` state shape changed from `previous: kind` to `previous: Extract<State, { kind: 'stage-2' | 'confirming' }>` so DISCARD_CANCEL can restore the full payload, not just re-enter an empty state.
+
+**`app/check-in/page.tsx` rewired end-to-end.** Single client component composes everything Wave 1 produced.
+- `useQuery(api.continuity.getContinuityState)` feeds opener + closer; `FALLBACK_CONTINUITY` (with `isFirstEverCheckin: true`) renders an opener string from the very first paint instead of a spinner.
+- `useEffect` on `processing` dispatches `EXTRACTION_START`, awaits `extractMetrics()`, computes `coverage()`, dispatches `EXTRACTION_DONE` with `stage: 'open' | 'hybrid' | 'scripted'` (3-way split on `missing.length`), or `EXTRACTION_FAILED`.
+- `confirming` and `saving` and the `error/save-failed` branch all render `<ConfirmSummary>` from a cached `confirmingRef` snapshot — keeps the card on screen across save success/fail without re-mounting.
+- `stage-2` renders `<Stage2>` with the recap + tap-input column.
+- `saved` triggers `router.push('/check-in/saved?closer=…')`.
+- Save-later queue is drained once on mount (`useEffect`), failed retries re-`enqueue`.
+- `ConvexCreateCheckinArgs` + `toConvexArgs(payload)` bridge `SaveLaterPayload`'s plain-string `appendedTo` to Convex's branded `Id<'checkIns'>` — strip the field when undefined, cast when present. Brand is TS-only nominal so the round-trip is lossless.
+- ConfirmSummary owns its own discard-confirm modal, so `onDiscard` fires `RESET` directly (skipping the reducer's `discarding` state). The state is kept for completeness — Stage 2 will route through it once Wave 2's discard sheet lands.
+
+**Test surface (`tests/setup.ts` + `tests/check-in/screen-shell.test.tsx`).** Page tests render `<CheckinPage>` outside Next's App Router runtime, so `useRouter()` threw "invariant expected app router to be mounted". Added a global `vi.mock('next/navigation', …)` to `tests/setup.ts` returning callable spies for `push`/`replace`/`back`/`prefetch` and stubs for `usePathname` / `useSearchParams`. Convex was already mocked there since Cycle 1.
+
+The C1 screen-shell test asserted on the literal heading `"How's today feeling?"`. The opener engine now selects `first-ever` under FALLBACK_CONTINUITY, so the test was updated to assert on the actual variant text from `lib/saumya/variants.ts`: *"Hey Sonakshi — glad you're here. How are you feeling today?"*. Subcopy + ScreenShell + listening + error + retry assertions still pass unmodified.
+
+State-machine unit tests grew by 19 cases (47/47 total) covering: scripted/hybrid routing on `EXTRACTION_DONE`, declined-metric handling at both `stage-2` and `confirming`, discard preserve-and-restore, and `saved + MILESTONE_DETECTED → celebrating`.
+
+**Verified.**
+- `npm run test:run` — **366/366 pass** across 26 files.
+- `npx tsc --noEmit` — clean.
+- `npm run build` — compiled in 12.7s with Turbopack; 10 static pages generated, `/api/check-in/extract` registered as the dynamic route. No warnings.
+
+**Diff scope at session end.**
+- `app/check-in/page.tsx`: net +355 lines (full rewrite around the new union).
+- `lib/checkin/state-machine.ts`: +149 (transition logic for the new events; `discarding.previous` widened).
+- `tests/check-in/state-machine.test.ts`: +252 (19 new cases).
+- `tests/setup.ts`: +17 (Next router mock).
+- `tests/check-in/screen-shell.test.tsx`: ±9 (opener text + header doc).
+- `vitest.config.ts`: +5 (`pool: 'vmThreads'` with comment).
+- `convex/_generated/api.d.ts`: +4 (regen via `npx convex dev --once` to register `continuity` + `extractAttempts` modules).
+
+**Open follow-ups.**
+- Wave 2 dispatch — chunks 2.E (TTS spoken closer) + 2.F (Day-1 tutorial overlay + same-day re-entry append payload + milestone celebration). Both can run in parallel; lanes don't overlap.
+- Then Project Process Playbook review pass — three reviewers in parallel, fix pass, second pass, ship.
+- F02 C1 ship-day learning #5 still holds: `NEXT_PUBLIC_CONVEX_URL` should be set globally for "all preview branches" before pushing this branch to a PR, otherwise the Vercel preview will 401 + crash at `_not-found` prerender.
+
+**Next.** Tag `f01-c2/wave-1-integrated` on the integration commit. Then Wave 2 dispatch.

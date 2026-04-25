@@ -68,8 +68,15 @@ export type State =
       declined?: Metric[]
       stage?: StageEnum
     }
-  // 2.D — modal-overlay state when the user requests discard.
-  | { kind: 'discarding'; from: 'confirming' | 'stage-2' }
+  // 2.D — modal-overlay state when the user requests discard. `previous`
+  // carries the full state to restore on DISCARD_CANCEL — we'd lose
+  // metrics/missing/declined otherwise.
+  | {
+      kind: 'discarding'
+      previous:
+        | Extract<State, { kind: 'stage-2' }>
+        | Extract<State, { kind: 'confirming' }>
+    }
   | { kind: 'saving' }
   // 2.F — `milestone` carries the celebration kind (or null when the
   // save isn't a milestone day). Optional for the same C1-compatibility
@@ -90,13 +97,22 @@ export type Event =
   // C1 legacy event — kept so existing tests still pass. Chunk 2.B
   // re-points the production path at EXTRACTION_DONE.
   | { type: 'METRICS_READY' }
+  // 2.B — page kicks extraction once it sees `processing`. Reducer
+  // moves to `extracting` so the orb can render a distinct label.
+  | { type: 'EXTRACTION_START' }
   // 2.B — fires when the AI Gateway returns. `missing.length === 0`
-  // is the ADR-005 skip-Stage-2 signal (chunk 2.B owns the routing).
+  // is the ADR-005 skip-Stage-2 signal — reducer routes to `confirming`
+  // (stage='open') vs `stage-2` (stage='hybrid' or 'scripted').
   | {
       type: 'EXTRACTION_DONE'
       metrics: Partial<CheckinMetrics>
       missing: Metric[]
+      stage: StageEnum
     }
+  // 2.B — extraction failure path (route 429, schema parse fail, network).
+  // Treated as "all 5 missing, scripted" so user falls into Stage 2 with
+  // every control rendered. No data lost — transcript is still attached.
+  | { type: 'EXTRACTION_FAILED' }
   // 2.C — Stage 2 user actions.
   | { type: 'METRIC_UPDATED'; metric: Metric; value: unknown }
   | { type: 'METRIC_DECLINED'; metric: Metric }
@@ -164,8 +180,15 @@ export function reducer(state: State, event: Event): State {
       return state
     }
     case 'processing': {
+      // Legacy C1 path — kept so existing tests still pass.
       if (event.type === 'METRICS_READY') {
-        return { kind: 'confirming', transcript: state.transcript }
+        return {
+          kind: 'confirming',
+          transcript: state.transcript,
+        }
+      }
+      if (event.type === 'EXTRACTION_START') {
+        return { kind: 'extracting', transcript: state.transcript }
       }
       if (event.type === 'VOICE_ERROR') {
         return { kind: 'error', error: event.error }
@@ -173,25 +196,121 @@ export function reducer(state: State, event: Event): State {
       return state
     }
     case 'extracting': {
-      // 2.B owns transitions out of `extracting` (EXTRACTION_DONE → either
-      // `stage-2` when missing.length > 0, or `confirming` per ADR-005 skip
-      // rule). Pre-flight commits the state; lane 2.B implements the routing.
+      if (event.type === 'EXTRACTION_DONE') {
+        // ADR-005 skip rule: zero missing → straight to confirming.
+        if (event.missing.length === 0) {
+          return {
+            kind: 'confirming',
+            transcript: state.transcript,
+            metrics: event.metrics as CheckinMetrics,
+            declined: [],
+            stage: event.stage,
+          }
+        }
+        return {
+          kind: 'stage-2',
+          transcript: state.transcript,
+          metrics: event.metrics,
+          missing: event.missing,
+          declined: [],
+        }
+      }
+      if (event.type === 'EXTRACTION_FAILED') {
+        // Fall-through: treat as no metrics extracted, all 5 missing,
+        // user falls into a fully scripted Stage 2.
+        return {
+          kind: 'stage-2',
+          transcript: state.transcript,
+          metrics: {},
+          missing: ['pain', 'mood', 'adherenceTaken', 'flare', 'energy'],
+          declined: [],
+        }
+      }
       return state
     }
     case 'stage-2': {
-      // 2.C owns transitions: METRIC_UPDATED, METRIC_DECLINED, and
-      // STAGE_2_CONTINUE (→ confirming). DISCARD_REQUEST → discarding.
-      // Pre-flight commits the state; lane 2.C implements the logic.
+      if (event.type === 'METRIC_UPDATED') {
+        // Set the value, drop the metric from missing + declined (a tap
+        // overrides a prior skip).
+        return {
+          ...state,
+          metrics: { ...state.metrics, [event.metric]: event.value },
+          missing: state.missing.filter((m) => m !== event.metric),
+          declined: state.declined.filter((m) => m !== event.metric),
+        }
+      }
+      if (event.type === 'METRIC_DECLINED') {
+        // Skip-today: write null to the metric, mark declined, drop from
+        // missing. Pattern engine reads `declined` to render distinctly.
+        if (state.declined.includes(event.metric)) return state
+        return {
+          ...state,
+          metrics: { ...state.metrics, [event.metric]: null },
+          missing: state.missing.filter((m) => m !== event.metric),
+          declined: [...state.declined, event.metric],
+        }
+      }
+      if (event.type === 'STAGE_2_CONTINUE') {
+        // Treat anything still in `missing` as declined-by-omission so
+        // confirming gets a fully-formed `CheckinMetrics` (nulls included).
+        const filledMetrics: CheckinMetrics = {
+          pain: state.metrics.pain ?? null,
+          mood: state.metrics.mood ?? null,
+          adherenceTaken: state.metrics.adherenceTaken ?? null,
+          flare: state.metrics.flare ?? null,
+          energy: state.metrics.energy ?? null,
+        }
+        const finalDeclined = [
+          ...state.declined,
+          ...state.missing.filter((m) => !state.declined.includes(m)),
+        ]
+        const stage: StageEnum =
+          state.declined.length === 5 || state.missing.length === 5
+            ? 'scripted'
+            : 'hybrid'
+        return {
+          kind: 'confirming',
+          transcript: state.transcript,
+          metrics: filledMetrics,
+          declined: finalDeclined,
+          stage,
+        }
+      }
+      if (event.type === 'DISCARD_REQUEST') {
+        return { kind: 'discarding', previous: state }
+      }
       return state
     }
     case 'confirming': {
+      if (event.type === 'METRIC_UPDATED' && state.metrics) {
+        return {
+          ...state,
+          metrics: { ...state.metrics, [event.metric]: event.value },
+          declined: (state.declined ?? []).filter((m) => m !== event.metric),
+        }
+      }
+      if (event.type === 'METRIC_DECLINED' && state.metrics) {
+        const declined = state.declined ?? []
+        if (declined.includes(event.metric)) return state
+        return {
+          ...state,
+          metrics: { ...state.metrics, [event.metric]: null },
+          declined: [...declined, event.metric],
+        }
+      }
       if (event.type === 'CONFIRM') return { kind: 'saving' }
-      // 2.D owns DISCARD_REQUEST → discarding. Pre-flight no-op.
+      if (event.type === 'DISCARD_REQUEST') {
+        return { kind: 'discarding', previous: state }
+      }
       return state
     }
     case 'discarding': {
-      // 2.D owns DISCARD_CONFIRM (→ idle via RESET semantics) and
-      // DISCARD_CANCEL (→ back to state.from). Pre-flight no-op.
+      if (event.type === 'DISCARD_CONFIRM') {
+        return { kind: 'idle' }
+      }
+      if (event.type === 'DISCARD_CANCEL') {
+        return state.previous
+      }
       return state
     }
     case 'saving': {
@@ -205,7 +324,9 @@ export function reducer(state: State, event: Event): State {
       return state
     }
     case 'saved': {
-      // 2.F owns MILESTONE_DETECTED → celebrating. Pre-flight no-op.
+      if (event.type === 'MILESTONE_DETECTED') {
+        return { kind: 'celebrating', milestone: event.milestone }
+      }
       return state
     }
     case 'celebrating': {
