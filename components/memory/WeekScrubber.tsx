@@ -16,7 +16,7 @@
  * - No tier clamp — full history navigable.
  */
 
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type { MemoryEvent } from './_types'
 
 export interface WeekScrubberProps {
@@ -142,11 +142,33 @@ export function WeekScrubber({
     const end = e.changedTouches[0]?.clientX ?? start
     const dx = end - start
     if (Math.abs(dx) < 50) return
-    // Snap a full week.
+    shiftWeek(dx < 0 ? 1 : -1)
+  }
+
+  /** Shift selection by N weeks (for prev/next buttons + swipe). */
+  const shiftWeek = (weeks: number): void => {
     const sel = parseISO(selectedDate)
-    sel.setDate(sel.getDate() + (dx < 0 ? 7 : -7))
+    sel.setDate(sel.getDate() + 7 * weeks)
     onSelectDay(formatISO(sel))
   }
+
+  // Map of date → button ref so we can focus the new selection after
+  // arrow-key navigation. Without this, focus stays on the old (now-
+  // unselected) cell while selection moves visually — kbd users get stuck.
+  const cellRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
+  // When set, the next render focuses the cell with this iso. Cleared by
+  // the effect after focus transfers. Click sets nothing; only kbd nav.
+  const pendingFocusRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const target = pendingFocusRef.current
+    if (target === null) return
+    const node = cellRefs.current.get(target)
+    if (node !== undefined) {
+      node.focus()
+      pendingFocusRef.current = null
+    }
+  })
 
   const handleKey = (
     e: React.KeyboardEvent<HTMLButtonElement>,
@@ -156,21 +178,45 @@ export function WeekScrubber({
     e.preventDefault()
     const next = new Date(day)
     next.setDate(day.getDate() + (e.key === 'ArrowRight' ? 1 : -1))
-    onSelectDay(formatISO(next))
+    const nextIso = formatISO(next)
+    pendingFocusRef.current = nextIso
+    onSelectDay(nextIso)
   }
 
   return (
-    <div data-testid="week-scrubber" className="flex flex-col gap-2 select-none">
-      <div
-        data-testid="week-scrubber-month"
-        className="sticky top-0 z-10 px-1 py-1 text-sm font-medium text-[color:var(--ink-muted)]"
-      >
-        {monthLabel}
+    <nav
+      data-testid="week-scrubber"
+      aria-label="Week navigation"
+      className="flex flex-col gap-2 select-none"
+    >
+      <div className="flex items-center justify-between px-1 py-1">
+        <button
+          type="button"
+          aria-label="Previous week"
+          data-testid="week-scrubber-prev"
+          onClick={() => shiftWeek(-1)}
+          className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--ink-muted)] hover:bg-[color:var(--sage-soft)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--sage)]"
+        >
+          <span aria-hidden>‹</span>
+        </button>
+        <div
+          data-testid="week-scrubber-month"
+          className="text-sm font-medium text-[color:var(--ink-muted)]"
+        >
+          {monthLabel}
+        </div>
+        <button
+          type="button"
+          aria-label="Next week"
+          data-testid="week-scrubber-next"
+          onClick={() => shiftWeek(1)}
+          className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--ink-muted)] hover:bg-[color:var(--sage-soft)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--sage)]"
+        >
+          <span aria-hidden>›</span>
+        </button>
       </div>
 
       <div
-        role="group"
-        aria-label="Week navigation"
         className="grid grid-cols-7 gap-1 px-1"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
@@ -191,12 +237,15 @@ export function WeekScrubber({
           return (
             <button
               key={iso}
+              ref={(el) => {
+                if (el === null) cellRefs.current.delete(iso)
+                else cellRefs.current.set(iso, el)
+              }}
               type="button"
-              role="gridcell"
               data-testid={`week-cell-${iso}`}
               data-selected={isSelected ? 'true' : 'false'}
               data-today={isToday ? 'true' : 'false'}
-              aria-selected={isSelected}
+              aria-current={isSelected ? 'date' : undefined}
               aria-label={ariaLabel}
               onClick={() => onSelectDay(iso)}
               onKeyDown={(e) => handleKey(e, day)}
@@ -258,6 +307,6 @@ export function WeekScrubber({
           )
         })}
       </div>
-    </div>
+    </nav>
   )
 }

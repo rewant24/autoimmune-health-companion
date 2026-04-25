@@ -6,9 +6,13 @@
  * Feature 02, Chunk 2.B, US-2.B.3.
  *
  * Order is locked: All / Check-ins / Intake events / Flare-ups / Visits.
- * Selected tab is filled in sage-teal accent. Container is horizontally
- * scrollable on small screens. Each tab is a `<button role="tab">` with
- * `aria-selected`. Min hit target 44pt.
+ * Selected chip is filled in sage-teal accent. Container is horizontally
+ * scrollable on small screens. Min hit target 44pt.
+ *
+ * a11y: these are filter toggles, not panel-switching tabs — the same
+ * day-list panel is filtered in place. WAI-ARIA tab pattern would mislead
+ * SRs into expecting separate panels per tab. So: `<nav>` + `aria-pressed`
+ * buttons. (Reviewer 3 catch.)
  */
 
 import type { MemoryFilter } from './_types'
@@ -31,8 +35,7 @@ export function FilterTabs({
   onChange,
 }: FilterTabsProps): React.JSX.Element {
   return (
-    <div
-      role="tablist"
+    <nav
       aria-label="Filter Memory by event type"
       data-testid="filter-tabs"
       className="flex gap-2 overflow-x-auto px-1 py-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
@@ -43,8 +46,7 @@ export function FilterTabs({
           <button
             key={tab.value}
             type="button"
-            role="tab"
-            aria-selected={isSelected}
+            aria-pressed={isSelected}
             data-testid={`filter-tab-${tab.value}`}
             data-selected={isSelected ? 'true' : 'false'}
             onClick={() => onChange(tab.value)}
@@ -61,6 +63,6 @@ export function FilterTabs({
           </button>
         )
       })}
-    </div>
+    </nav>
   )
 }

@@ -3,12 +3,16 @@
  *
  * Asserts:
  *  - 7 cells render with the expected date numbers
- *  - selected cell carries `aria-selected="true"` + data-selected="true"
+ *  - selected cell carries `aria-current="date"` + data-selected="true"
  *  - tap fires onSelectDay with the YYYY-MM-DD of the tapped cell
  *  - cell with an event in `events` shows the event-dot
  *  - cell with a flare event shows the flare marker
- *  - sticky month label reflects the selected date
+ *  - month label reflects the selected date
  *  - keyboard arrow-left / arrow-right navigates by one day
+ *  - prev/next week buttons jump 7 days (kbd-accessible alternative to swipe)
+ *
+ * a11y note: cells are plain buttons inside a `<nav>`, not `gridcell` —
+ * see Reviewer 3 catch during F02 C1 review.
  */
 
 import { render, screen } from '@testing-library/react'
@@ -59,7 +63,7 @@ describe('<WeekScrubber />', () => {
     expect(screen.getByTestId(`week-cell-${SATURDAY}`)).toHaveTextContent('25')
   })
 
-  it('marks the selected cell with aria-selected + data-selected', () => {
+  it('marks the selected cell with aria-current="date" + data-selected', () => {
     render(
       <WeekScrubber
         selectedDate={SELECTED}
@@ -69,13 +73,12 @@ describe('<WeekScrubber />', () => {
       />,
     )
     const cell = screen.getByTestId(`week-cell-${SELECTED}`)
-    expect(cell).toHaveAttribute('aria-selected', 'true')
+    expect(cell).toHaveAttribute('aria-current', 'date')
     expect(cell).toHaveAttribute('data-selected', 'true')
-    // Sibling is not selected.
-    expect(screen.getByTestId(`week-cell-${SUNDAY}`)).toHaveAttribute(
-      'aria-selected',
-      'false',
-    )
+    // Sibling is not selected — aria-current omitted entirely on non-selected cells.
+    const sibling = screen.getByTestId(`week-cell-${SUNDAY}`)
+    expect(sibling).not.toHaveAttribute('aria-current')
+    expect(sibling).toHaveAttribute('data-selected', 'false')
   })
 
   it('marks the today cell with data-today even when not selected', () => {
@@ -198,5 +201,33 @@ describe('<WeekScrubber />', () => {
     cell.focus()
     await userEvent.keyboard('{ArrowLeft}')
     expect(onSelectDay).toHaveBeenCalledWith('2026-04-21')
+  })
+
+  it('next-week button jumps selection forward by 7 days', async () => {
+    const onSelectDay = vi.fn()
+    render(
+      <WeekScrubber
+        selectedDate={SELECTED}
+        events={[]}
+        onSelectDay={onSelectDay}
+        todayDate="2026-04-25"
+      />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Next week' }))
+    expect(onSelectDay).toHaveBeenCalledWith('2026-04-29')
+  })
+
+  it('prev-week button jumps selection back by 7 days', async () => {
+    const onSelectDay = vi.fn()
+    render(
+      <WeekScrubber
+        selectedDate={SELECTED}
+        events={[]}
+        onSelectDay={onSelectDay}
+        todayDate="2026-04-25"
+      />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Previous week' }))
+    expect(onSelectDay).toHaveBeenCalledWith('2026-04-15')
   })
 })

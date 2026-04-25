@@ -30,6 +30,12 @@ import { DayView } from './DayView'
 export interface MemoryTabProps {
   events: MemoryEvent[]
   initialFilter?: MemoryFilter
+  /**
+   * True while the parent is still resolving events (e.g. Convex query
+   * pending). Surfaces a subtle "Loading your memory…" line so the screen
+   * doesn't read as empty during the first round-trip.
+   */
+  isLoading?: boolean
 }
 
 /** Today as YYYY-MM-DD in IST (en-CA emits ISO-style YYYY-MM-DD). */
@@ -45,6 +51,7 @@ export function todayIST(): string {
 export function MemoryTab({
   events,
   initialFilter = 'all',
+  isLoading = false,
 }: MemoryTabProps): React.JSX.Element {
   const router = useRouter()
   const pathname = usePathname()
@@ -91,14 +98,17 @@ export function MemoryTab({
         <button
           type="button"
           aria-label="Search your check-ins"
+          aria-disabled="true"
+          title="Search coming soon"
           data-testid="memory-search-icon"
           onClick={() => {
             /* chunk 2.E wires SearchBar */
           }}
           className={
             'flex h-11 w-11 items-center justify-center rounded-full ' +
-            'text-[color:var(--ink-muted)] hover:bg-[color:var(--sage-soft)] ' +
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--sage)]'
+            'text-[color:var(--ink-subtle)] hover:bg-[color:var(--sage-soft)] ' +
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--sage)] ' +
+            'cursor-not-allowed'
           }
         >
           <svg
@@ -136,6 +146,7 @@ export function MemoryTab({
         selectedDate={selectedDate}
         events={events}
         filter={filter}
+        isLoading={isLoading}
       />
     </main>
   )
@@ -153,10 +164,12 @@ function DayListArea({
   selectedDate,
   events,
   filter,
+  isLoading,
 }: {
   selectedDate: string
   events: MemoryEvent[]
   filter: MemoryFilter
+  isLoading: boolean
 }): React.JSX.Element {
   const dayEvents = useMemo(
     () =>
@@ -172,9 +185,20 @@ function DayListArea({
       data-testid="day-list-area"
       data-selected-date={selectedDate}
       data-filter={filter}
+      data-loading={isLoading ? 'true' : 'false'}
       className="flex flex-1 flex-col gap-4"
     >
-      <DayView date={selectedDate} events={dayEvents} />
+      {isLoading ? (
+        <div
+          data-testid="day-list-loading"
+          aria-live="polite"
+          className="px-3 py-4 text-sm text-[color:var(--ink-subtle)]"
+        >
+          Loading your memory…
+        </div>
+      ) : (
+        <DayView date={selectedDate} events={dayEvents} />
+      )}
     </div>
   )
 }

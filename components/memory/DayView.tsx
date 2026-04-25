@@ -55,6 +55,12 @@ export function DayView({ date, events, onEventTap }: Props): React.JSX.Element 
     (e) => e.type === 'flare' || e.type === 'visit',
   )
 
+  const isEmpty =
+    todaysCheckin.length === 0 &&
+    medicationIntake.length === 0 &&
+    otherEvents.length === 0 &&
+    completed.length === 0
+
   return (
     <article data-day-view={date} className="flex flex-col">
       <header
@@ -63,35 +69,48 @@ export function DayView({ date, events, onEventTap }: Props): React.JSX.Element 
       >
         {formatDayHeader(date)}
       </header>
-      {todaysCheckin.length > 0 && (
-        <EventGroup
-          label="Today's check-in"
-          events={todaysCheckin}
-          onEventTap={onEventTap}
-        />
-      )}
-      {medicationIntake.length > 0 && (
-        <EventGroup
-          label="Medication intake"
-          events={medicationIntake}
-          onEventTap={onEventTap}
-        />
-      )}
-      {otherEvents.length > 0 && (
-        <EventGroup
-          label="Other events"
-          events={otherEvents}
-          onEventTap={onEventTap}
-        />
-      )}
-      {completed.length > 0 && (
-        <EventGroup
-          label="Completed"
-          events={completed}
-          onEventTap={onEventTap}
-          collapsible
-          initiallyCollapsed
-        />
+      {isEmpty ? (
+        <div
+          data-testid="day-view-empty"
+          className="px-3 py-6 text-sm text-[color:var(--ink-subtle)]"
+        >
+          {date === todayIST()
+            ? 'Your memory starts today.'
+            : 'No check-ins on this day.'}
+        </div>
+      ) : (
+        <>
+          {todaysCheckin.length > 0 && (
+            <EventGroup
+              label="Today's check-in"
+              events={todaysCheckin}
+              onEventTap={onEventTap}
+            />
+          )}
+          {medicationIntake.length > 0 && (
+            <EventGroup
+              label="Medication intake"
+              events={medicationIntake}
+              onEventTap={onEventTap}
+            />
+          )}
+          {otherEvents.length > 0 && (
+            <EventGroup
+              label="Other events"
+              events={otherEvents}
+              onEventTap={onEventTap}
+            />
+          )}
+          {completed.length > 0 && (
+            <EventGroup
+              label="Completed"
+              events={completed}
+              onEventTap={onEventTap}
+              collapsible
+              initiallyCollapsed
+            />
+          )}
+        </>
       )}
     </article>
   )

@@ -38,16 +38,30 @@ function parseFilter(raw: string | null): MemoryFilter {
   return 'all'
 }
 
-/** YYYY-MM-DD in IST for an offset (in days) from today. */
+/**
+ * YYYY-MM-DD in IST for an offset (in days) from today.
+ *
+ * Anchors to *IST today*, not UTC now — so during the 18:30–23:59 UTC
+ * window (when IST is already tomorrow) we don't get an off-by-one window.
+ * Reviewer 2 catch.
+ */
 function istDateOffset(daysOffset: number): string {
-  const now = new Date()
-  now.setUTCDate(now.getUTCDate() + daysOffset)
-  return new Intl.DateTimeFormat('en-CA', {
+  const istToday = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Kolkata',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(now)
+  }).format(new Date())
+  const [y, m, d] = istToday.split('-').map(Number)
+  // Construct in UTC so setUTCDate arithmetic is timezone-agnostic, then
+  // read back UTC fields — the date string carries no time component so
+  // there's no IST formatting to do here.
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  dt.setUTCDate(dt.getUTCDate() + daysOffset)
+  const yy = dt.getUTCFullYear()
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getUTCDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
 }
 
 /**
@@ -91,8 +105,18 @@ function JourneyMemoryInner(): React.JSX.Element {
   )
 
   const events = result?.events ?? []
+  // Loading = userId is provisioned but Convex query hasn't resolved.
+  // Pre-userId render is also a kind of "loading" but instant — keep the
+  // banner specifically for the network round-trip so it doesn't flash.
+  const isLoading = userId !== null && result === undefined
 
-  return <MemoryTab events={events} initialFilter={initialFilter} />
+  return (
+    <MemoryTab
+      events={events}
+      initialFilter={initialFilter}
+      isLoading={isLoading}
+    />
+  )
 }
 
 export default function JourneyMemoryPage(): React.JSX.Element {

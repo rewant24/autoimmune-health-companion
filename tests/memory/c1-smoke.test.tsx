@@ -110,9 +110,12 @@ describe('F02 C1 smoke — MemoryTab integrated with seeded events', () => {
       screen.getByRole('button', { name: 'Search your check-ins' }),
     ).toBeInTheDocument()
 
-    // FilterTabs — 5 labels in fixed order.
-    const tablist = screen.getByRole('tablist')
-    const tabs = within(tablist).getAllByRole('tab')
+    // FilterTabs — 5 labels in fixed order. Filter chips use <nav> +
+    // aria-pressed (not WAI-ARIA tablist) per F02 C1 review pass.
+    const filterNav = screen.getByRole('navigation', {
+      name: /filter memory/i,
+    })
+    const tabs = within(filterNav).getAllByRole('button')
     expect(tabs.map((t) => t.textContent?.trim())).toEqual([
       'All',
       'Check-ins',
