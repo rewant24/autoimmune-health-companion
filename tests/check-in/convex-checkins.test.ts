@@ -193,6 +193,52 @@ describe('createCheckinHandler', () => {
       expect(e).toBeInstanceOf(ConvexError)
     }
   })
+
+  // Same-day re-entry (chunk 2.F Wave 2 integration): when `appendedTo`
+  // is set, the second create on (userId, date) is a deliberate append
+  // and the handler inserts a new row instead of throwing duplicate.
+  it('append: appendedTo set bypasses the duplicate check', async () => {
+    const { ctx, rows } = makeCtx()
+    const first = await createCheckinHandler(
+      ctx as unknown as Parameters<typeof createCheckinHandler>[0],
+      baseArgs({ clientRequestId: 'req_first' }),
+    )
+    const second = await createCheckinHandler(
+      ctx as unknown as Parameters<typeof createCheckinHandler>[0],
+      baseArgs({
+        clientRequestId: 'req_second',
+        appendedTo: first.id,
+      }),
+    )
+    expect(second.id).not.toBe(first.id)
+    expect(rows.length).toBe(2)
+    expect(rows[1].appendedTo).toBe(first.id)
+    expect(rows[0].appendedTo).toBeUndefined()
+  })
+
+  it('append: idempotent retry of an append matches the existing append row', async () => {
+    const { ctx, rows } = makeCtx()
+    const first = await createCheckinHandler(
+      ctx as unknown as Parameters<typeof createCheckinHandler>[0],
+      baseArgs({ clientRequestId: 'req_first' }),
+    )
+    const append1 = await createCheckinHandler(
+      ctx as unknown as Parameters<typeof createCheckinHandler>[0],
+      baseArgs({
+        clientRequestId: 'req_append',
+        appendedTo: first.id,
+      }),
+    )
+    const append2 = await createCheckinHandler(
+      ctx as unknown as Parameters<typeof createCheckinHandler>[0],
+      baseArgs({
+        clientRequestId: 'req_append',
+        appendedTo: first.id,
+      }),
+    )
+    expect(append2.id).toBe(append1.id)
+    expect(rows.length).toBe(2)
+  })
 })
 
 describe('listCheckinsHandler', () => {

@@ -523,3 +523,57 @@ State-machine unit tests grew by 19 cases (47/47 total) covering: scripted/hybri
 - F02 C1 ship-day learning #5 still holds: `NEXT_PUBLIC_CONVEX_URL` should be set globally for "all preview branches" before pushing this branch to a PR, otherwise the Vercel preview will 401 + crash at `_not-found` prerender.
 
 **Next.** Tag `f01-c2/wave-1-integrated` on the integration commit. Then Wave 2 dispatch.
+
+---
+
+## 2026-04-25 — Session 11 — F01 C2 Wave 2 build + integration
+
+**Wave 2 build dispatched** as two parallel subagents in one multi-tool-call message per playbook (Task 3 of `docs/features/01-daily-checkin-cycle-2-plan.md`). File ownership disjoint by design — no merge collisions.
+
+**Build-E (Chunk 2.E — TTS spoken opener)** — 3 commits on `feat/f01-cycle-2`.
+- `2a7b945` `feat(voice): add Web Speech tts-adapter (TTS.US-1.H.1)`
+- `55386d5` `feat(voice): add SpokenOpener auto-speak component (TTS.US-1.H.2)`
+- `14d8991` `feat(voice): add long-press mute popover to SpokenOpener (TTS.US-1.H.3)`
+- Files: `lib/voice/tts-adapter.ts`, `components/check-in/SpokenOpener.tsx`, 27 tests across `tts-adapter.test.ts` + `spoken-opener.test.tsx`.
+- Voice selection: `en-IN` > any `en-*` > platform default; cached at module level.
+- Three guards on auto-speak: `isTtsAvailable()`, no `prefers-reduced-motion`, no `localStorage.saumya.ttsDisabled`.
+- Long-press deviation: in jsdom + `pool: 'vmThreads'`, `userEvent.pointer({ keys: '[MouseLeft>]' })` hangs past 5s. Tests use `fireEvent.pointerDown`/`pointerUp` wrapped in `act()`. Behaviour-equivalent — same handlers fire. Matches prior pattern in `tests/check-in/discard.test.tsx`.
+- Click-after-long-press suppression: `longPressFired` ref swallows the synthetic click after a 1s hold so the user doesn't get a stray utterance over the popover.
+
+**Build-F (Chunk 2.F — Day-1 tutorial + re-entry + milestone)** — 4 commits on `feat/f01-cycle-2`.
+- `29f9d1f` `feat(check-in): detect milestone kinds (Milestone.US-1.J.3)`
+- `f450629` `feat(check-in): same-day re-entry append payload + getTodayCheckin (Reentry.US-1.J.2)`
+- `f1ba9eb` `feat(check-in): Day-1 micro-tutorial wrapper component (Day1.US-1.J.1)`
+- `c7d0589` `feat(check-in): milestone celebration ring overlay (Milestone.US-1.J.4)`
+- Files: `lib/checkin/{milestone,same-day-reentry}.ts`, `components/check-in/{Day1Tutorial,MilestoneCelebration}.tsx`, plus the additive `getTodayCheckin` query + `getTodayCheckinHandler` in `convex/checkIns.ts`. 46 tests added.
+- `MilestoneCelebration.prefersReducedMotion` shipped as a prop (not internal `matchMedia`) — keeps SSR deterministic and avoids needing a jsdom polyfill. Page reads it once and passes through.
+- `Day1Tutorial` ships with a single `forceTooltip` prop instead of the spec-suggested two-flag pattern. Clean contract — Day1Tutorial doesn't know about Stage 2's `forceAllControls`. Orchestrator computes the AND.
+- `buildAppendPayload` is 5-arg (added `opts: { clientRequestId, durationMs, providerUsed?, stage? }`) — the spec's 4-arg signature didn't account for required fields on `CreateCheckinArgs`.
+- `getTodayCheckin` returns the *original* row (the one with `appendedTo === undefined`) when an append chain already exists for today, so subsequent re-entries chain off the original `_id` and the timestamped block list reads in order.
+
+**Wave 2 integration (orchestrator-only)** wired everything into `app/check-in/page.tsx`:
+- Imports: `SpokenOpener`, `Day1Tutorial`, `MilestoneCelebration`, `detectMilestone`, `buildAppendPayload`, `CheckinRow` type.
+- `useQuery(api.checkIns.getTodayCheckin, …)` runs alongside `getContinuityState`. When non-null, opener variant becomes `re-entry-same-day` (driven by `continuity.lastCheckinDaysAgo === 0` — already wired by Wave 1) and `onSave` builds an append payload via `buildAppendPayload(existing, …)` instead of a fresh-row payload.
+- `prefersReducedMotion` snapshot read once via `useMemo` and passed to `MilestoneCelebration`.
+- Saved-state effect now runs `detectMilestone(streakDays + 1, isFirstEverCheckin)` first. Non-null → dispatches `MILESTONE_DETECTED` (state machine moves to `celebrating`); null → routes to `/check-in/saved?closer=…` as before.
+- New `celebrating` render branch renders `<MilestoneCelebration kind closerText prefersReducedMotion onContinue>` — `onContinue` routes to `/check-in/saved`. Closer text becomes the heading inside the overlay.
+- Stage 2 render branch: `<Day1Tutorial forceTooltip={isDay1}>` wraps `<Stage2 forceAllControls={isDay1} …>`. **Deviation note**: Build-F's Day1Tutorial renders the ribbon below children, not under each TapInput. Orchestrator wraps the whole Stage 2 once — single ribbon below the view. UX-equivalent for v1; per-control wrapping is a future polish.
+- Idle render: replaced `<h2>{openerSelection.text}</h2>` with `<SpokenOpener text={openerSelection.text} variantKey={openerSelection.key} />`. The "Tap the orb…" subcopy stays.
+
+**Convex handler patch (cross-cut Build-F gap).** Same-day re-entry needed a way past `createCheckinHandler`'s duplicate check. Build-F explicitly deferred that change. Orchestrator extended the handler in `convex/checkIns.ts:156-185`:
+- Idempotency lookup now scans the whole append chain (matches `clientRequestId` across all live rows for `(userId, date)`), not just the original.
+- Without `appendedTo`: a second create on `(userId, date)` still throws `checkin.duplicate` — unchanged contract for the non-append path.
+- With `appendedTo`: handler skips the duplicate check and inserts the new row.
+- Added 2 tests in `tests/check-in/convex-checkins.test.ts`: one asserting the append insert produces a distinct row with `appendedTo` set, one asserting idempotent retry of an append matches the existing append row.
+
+**Verified.**
+- `npx tsc --noEmit` — clean.
+- `npm run test:run` — **441/441 pass** across 32 files (was 412 before Wave 2; +29 = 27 from Build-E + 2 from the orchestrator's append tests, since Build-F's 46 added the gap from 412 to 439, then orchestrator added 2 more to reach 441).
+- `npm run build` — compiled in 13.2s with Turbopack; 10 static pages generated. No warnings.
+
+**Open follow-ups.**
+- Tag `f01-c2/wave-2-integrated` on the integration commit, then dispatch the 3 parallel review subagents per the playbook (review pass), fix pass, second-pass reviewer (decisions-locked frame), ship.
+- Manual smoke test before tagging `f01-c2/shipped`: clear localStorage + Convex `checkIns` → verify Day-1 tutorial + day-1 milestone fires; seed 6 prior days via `scripts/seed-streak.ts` (dev-only, not yet authored — orchestrator can add as part of smoke test) → verify day-7 ring animation.
+- F02 C1 ship-day learning #5 still relevant: `NEXT_PUBLIC_CONVEX_URL` needs to be set for the preview branch (or globally for "all preview") before opening the PR.
+
+**Next.** Tag the Wave 2 integration commit, then dispatch reviewers.

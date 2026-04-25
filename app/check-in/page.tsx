@@ -3,7 +3,7 @@
 /**
  * /check-in — daily voice check-in screen.
  *
- * Feature 01, Cycle 2 — Wave 1 integration.
+ * Feature 01, Cycle 2 — Wave 1 + Wave 2 integration.
  *
  * Composes:
  *   - ScreenShell + Orb + ErrorSlot (C1 layout)
@@ -15,14 +15,29 @@
  *   - <ConfirmSummary>             (Chunk 2.D — review card + save flow)
  *   - save-later queue             (Chunk 2.D — drained on mount, refilled on
  *                                   save-fail when user picks "Keep for later")
+ *   - <SpokenOpener>               (Chunk 2.E — Web Speech TTS opener)
+ *   - <Day1Tutorial>               (Chunk 2.F — Day-1 tap-to-edit ribbon
+ *                                   wrapping Stage 2)
+ *   - getTodayCheckin + buildAppendPayload (Chunk 2.F — same-day re-entry
+ *                                   produces an append-block save with
+ *                                   `appendedTo` referencing the original)
+ *   - detectMilestone + <MilestoneCelebration> (Chunk 2.F — Whoop-style
+ *                                   ring overlay on day-1/7/30/90/180/365)
  *
  * Flow:
- *   idle (opener text)
+ *   idle (SpokenOpener)
  *     → tap orb → requesting-permission → listening → processing
  *     → EXTRACTION_START → extracting → EXTRACTION_DONE / EXTRACTION_FAILED
  *     → coverage(metrics).missing.length === 0 ? confirming : stage-2
  *     → STAGE_2_CONTINUE → confirming
- *     → CONFIRM → saving → saved → router.push('/check-in/saved?closer=…')
+ *     → CONFIRM → saving → saved
+ *     → milestone? → celebrating → /check-in/saved
+ *     → no milestone → /check-in/saved
+ *
+ * Same-day re-entry: when `getTodayCheckin` returns a row, opener becomes
+ * `re-entry-same-day` (driven by continuity.lastCheckinDaysAgo === 0) and
+ * onSave builds an append payload via `buildAppendPayload`. The original
+ * row is unchanged; a new row is inserted with `appendedTo = original._id`.
  *
  * Discard: ConfirmSummary owns the modal state (DiscardConfirm). When the
  * user confirms discard, `onDiscard` fires here and we RESET to idle —
@@ -30,9 +45,11 @@
  * confirmation. The reducer keeps the `discarding` state for completeness
  * but the page never enters it through this flow.
  *
- * Wave 2 will add: SpokenOpener (TTS), Day1Tutorial overlay, same-day
- * re-entry append payload, milestone celebration. For now, the opener
- * renders as plain text and milestones are ignored (saved → /saved).
+ * Day-1 ribbon deviation: Build-F shipped `Day1Tutorial` as a wrapper that
+ * renders the ribbon below children. The orchestrator wraps the whole
+ * `<Stage2>` once instead of every TapInput — single ribbon below the
+ * Stage 2 view. UX-equivalent for v1; per-control wrapping is a future
+ * polish if needed.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -52,6 +69,9 @@ import { ScreenShell } from '@/components/check-in/ScreenShell'
 import { ErrorSlot } from '@/components/check-in/ErrorSlot'
 import { Stage2 } from '@/components/check-in/Stage2'
 import { ConfirmSummary } from '@/components/check-in/ConfirmSummary'
+import { SpokenOpener } from '@/components/check-in/SpokenOpener'
+import { Day1Tutorial } from '@/components/check-in/Day1Tutorial'
+import { MilestoneCelebration } from '@/components/check-in/MilestoneCelebration'
 import { selectOpener } from '@/lib/saumya/opener-engine'
 import { selectCloser } from '@/lib/saumya/closer-engine'
 import {
@@ -59,8 +79,11 @@ import {
   ExtractDailyCapError,
 } from '@/lib/checkin/extract-metrics'
 import { coverage } from '@/lib/checkin/coverage'
+import { detectMilestone } from '@/lib/checkin/milestone'
+import { buildAppendPayload } from '@/lib/checkin/same-day-reentry'
 import { drain, enqueue, type SaveLaterPayload } from '@/lib/checkin/save-later'
 import type { Id } from '@/convex/_generated/dataModel'
+import type { CheckinRow } from '@/convex/checkIns'
 import type {
   CheckinMetrics,
   ContinuityState,
@@ -194,6 +217,30 @@ export default function CheckinPage({
   })
   const continuityState: ContinuityState = continuityQuery ?? FALLBACK_CONTINUITY
 
+  // Same-day re-entry detection (chunk 2.F). When non-null, an open
+  // check-in already exists for today — opener variant becomes
+  // `re-entry-same-day` (driven by continuity.lastCheckinDaysAgo === 0)
+  // and `onSave` builds an `appendedTo` payload via `buildAppendPayload`
+  // instead of a fresh row.
+  const todayCheckinQuery = useQuery(api.checkIns.getTodayCheckin, {
+    userId,
+    date: todayIso,
+  })
+  const existingTodayRow: CheckinRow | null = todayCheckinQuery ?? null
+
+  // Day-1 mode: `Stage2` shows all 5 controls + we wrap it in
+  // `<Day1Tutorial>` to render the tap-to-edit ribbon below it.
+  const isDay1 = continuityState.isFirstEverCheckin
+
+  // `prefers-reduced-motion` snapshot — read once on the client. SSR
+  // returns false; MilestoneCelebration accepts this as a prop so the
+  // component itself stays SSR-deterministic.
+  const prefersReducedMotion = useMemo(() => {
+    if (typeof window === 'undefined') return false
+    if (typeof window.matchMedia !== 'function') return false
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  }, [])
+
   // Recompute opener + closer whenever continuity changes. Pure functions —
   // safe under the React 19 strict-mode double-invoke.
   const openerSelection = useMemo(
@@ -218,16 +265,39 @@ export default function CheckinPage({
     if (!snapshot) {
       throw new Error('No confirming snapshot — cannot save.')
     }
-    const payload: SaveLaterPayload = {
-      userId,
-      date: todayIso,
-      ...metricsToCreateArgs(snapshot.metrics),
-      declined: snapshot.declined,
-      transcript: snapshot.transcript.text,
-      stage: snapshot.stage,
-      durationMs: snapshot.transcript.durationMs ?? 0,
-      providerUsed: 'web-speech',
-      clientRequestId: newRequestId(),
+    const clientRequestId = newRequestId()
+    const durationMs = snapshot.transcript.durationMs ?? 0
+
+    let payload: SaveLaterPayload
+    if (existingTodayRow !== null) {
+      // Same-day re-entry — append a new block referencing the original.
+      const appendArgs = buildAppendPayload(
+        existingTodayRow,
+        snapshot.metrics,
+        snapshot.transcript.text,
+        snapshot.declined,
+        {
+          clientRequestId,
+          durationMs,
+          providerUsed: 'web-speech',
+          stage: snapshot.stage,
+        },
+      )
+      // `CreateCheckinArgs` is structurally compatible with
+      // `SaveLaterPayload`; both use `string` for `appendedTo`.
+      payload = appendArgs as SaveLaterPayload
+    } else {
+      payload = {
+        userId,
+        date: todayIso,
+        ...metricsToCreateArgs(snapshot.metrics),
+        declined: snapshot.declined,
+        transcript: snapshot.transcript.text,
+        stage: snapshot.stage,
+        durationMs,
+        providerUsed: 'web-speech',
+        clientRequestId,
+      }
     }
     lastPayloadRef.current = payload
     await createCheckin(toConvexArgs(payload))
@@ -305,12 +375,31 @@ export default function CheckinPage({
     }
   }, [state, dispatch, userId, todayIso])
 
-  // 4. Route to the terminal screen on save success.
+  // 4. On save success: detect milestone first (chunk 2.F). When the
+  //    save completes a streak day worth celebrating (or it was the
+  //    user's first-ever check-in), dispatch `MILESTONE_DETECTED` so the
+  //    state machine moves to `celebrating` and the page renders the
+  //    Whoop-style ring overlay. Otherwise, route straight to /saved.
   useEffect(() => {
     if (state.kind !== 'saved') return
+    const milestone = detectMilestone(
+      continuityState.streakDays + 1,
+      continuityState.isFirstEverCheckin,
+    )
+    if (milestone !== null) {
+      dispatch({ type: 'MILESTONE_DETECTED', milestone })
+      return
+    }
     const url = `/check-in/saved?closer=${encodeURIComponent(closerSelection.text)}`
     router.push(url)
-  }, [state.kind, router, closerSelection.text])
+  }, [
+    state.kind,
+    router,
+    closerSelection.text,
+    continuityState.streakDays,
+    continuityState.isFirstEverCheckin,
+    dispatch,
+  ])
 
   // ---- Render ----
 
@@ -364,22 +453,44 @@ export default function CheckinPage({
     )
   }
 
+  // Milestone celebration overlay (chunk 2.F). User taps "Keep going" →
+  // we route to /check-in/saved like the non-milestone path. Closer text
+  // surfaces inside the overlay as the heading.
+  if (state.kind === 'celebrating') {
+    return (
+      <ScreenShell>
+        <MilestoneCelebration
+          kind={state.milestone}
+          closerText={closerSelection.text}
+          prefersReducedMotion={prefersReducedMotion}
+          onContinue={() => {
+            const url = `/check-in/saved?closer=${encodeURIComponent(closerSelection.text)}`
+            router.push(url)
+          }}
+        />
+      </ScreenShell>
+    )
+  }
+
   if (state.kind === 'stage-2') {
     return (
       <ScreenShell>
-        <Stage2
-          transcript={state.transcript}
-          metrics={state.metrics}
-          missing={state.missing}
-          declined={state.declined}
-          onMetricUpdate={(metric, value) =>
-            dispatch({ type: 'METRIC_UPDATED', metric, value })
-          }
-          onMetricDeclined={(metric) =>
-            dispatch({ type: 'METRIC_DECLINED', metric })
-          }
-          onContinue={() => dispatch({ type: 'STAGE_2_CONTINUE' })}
-        />
+        <Day1Tutorial forceTooltip={isDay1}>
+          <Stage2
+            transcript={state.transcript}
+            metrics={state.metrics}
+            missing={state.missing}
+            declined={state.declined}
+            forceAllControls={isDay1}
+            onMetricUpdate={(metric, value) =>
+              dispatch({ type: 'METRIC_UPDATED', metric, value })
+            }
+            onMetricDeclined={(metric) =>
+              dispatch({ type: 'METRIC_DECLINED', metric })
+            }
+            onContinue={() => dispatch({ type: 'STAGE_2_CONTINUE' })}
+          />
+        </Day1Tutorial>
       </ScreenShell>
     )
   }
@@ -426,9 +537,10 @@ export default function CheckinPage({
     <ScreenShell>
       {state.kind === 'idle' ? (
         <header className="flex flex-col gap-3">
-          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            {openerSelection.text}
-          </h2>
+          <SpokenOpener
+            text={openerSelection.text}
+            variantKey={openerSelection.key}
+          />
           <p className="text-base text-zinc-600 dark:text-zinc-400">
             Tap the orb and tell me in your own words.
           </p>

@@ -145,26 +145,34 @@ export async function createCheckinHandler(
     }
   }
 
-  // We fetch the first row matching (userId, date) via the index and
-  // skip soft-deleted rows in code — simpler than composing Convex's
+  // We fetch all rows matching (userId, date) via the index and skip
+  // soft-deleted rows in code — simpler than composing Convex's
   // `.filter()` predicate and easier to mock in tests.
-  // NOTE: same-day re-entry (Cycle 2 chunk 2.F) is permitted via the
-  // `appendedTo` field — the new row references the original. This
-  // handler still rejects a second create on the same (userId, date)
-  // for non-append calls; the chunk-2.F save path uses a different
-  // mutation (`appendCheckin`) wired in that chunk.
+  //
+  // Same-day re-entry (Cycle 2 chunk 2.F): when `args.appendedTo` is set,
+  // the row IS an append block referencing the original. Multiple rows
+  // for the same (userId, date) are allowed in this case. Idempotency
+  // still applies — a retry with the same `clientRequestId` returns the
+  // existing row (matched across the whole append chain), not a new one.
   const candidates = await ctx.db
     .query("checkIns")
     .withIndex("by_user_date", (q) =>
       q.eq("userId", args.userId).eq("date", args.date),
     )
     .collect();
-  const existing = candidates.find((r) => r.deletedAt === undefined) ?? null;
+  const live = candidates.filter((r) => r.deletedAt === undefined);
 
-  if (existing !== null) {
-    if (existing.clientRequestId === args.clientRequestId) {
-      return { id: String(existing._id), date: existing.date };
-    }
+  // Idempotency check spans the whole append chain, not just the original.
+  const idempotentMatch = live.find(
+    (r) => r.clientRequestId === args.clientRequestId,
+  );
+  if (idempotentMatch !== undefined) {
+    return { id: String(idempotentMatch._id), date: idempotentMatch.date };
+  }
+
+  // Without `appendedTo`, a second create for (userId, date) is a duplicate.
+  // With `appendedTo`, this is an explicit append block — proceed to insert.
+  if (args.appendedTo === undefined && live.length > 0) {
     throw new ConvexError({
       code: "checkin.duplicate",
       message: "A check-in already exists for this user and date.",
