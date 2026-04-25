@@ -286,8 +286,10 @@
 
 ## ADR-018 — Voice provider for MVP: Web Speech only; Sarvam AI deferred post-MVP
 
+> **Superseded by [ADR-026](#adr-026--voice-provider-for-production-sarvam-ai-streaming-stt--tts--multi-turn-dialog) as of 2026-04-26.** Body retained as the point-in-time rationale for the deferral.
+
 **Date:** 2026-04-25
-**Status:** accepted
+**Status:** superseded by ADR-026
 
 **Context.** Earlier scoping flagged Sarvam AI (`saarika:v2.5` / `saaras:v3`) as the multilingual voice path (12–23 Indic languages including `en-IN`). REST contract was confirmed but the streaming endpoint URL was not located, API-key handling was unscoped, and no server-side proxy path was designed. Building Sarvam now would expand F01 C2 scope and pull schedule into voice provider work that the MVP feature set doesn't strictly require.
 
@@ -467,3 +469,34 @@ The exception remains bounded: future content changes to any recorded ADR still 
 - **Sanskrit "with" only (e.g. *Saath*, *Saha* as just *with*).** Rejected as a concept (the word still works as the product name): "with" alone is warm but doesn't honor what autoimmune actually demands. The point isn't just companionship — it's enduring something hard, together.
 - **Hindi *Sahna* / endurance-only framing.** Rejected: *Sahna* is the verb form ("to bear, to endure") and reads more clinical / weighty than सह; also loses the "with" half of the meaning entirely. Saha keeps both meanings live in one syllable.
 - **Hold the *Saumya* name and adjust copy to lean into resilience instead.** Rejected: copy can't fix a name that softens the experience. The name is the load-bearing word; better to swap once now than to keep over-explaining the gentleness.
+
+## ADR-026 — Voice provider for production: Sarvam AI streaming (STT + TTS) + multi-turn dialog
+
+**Date:** 2026-04-26
+**Status:** accepted (supersedes ADR-018 on the deferral)
+
+**Context.** ADR-018 deferred Sarvam to post-MVP. Three blockers were resolved 2026-04-25: `sarvamai` JS SDK abstracts streaming WebSocket; long-lived `api-subscription-key` server-only; Vercel HTTP-streaming + SSE for STT partials and Vercel streaming `Response` for TTS audio. In the same conversation Rewant chose Option B + B3 from the dialog scoping menu — multi-turn voice with a "Switch to taps" bail-out.
+
+**Decision.** Sarvam AI is the production voice provider for both STT and TTS. `WebSpeechAdapter` (STT) and `web-speech-tts-adapter.ts` (TTS) remain as dev/test fallbacks. New files:
+- `lib/voice/sarvam-adapter.ts` (STT client, `VoiceProvider`).
+- `app/api/transcribe/route.ts` (Vercel Fluid Compute STT proxy).
+- `lib/voice/sarvam-tts-adapter.ts` (TTS client, new `TtsProvider`).
+- `app/api/speak/route.ts` (TTS audio proxy).
+- `lib/saha/follow-up-engine.ts` + `follow-up-variants.ts` (per-metric question + re-ask + decline-acknowledgement copy).
+
+Resolvers picked by env: `VOICE_PROVIDER=sarvam` (STT), `VOICE_TTS_PROVIDER=sarvam` (TTS). Multi-turn dialog drives via 5 new states + 7 new events on the existing check-in state machine. Bail-to-taps from any voice state lands in the existing Stage 2 grid with partial metrics preserved; cycle-1 makes that path forward-only.
+
+**Consequences.**
+- Pros: live partials match the existing UX; multilingual readiness is now a config change (Hindi-next via `language_code`); key never reaches the browser; conversational flow turns into a real product differentiator vs the plain transcribe-and-tap shape of C2.
+- Cons: dialog flow adds ~300 lines of state-machine + page wiring. Cost + latency budget per metric (TTS + STT + extract) is ~3–5s, multiplied by up to 5 missing metrics ⇒ worst-case ~25s of dialog after the freeform turn. Acceptable for MVP; revisit with telemetry.
+- Two-deploy-target risk avoided — everything stays on Vercel.
+
+**Alternatives considered.**
+- Browser-direct with ephemeral tokens: rejected — Sarvam doesn't expose ephemeral tokens.
+- Separate WebSocket service on Render/Fly: rejected — second deploy + monitoring + bill.
+- REST batch (no streaming): rejected — kills live partials.
+- Option B1 (no taps during dialog): rejected — punishing on iOS Safari STT failures.
+- Option B2 (Stage 2 visible during dialog): rejected — two input paths racing each other is messy.
+- Option C (full duplex / barge-in): out of scope for cycle 1.
+
+**Supersedes:** ADR-018 on the deferral. ADR-018 stays in the record as the point-in-time rationale; ADR-026 is the active decision.

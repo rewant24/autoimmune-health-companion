@@ -31,6 +31,7 @@ import type {
   CheckinMetrics,
   Metric,
   MilestoneKind,
+  OpenerVariantKey,
   StageEnum,
 } from './types'
 
@@ -85,6 +86,61 @@ export type State =
   // 2.F — milestone celebration overlay; entered from `saved` when
   // `saved.milestone !== null`.
   | { kind: 'celebrating'; milestone: MilestoneKind }
+  // Voice C1 (ADR-026) — multi-turn dialog states. Pre-flight only adds
+  // the union shapes + no-op transition cases so the parallel build
+  // chunks see the seam. Wave 2 (orchestrator integration) implements
+  // the actual transitions per the protocol in the cycle plan.
+  //
+  // `speaking-opener`: TTS plays the opener line before listening starts.
+  // `text` is the rendered string (so the screen can mirror it
+  // captioned); `variantKey` lets Wave-2 telemetry know which
+  // opener-engine variant is being spoken.
+  | { kind: 'speaking-opener'; text: string; variantKey: OpenerVariantKey }
+  // `speaking-question`: per-metric follow-up question. Page selects the
+  // next missing metric, kicks TTS, reducer parks here while playback
+  // runs. `transcript` is the original freeform-turn transcript carried
+  // through so `confirming` still sees it.
+  | {
+      kind: 'speaking-question'
+      metric: Metric
+      text: string
+      metrics: Partial<CheckinMetrics>
+      missing: Metric[]
+      declined: Metric[]
+      transcript: Transcript
+    }
+  // `listening-answer`: per-metric STT for the current question.
+  | {
+      kind: 'listening-answer'
+      metric: Metric
+      partial: string
+      metrics: Partial<CheckinMetrics>
+      missing: Metric[]
+      declined: Metric[]
+      transcript: Transcript
+    }
+  // `extracting-answer`: page extracts the metric value (or detects a
+  // decline phrase) from `answerTranscript`. Reducer stays here until
+  // ANSWER_EXTRACTED arrives.
+  | {
+      kind: 'extracting-answer'
+      metric: Metric
+      answerTranscript: Transcript
+      metrics: Partial<CheckinMetrics>
+      missing: Metric[]
+      declined: Metric[]
+      transcript: Transcript
+    }
+  // `speaking-closer`: TTS plays the closer line before save commits.
+  // Wave 2 bridges this to `saving` on `CLOSER_PLAYED`.
+  | {
+      kind: 'speaking-closer'
+      text: string
+      metrics: CheckinMetrics
+      declined: Metric[]
+      stage: StageEnum
+      transcript: Transcript
+    }
   | { kind: 'error'; error: VoiceError | SaveFailedError }
 
 export type Event =
@@ -127,6 +183,20 @@ export type Event =
   // 2.F — milestone celebration trigger; dispatched after SAVE_OK when
   // the user hits a day-1/7/30/90/180/365 marker.
   | { type: 'MILESTONE_DETECTED'; milestone: MilestoneKind }
+  // Voice C1 (ADR-026) — multi-turn dialog events. Pre-flight only adds
+  // the union members + no-op cases; Wave 2 implements transitions.
+  | { type: 'OPENER_PLAYED' }
+  | { type: 'OPENER_FAILED' }
+  | { type: 'ASK_QUESTION'; metric: Metric; text: string }
+  | { type: 'QUESTION_PLAYED' }
+  | { type: 'ANSWER_TRANSCRIBED'; transcript: Transcript }
+  | {
+      type: 'ANSWER_EXTRACTED'
+      metrics: Partial<CheckinMetrics>
+      declined: boolean
+    }
+  | { type: 'BAIL_TO_TAPS' }
+  | { type: 'CLOSER_PLAYED' }
   | { type: 'RESET' }
 
 export const initialState: State = { kind: 'idle' }
@@ -333,6 +403,25 @@ export function reducer(state: State, event: Event): State {
       // 2.F owns the celebration dismiss path. Pre-flight no-op.
       return state
     }
+    case 'speaking-opener':
+    case 'speaking-question':
+    case 'listening-answer':
+    case 'extracting-answer':
+    case 'speaking-closer': {
+      // Voice C1 pre-flight no-ops. Wave 2 (orchestrator integration)
+      // wires the transitions per the protocol in the cycle plan:
+      //   speaking-opener  + OPENER_PLAYED   → listening
+      //   speaking-opener  + OPENER_FAILED   → listening
+      //   speaking-opener  + BAIL_TO_TAPS    → stage-2 (empty)
+      //   speaking-question + QUESTION_PLAYED → listening-answer
+      //   speaking-question + BAIL_TO_TAPS    → stage-2 (carry state)
+      //   listening-answer + PROVIDER_STOPPED → extracting-answer
+      //   listening-answer + BAIL_TO_TAPS     → stage-2
+      //   extracting-answer + ANSWER_EXTRACTED → next question | confirming
+      //   speaking-closer  + CLOSER_PLAYED   → saving
+      //   speaking-closer  + BAIL_TO_TAPS    → confirming (cancel TTS)
+      return state
+    }
     case 'error': {
       // Only RESET escapes error (handled at top of function).
       return state
@@ -354,6 +443,7 @@ export function toOrbState(state: State): OrbVisualState {
     case 'idle':
       return 'idle'
     case 'listening':
+    case 'listening-answer':
       return 'listening'
     case 'requesting-permission':
     case 'processing':
@@ -364,6 +454,10 @@ export function toOrbState(state: State): OrbVisualState {
     case 'saving':
     case 'saved':
     case 'celebrating':
+    case 'speaking-opener':
+    case 'speaking-question':
+    case 'extracting-answer':
+    case 'speaking-closer':
       return 'processing'
     case 'error':
       return 'error'
