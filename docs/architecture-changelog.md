@@ -9,6 +9,22 @@
 
 ---
 
+## 2026-04-25 — Product rename: Saumya → Saha (full sweep)
+
+**Scope.** Second pre-launch rename in twelve hours. ADR-024 (Sakhi → Saumya) is now superseded by ADR-025 (Saumya → Saha). No public users; no data migration needed.
+
+- **Brand framing locked (Option B): "endurance + together."** Sanskrit सह means both *to bear* and *with*. The landing-page brand block + footer brand line carry both meanings; gentleness was softening what autoimmune actually asks of patients.
+- **App code:** `app/LandingPage.tsx` (Option B copy at the brand block + footer + 3 hero/privacy spots; remaining brand mentions straight-renamed), `app/layout.tsx` page title, `app/privacy/page.tsx`, `app/CheckInGrid.tsx`, `app/WaitlistCount.tsx`, `app/VoiceTranscript.tsx`, `app/check-in/page.tsx`, `app/journey/memory/page.tsx`, `components/check-in/{SpokenOpener,Closer,DiscardConfirm}.tsx`, `lib/checkin/{save-later,types}.ts`, `convex/continuity.ts`, `package.json` name field.
+- **Directory rename:** `lib/saumya/` → `lib/saha/` (the rules-engine catalog). 21 import sites updated.
+- **`localStorage` keys (none shipped to real users — pre-launch):** `saumya.saveLater.v1` → `saha.saveLater.v1`, `saumya.ttsDisabled` → `saha.ttsDisabled`, `saumya.testUser.v1` → `saha.testUser.v1`. History-state key `saumyaDiscardModal` → `sahaDiscardModal`.
+- **Active docs:** scoping, build-plan, system-map, product-taxonomy, tech-stack, features/*, post-mvp-backlog, README, docs/CLAUDE.md, docs/research/sonakshi-lele-interview.md.
+- **History docs (immutability exception extension):** ADR-001 through ADR-023 had active brand references updated *Saumya → Saha*. ADR-024 retains its body intact as the historical record of the prior rename — only a `Superseded by ADR-025` header is added. ADR-025 itself documents the extension and remains bounded.
+- **Vercel:** project renamed `saumya-health-companion` → `saha-health-companion`; primary host becomes `saha-health-companion.vercel.app`. New `proxy.ts` (Next 16's renamed-from-middleware file convention) issues 308 permanent redirects from all legacy hosts (`saumya-*`, `sakhi-*`, `autoimmune-*`) to the canonical Saha host so existing shared links land on the new home with paths preserved. `vercel.json` redirects were rejected — they're path-based, not host-based; the proxy runs at the edge before page handlers and is the cleanest place for host-conditional 308s.
+
+**Related.** Adds ADR-025. Supersedes ADR-024.
+
+---
+
 ## 2026-04-25 — F01 C2 Wave 2 integration + reviewer-fix pass
 
 **Scope.** Wires Build-E (Web Speech TTS opener) and Build-F (Day-1 tutorial, same-day re-entry, milestone celebration) into `app/check-in/page.tsx`, then absorbs the three-reviewer ship-blocker fix list. Tagged `f01-c2/wave-2-integrated` (integration) and `f01-c2/second-pass-clean` (post-fix).

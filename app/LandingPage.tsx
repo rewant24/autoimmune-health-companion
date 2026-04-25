@@ -22,7 +22,7 @@ const pillars = [
     bucket: "Capture",
     label: "01",
     items: [
-      { t: "Voice check-in", d: "Sixty seconds a day. No forms — Saumya listens." },
+      { t: "Voice check-in", d: "Sixty seconds a day. No forms — Saha carries the record with you." },
       { t: "Medications", d: "Dosage, schedule, adherence. Track every dose change." },
       { t: "Visits & blood work", d: "Captured by hand or pulled from your voice." },
     ],
@@ -54,7 +54,7 @@ const privacyClaims = [
   },
   {
     t: "Your transcripts never train an AI.",
-    d: "What you say to Saumya stays between you and Saumya. Not used for model training. Not sold.",
+    d: "What you say to Saha stays between you and Saha. Not used for model training. Not sold.",
   },
   {
     t: "Delete in one tap.",
@@ -95,7 +95,7 @@ export function LandingPage() {
                 letterSpacing: "-0.01em",
               }}
             >
-              Saumya
+              Saha
             </span>
           </div>
           <div className="flex items-center">
@@ -148,7 +148,7 @@ export function LandingPage() {
               className="type-body mt-4 max-w-lg"
               style={{ color: "var(--ink-muted)" }}
             >
-              Sixty seconds a day. Saumya remembers your symptoms,
+              Sixty seconds a day. Saha remembers your symptoms,
               medications, and visits — so when the room rushes, you walk in
               prepared.
             </p>
@@ -179,7 +179,7 @@ export function LandingPage() {
                 style={{ color: "var(--ink-muted)" }}
               >
                 You shouldn&apos;t have to be your own pattern detective.
-                Saumya gives you a picture of what works for you — every
+                Saha gives you a picture of what works for you — every
                 dose change, every flare, every off day, plotted so you can
                 finally see what&apos;s actually helping.
               </p>
@@ -290,7 +290,7 @@ export function LandingPage() {
         {/* What's inside — three buckets, story not dump */}
         <section className="grid grid-cols-1 gap-10 md:grid-cols-12">
           <div className="md:col-span-4">
-            <p className="type-label">What&apos;s inside Saumya</p>
+            <p className="type-label">What&apos;s inside Saha</p>
             <h2 className="type-display-md mt-3">
               Three jobs.
               <br />
@@ -360,7 +360,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* Founder note + Why Saumya — combined trust block */}
+        {/* Founder note + Why Saha — combined trust block */}
         <section className="grid grid-cols-1 gap-10 md:grid-cols-12">
           <div className="md:col-span-4">
             <p className="type-label">A note from the builder</p>
@@ -390,14 +390,14 @@ export function LandingPage() {
                   className="type-label"
                   style={{ letterSpacing: "0.14em" }}
                 >
-                  Building Saumya
+                  Building Saha
                 </span>
               </div>
             </div>
 
             <div className="mt-6 flex flex-col gap-4">
               <p className="type-body">
-                I started Saumya after a year of patient interviews. The same
+                I started Saha after a year of patient interviews. The same
                 story, again and again: people doing real work to manage their
                 condition, then losing the thread the moment the visit started.
               </p>
@@ -409,7 +409,7 @@ export function LandingPage() {
           </div>
 
           <div className="md:col-span-8 md:pl-12 md:border-l" style={{ borderColor: "var(--rule)" }}>
-            <p className="type-label">Why Saumya</p>
+            <p className="type-label">Why Saha</p>
             <h2
               className="type-display-lg mt-3"
               style={{ fontSize: "clamp(1.75rem, 3.5vw, 2.5rem)" }}
@@ -432,7 +432,7 @@ export function LandingPage() {
                 mattered last Tuesday is gone.
               </p>
               <p>
-                Saumya removes the cognitive load. You speak — naturally,
+                Saha removes the cognitive load. You speak — naturally,
                 briefly — and a quiet record builds itself. When your visit
                 comes, the data is already there.
               </p>
@@ -445,9 +445,10 @@ export function LandingPage() {
                   fontVariationSettings: "'SOFT' 100, 'opsz' 24, 'wght' 380",
                 }}
               >
-                Saumya means &ldquo;gentle&rdquo; — सौम्य, soft, calm, kind.
-                The presence you want next to you on a hard day, remembering
-                with you so you don&apos;t walk into that room alone.
+                Saha — सह — Sanskrit, two meanings at once: <em>to endure</em>{" "}
+                and <em>with</em>. Because autoimmune is a long carry, and you
+                don&apos;t carry it alone. Saha holds the days you can&apos;t,
+                and walks beside the days you can.
               </p>
             </div>
           </div>
@@ -467,7 +468,7 @@ export function LandingPage() {
               style={{ color: "var(--ink-muted)" }}
             >
               Most health apps say &ldquo;we care about privacy&rdquo; and run
-              ad pixels behind the page. Here&apos;s exactly where Saumya
+              ad pixels behind the page. Here&apos;s exactly where Saha
               stands.
             </p>
           </div>
@@ -494,13 +495,13 @@ export function LandingPage() {
               ))}
             </ul>
             <p className="type-label mt-5">
-              Saumya is in active development · not medical advice · talk to
+              Saha is in active development · not medical advice · talk to
               your doctor about health decisions
             </p>
           </div>
         </section>
 
-        {/* Boundary statement — what Saumya is not. Sits between privacy and the final ask. */}
+        {/* Boundary statement — what Saha is not. Sits between privacy and the final ask. */}
         <section className="grid grid-cols-1 gap-10 md:grid-cols-12">
           <div className="md:col-span-4">
             <p className="type-label">Where we stop</p>
@@ -515,10 +516,10 @@ export function LandingPage() {
                 color: "var(--ink-muted)",
               }}
             >
-              Saumya doesn&apos;t tell you what&apos;s wrong, doesn&apos;t
+              Saha doesn&apos;t tell you what&apos;s wrong, doesn&apos;t
               recommend tests, doesn&apos;t suggest treatment changes.
               That&apos;s the conversation between you and your doctor — and
-              the one we want to make better. What Saumya does is hold your
+              the one we want to make better. What Saha does is hold your
               story so you walk into that conversation with it ready.
             </p>
           </div>
@@ -572,8 +573,8 @@ export function LandingPage() {
                   fontVariationSettings: "'SOFT' 100, 'opsz' 24, 'wght' 380",
                 }}
               >
-                Saumya — सौम्य — Sanskrit for gentle, soft, calm, kind. The
-                presence we&apos;re building toward.
+                Saha — सह — Sanskrit. Endurance, and together. The two
+                things this asks of all of us.
               </p>
             </div>
 
@@ -612,7 +613,7 @@ export function LandingPage() {
                 letterSpacing: "-0.01em",
               }}
             >
-              Saumya
+              Saha
             </span>
             <p
               className="type-body mt-3 max-w-xs"
@@ -654,7 +655,7 @@ export function LandingPage() {
                 In active development
               </span>
               <span className="type-label" style={{ color: "var(--ink-subtle)" }}>
-                © {new Date().getFullYear()} Saumya
+                © {new Date().getFullYear()} Saha
               </span>
             </div>
           </div>

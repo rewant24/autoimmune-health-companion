@@ -1,9 +1,9 @@
 /**
- * Locked variant catalog for Saumya's continuity-aware opener and closer.
+ * Locked variant catalog for Saha's continuity-aware opener and closer.
  *
  * Two parallel maps keyed by `OpenerVariantKey`:
- *   - `OPENER_VARIANTS` — the line Saumya speaks first thing in the morning
- *   - `CLOSER_VARIANTS` — the line Saumya signs off with on the same screen
+ *   - `OPENER_VARIANTS` — the line Saha speaks first thing in the morning
+ *   - `CLOSER_VARIANTS` — the line Saha signs off with on the same screen
  *
  * Both engines (`opener-engine.ts` / `closer-engine.ts`) use the SAME
  * `ContinuityState` snapshot to pick a key, then look up the matching line

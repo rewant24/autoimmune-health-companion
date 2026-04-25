@@ -6,7 +6,7 @@
 > **Created:** 2026-04-25 · **Owner:** orchestrator (Claude Code main)
 > **POC status:** Conversational POC validated by Rewant in Claude Chat (2026-04-25) — **skip POC step**.
 
-**Goal:** Make the check-in actually conversational. Saumya speaks first with a continuity-aware opener, listens, extracts the 5 metrics from the transcript, only asks tap-controls for what she missed, presents an editable summary card, and signs off with a paired closer — all per the canonical scoping doc.
+**Goal:** Make the check-in actually conversational. Saha speaks first with a continuity-aware opener, listens, extracts the 5 metrics from the transcript, only asks tap-controls for what she missed, presents an editable summary card, and signs off with a paired closer — all per the canonical scoping doc.
 
 **Architecture:** 6 disjoint chunks owned by 6 subagents in two parallel waves. Wave 1 (4 chunks) is the conversational backbone. Wave 2 (2 chunks) is polish that depends on Wave 1's data shapes. Schema migration + AI Gateway provisioning happen in pre-flight (orchestrator-only) so parallel agents never touch the same schema or env file.
 
@@ -44,7 +44,7 @@ A phase entry is appended to `docs/build-log.md` at every tag.
 ### Scoping requirements NOT yet delivered (this cycle's scope)
 | Scoping section | Requirement | Chunk |
 |---|---|---|
-| § Daily check-in — voice conversation | Saumya **speaks first** (TTS opener) | 2.A + 2.E |
+| § Daily check-in — voice conversation | Saha **speaks first** (TTS opener) | 2.A + 2.E |
 | § The opener — continuity-aware | Rules engine selects variant from yesterday/streak/flare/upcoming-visit (ADR-006) | 2.A |
 | § The closer — continuity-aware | Same rules engine, paired with opener (ADR-009) | 2.A + 2.D |
 | § Conversation shape — hybrid | Live extraction of 5 metrics from transcript (ADR-007, ADR-020) | 2.B |
@@ -85,7 +85,7 @@ A phase entry is appended to `docs/build-log.md` at every tag.
 - **ADR-019:** `userId` stays as a client-trusted arg. No auth this cycle.
 - **ADR-020:** LLM extraction via Vercel AI SDK + AI Gateway. Default model `gpt-4o-mini`. Truncate transcript to 2000 input tokens. Cap output at 200 tokens. Per-user-per-day attempt ceiling enforced in Convex.
 - **ADR-021:** `stage` enum semantics — `"open"` = all 5 from transcript; `"hybrid"` = transcript + Stage 2; `"scripted"` = no transcript at all.
-- **ADR-022:** Save-later queue persists to `localStorage` key `saumya.saveLater.v1`.
+- **ADR-022:** Save-later queue persists to `localStorage` key `saha.saveLater.v1`.
 - **ADR-023:** Post-save terminal route is `/check-in/saved`; Memory CTA is hidden until F02 C1 ships.
 - **Mood enum:** `heavy | flat | okay | bright | great` (already shipped in C1 schema).
 - **Language guardrail:** "support-system" — never "caregiver" / "squad".
@@ -257,9 +257,9 @@ All four prompts dispatched in a single message. File ownership is disjoint. Int
 ### Build-A prompt (Chunk 2.A — Opener + closer rules engine + continuity state)
 
 **Files OWNED:**
-- `lib/saumya/opener-engine.ts`
-- `lib/saumya/closer-engine.ts`
-- `lib/saumya/variants.ts` (locked variant catalog — opener + closer paired)
+- `lib/saha/opener-engine.ts`
+- `lib/saha/closer-engine.ts`
+- `lib/saha/variants.ts` (locked variant catalog — opener + closer paired)
 - `convex/continuity.ts` (new file — `getContinuityState` query)
 - `tests/check-in/opener-engine.test.ts`
 - `tests/check-in/closer-engine.test.ts`
@@ -270,13 +270,13 @@ All four prompts dispatched in a single message. File ownership is disjoint. Int
 **Stories implemented:**
 
 - **OpenerEngine.US-1.G.1** — `selectOpener(state: ContinuityState): { key: OpenerVariantKey; text: string }`. Pure function. Priority order (highest first): `first-ever > re-entry-same-day > doctor-visit-tomorrow > blood-test-tomorrow > flare-fatigue-neutral (≥5 ongoing days) > flare-ongoing > streak-milestone (only at days 7, 30, 90, 180, 365) > rough-yesterday > multi-day-skip > good-yesterday > neutral-default`.
-- **OpenerEngine.US-1.G.2** — Variant catalog in `lib/saumya/variants.ts` matches the scoping doc § Example opener variants verbatim, plus `re-entry-same-day` ("Back again, Sonakshi — anything else?") and `flare-fatigue-neutral` (uses neutral copy). 11 variants total.
+- **OpenerEngine.US-1.G.2** — Variant catalog in `lib/saha/variants.ts` matches the scoping doc § Example opener variants verbatim, plus `re-entry-same-day` ("Back again, Sonakshi — anything else?") and `flare-fatigue-neutral` (uses neutral copy). 11 variants total.
 - **CloserEngine.US-1.G.3** — `selectCloser(state: ContinuityState): { key: OpenerVariantKey; text: string }`. Same priority order; output ≤8 words; copy matches scoping § Closer variants table verbatim. Phrases ruled out (verified in tests): "one day at a time", "be kind to yourself", "stay strong", "you're doing amazing", "thank you for trusting this".
 - **Continuity.US-1.G.4** — Convex query `getContinuityState({ userId, todayIso }) → ContinuityState`. Reads `checkIns` for the previous 30 days (date desc), computes `yesterday`, `streakDays`, `lastCheckinDaysAgo`, `flareOngoingDays`, `isFirstEverCheckin`. `upcomingEvent` returns `null` (F08 stub). `isRoughDay` = `pain >= 8 || flare === 'yes'`.
 
 **Test approach (TDD):** ≥18 unit tests. For `selectOpener`/`selectCloser`: one test per variant key + one test for priority order resolution + one test for safety rail (rough yesterday with pain=10 → still uses neutral or rough-yesterday, never references "yesterday was terrible" directly — verified by string match). For `getContinuityState`: empty history, 1 prior day, 30 prior days, gap of 3 days, ongoing flare 5 days, day-7 streak.
 
-**Commit per story** — Conventional Commits, `feat(saumya): …`. After last commit, run `npm run test:run` — must be green.
+**Commit per story** — Conventional Commits, `feat(saha): …`. After last commit, run `npm run test:run` — must be green.
 
 ---
 
@@ -292,7 +292,7 @@ All four prompts dispatched in a single message. File ownership is disjoint. Int
 - `tests/check-in/coverage.test.ts`
 - `tests/check-in/extract-route.test.ts` (with mocked AI SDK)
 
-**Do NOT touch:** `app/check-in/**`, `components/**`, `lib/saumya/**`, `lib/voice/**`, `convex/checkIns.ts`, `convex/continuity.ts`, `convex/schema.ts`.
+**Do NOT touch:** `app/check-in/**`, `components/**`, `lib/saha/**`, `lib/voice/**`, `convex/checkIns.ts`, `convex/continuity.ts`, `convex/schema.ts`.
 
 **Stories implemented:**
 
@@ -355,13 +355,13 @@ All four prompts dispatched in a single message. File ownership is disjoint. Int
 - `components/check-in/Closer.tsx` (renders the closer text + optional TTS play affordance — TTS itself wired in 2.E, props ready)
 - `components/check-in/DiscardConfirm.tsx` (modal: "Discard this one? Nothing will be saved." + Discard / Keep editing)
 - `app/check-in/saved/page.tsx` (ADR-023 stable terminal route — settled-orb success view)
-- `lib/checkin/save-later.ts` (localStorage queue per ADR-022 — `enqueue`, `drain`, `clear`, versioned key `saumya.saveLater.v1`)
+- `lib/checkin/save-later.ts` (localStorage queue per ADR-022 — `enqueue`, `drain`, `clear`, versioned key `saha.saveLater.v1`)
 - `tests/check-in/confirm-summary.test.tsx`
 - `tests/check-in/discard.test.tsx`
 - `tests/check-in/save-later.test.ts`
 - `tests/check-in/saved-route.test.tsx`
 
-**Do NOT touch:** `app/check-in/page.tsx` (orchestrator integrates), `components/check-in/{Orb,Stage2,Stage2Recap,MissingMetricList,TapInput,HeardYouOn,MilestoneCelebration,Day1Tutorial}.tsx`, `lib/saumya/**`, `lib/checkin/extract-metrics.ts`, `convex/**`.
+**Do NOT touch:** `app/check-in/page.tsx` (orchestrator integrates), `components/check-in/{Orb,Stage2,Stage2Recap,MissingMetricList,TapInput,HeardYouOn,MilestoneCelebration,Day1Tutorial}.tsx`, `lib/saha/**`, `lib/checkin/extract-metrics.ts`, `convex/**`.
 
 **Integration contract:** `ConfirmSummary` receives `{ metrics, declined, transcript, closerText, onMetricUpdate, onMetricDeclined, onSave, onDiscard, isSaving, saveError }`.
 
@@ -371,7 +371,7 @@ All four prompts dispatched in a single message. File ownership is disjoint. Int
 - **Confirm.US-1.F.2** — Save flow. On click → call `onSave()`. While `isSaving`, button shows spinner + label "Saving…", disabled. On `saveError`: render Feature 10 save-fail template inline (reuse `ErrorSlot` from C1) with "Try again" + "Keep this for later" — the latter calls `saveLater.enqueue(payload)` + routes to `/check-in/saved` with `?queued=true`.
 - **Discard.US-1.F.3** — `DiscardConfirm` is a modal with backdrop. Copy: heading "Discard this one?" / body "Nothing will be saved." / primary "Discard" / secondary "Keep editing". Pressing browser back also opens this modal (uses `history.pushState` trick or a `beforeunload` hint scoped to the route — implement with `window.history.pushState` on confirm-mount and a `popstate` listener that pops the modal). Discard confirm → fires `onDiscard()` (state-machine event from page).
 - **SavedRoute.US-1.F.4** — `app/check-in/saved/page.tsx` renders the settled orb (reuses `Orb` with new `'saved'` visual variant — add the variant to `OrbStates.tsx` via ONE-LINE addition, document the addition; *only* allowed cross-cut in 2.D), the closer text (passed via search param `?closer=…` URL-encoded), and a "View memory" CTA that is hidden when `process.env.NEXT_PUBLIC_F02_C1_SHIPPED !== 'true'` (per ADR-023). Auto-dismiss to `/` after 2000ms (via `setTimeout` cleared on unmount). Visible ≥1.5s minimum.
-- **SaveLater.US-1.F.5** — `lib/checkin/save-later.ts`: `enqueue(payload)` writes to `localStorage` under `saumya.saveLater.v1`; `drain(): Payload[]` reads + clears; `peek(): Payload[]` reads without clearing. Schema-versioned with leading `{ v: 1, items: [...] }`. On reload, `app/check-in/page.tsx` (wired in Task 2) calls `drain()` and re-tries each via `createCheckin`. Idempotency via `clientRequestId` is already preserved server-side.
+- **SaveLater.US-1.F.5** — `lib/checkin/save-later.ts`: `enqueue(payload)` writes to `localStorage` under `saha.saveLater.v1`; `drain(): Payload[]` reads + clears; `peek(): Payload[]` reads without clearing. Schema-versioned with leading `{ v: 1, items: [...] }`. On reload, `app/check-in/page.tsx` (wired in Task 2) calls `drain()` and re-tries each via `createCheckin`. Idempotency via `clientRequestId` is already preserved server-side.
 
 **Test approach (TDD):** ≥18 tests. ConfirmSummary: render with covered/declined mix → correct row states; click row → TapInput appears; click Save → `onSave` called with right shape; saveError → ErrorSlot + "Keep this for later" CTA. Discard: click "Discard this check-in" → modal opens; press Discard → `onDiscard` fired; press Keep editing → modal closes, state preserved. SaveLater: enqueue → peek shows item; drain → returns + clears; v1 key shape; corrupted storage falls back to empty + logs warning. SavedRoute: rendered with `?closer=Saved.%20See%20you%20tomorrow.` → visible text matches; `NEXT_PUBLIC_F02_C1_SHIPPED=false` → no Memory CTA; auto-dismiss after 2s.
 
@@ -427,8 +427,8 @@ Wave 2 depends on Wave 1's data shapes (especially `appendedTo` from same-day re
 **Stories implemented:**
 
 - **TTS.US-1.H.1** — `tts-adapter.ts`: `isAvailable()` returns `'speechSynthesis' in window && window.speechSynthesis !== undefined`. `speak(text, { rate, pitch, voice })` queues an utterance; resolves a Promise on `end`; rejects on `error`. `cancel()` clears the queue. Default voice selection: prefer English with locale `en-IN` if available, else any English voice, else default. Voice list is loaded once and cached.
-- **TTS.US-1.H.2** — `<SpokenOpener>`: renders `<p>{text}</p>` + a small speaker-icon `<button aria-label="Replay">` that calls `tts.speak(text)` on click. On mount: if `tts.isAvailable()` AND `!matchMedia('(prefers-reduced-motion: reduce)').matches` AND `localStorage.getItem('saumya.ttsDisabled') !== 'true'` → auto-`speak(text)`. On unmount: `cancel()`. If TTS unavailable → speaker icon hidden.
-- **TTS.US-1.H.3** — Settings opt-out persistence — clicking and holding the speaker icon for 1s triggers a small "Mute Saumya's voice" toggle in a popover; on confirm, sets `localStorage.saumya.ttsDisabled = 'true'`. (Lightweight UX — full settings panel is post-MVP.)
+- **TTS.US-1.H.2** — `<SpokenOpener>`: renders `<p>{text}</p>` + a small speaker-icon `<button aria-label="Replay">` that calls `tts.speak(text)` on click. On mount: if `tts.isAvailable()` AND `!matchMedia('(prefers-reduced-motion: reduce)').matches` AND `localStorage.getItem('saha.ttsDisabled') !== 'true'` → auto-`speak(text)`. On unmount: `cancel()`. If TTS unavailable → speaker icon hidden.
+- **TTS.US-1.H.3** — Settings opt-out persistence — clicking and holding the speaker icon for 1s triggers a small "Mute Saha's voice" toggle in a popover; on confirm, sets `localStorage.saha.ttsDisabled = 'true'`. (Lightweight UX — full settings panel is post-MVP.)
 
 **Test approach (TDD):** ≥10 tests. Mock `speechSynthesis` on `globalThis` with a controlled fake (`speak`/`cancel` spies, voice list returns a fixture). Verify auto-speak on mount; verify cancel on unmount; verify `prefersReducedMotion = true` → no auto-speak; verify `ttsDisabled = true` → no auto-speak; verify replay button calls `speak`; verify hidden when unavailable.
 
@@ -499,7 +499,7 @@ All three read the delta `f01-c2/pre-flight-done..HEAD`.
 - ADR-019: `userId` continues as client-trusted arg; no `ctx.auth` calls
 - ADR-020: extraction route uses Vercel AI SDK; cost-guard counter increments; truncation + output cap honored; key never reaches client
 - ADR-021: `stage` written per the contract (`'open'` / `'hybrid'` / `'scripted'`)
-- ADR-022: `localStorage` queue under `saumya.saveLater.v1`; `clientRequestId` reused on retry
+- ADR-022: `localStorage` queue under `saha.saveLater.v1`; `clientRequestId` reused on retry
 - ADR-023: `/check-in/saved` exists; Memory CTA hidden behind `NEXT_PUBLIC_F02_C1_SHIPPED`
 - C1 regression: `waitlist` table unchanged; `/` route still works; existing C1 tests still green; mood enum unchanged
 - Type contract: `lib/checkin/types.ts` exports match every consumer's imports; no `any` leaks
@@ -553,8 +553,8 @@ One Agent call. Prompt includes the locked-decisions list + first-pass summary. 
 - [ ] **8.5** — `docs/post-mvp-backlog.md` — confirm cross-tz, edit-past-checkin, Sarvam adapter still listed.
 - [ ] **8.6** — Push Convex schema to deploy: `npx convex deploy`. Verify on dashboard.
 - [ ] **8.7** — Vercel: ensure `AI_GATEWAY_API_KEY` set in production env (per ADR-020). Ensure `NEXT_PUBLIC_F02_C1_SHIPPED=false` set so Memory CTA stays hidden.
-- [ ] **8.8** — Deploy to Vercel: `git push origin feat/f01-cycle-2` (PR optional given solo workflow) → merge → auto-deploy. Verify live URL: `https://saumya-health-companion.vercel.app/check-in` runs the new flow.
-- [ ] **8.9** — Update `~/.claude/projects/-Users-rewantprakash-1/memory/MEMORY.md`: Saumya "Next" line → "F02 C1 (Memory) — auth lands here per ADR-019."
+- [ ] **8.8** — Deploy to Vercel: `git push origin feat/f01-cycle-2` (PR optional given solo workflow) → merge → auto-deploy. Verify live URL: `https://saha-health-companion.vercel.app/check-in` runs the new flow.
+- [ ] **8.9** — Update `~/.claude/projects/-Users-rewantprakash-1/memory/MEMORY.md`: Saha "Next" line → "F02 C1 (Memory) — auth lands here per ADR-019."
 - [ ] **8.10** — Commit: `docs: ship F01 C2 — update statuses, changelog, system-map, build-log`. Tag `f01-c2/shipped`.
 
 ---

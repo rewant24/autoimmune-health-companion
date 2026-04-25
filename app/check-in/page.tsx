@@ -72,8 +72,8 @@ import { ConfirmSummary } from '@/components/check-in/ConfirmSummary'
 import { SpokenOpener } from '@/components/check-in/SpokenOpener'
 import { Day1Tutorial } from '@/components/check-in/Day1Tutorial'
 import { MilestoneCelebration } from '@/components/check-in/MilestoneCelebration'
-import { selectOpener } from '@/lib/saumya/opener-engine'
-import { selectCloser } from '@/lib/saumya/closer-engine'
+import { selectOpener } from '@/lib/saha/opener-engine'
+import { selectCloser } from '@/lib/saha/closer-engine'
 import {
   extractMetrics,
   ExtractDailyCapError,
@@ -121,7 +121,7 @@ export interface CheckinPageProps {
   providerOverride?: VoiceProvider
 }
 
-const TEST_USER_KEY = 'saumya.testUser.v1'
+const TEST_USER_KEY = 'saha.testUser.v1'
 
 function getOrCreateTestUserId(): string {
   if (typeof window === 'undefined') return 'ssr-placeholder'

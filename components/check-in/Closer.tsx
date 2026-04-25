@@ -6,7 +6,7 @@
  *
  * Feature 01, Chunk 2.D, US-1.F.1.
  *
- * The text itself is selected by `lib/saumya/closer-engine.ts` (Build-A)
+ * The text itself is selected by `lib/saha/closer-engine.ts` (Build-A)
  * from the same `ContinuityState` snapshot used to pick the opener — so
  * opener and closer always rhyme in tone for a given session. Closer
  * lines are ≤ 8 words and never use any of the phrases ruled out by

@@ -2,7 +2,7 @@
  * Deterministic opener-selection rules engine (ADR-006).
  *
  * `selectOpener` takes a `ContinuityState` snapshot and returns the variant
- * key + the line Saumya should speak. Pure function — same input always
+ * key + the line Saha should speak. Pure function — same input always
  * produces the same output. No LLM, no I/O.
  *
  * Why a rules engine: predictability, instant render, audit-ability, i18n
@@ -33,7 +33,7 @@ import type {
 import {
   OPENER_VARIANTS,
   streakMilestoneOpener,
-} from "@/lib/saumya/variants";
+} from "@/lib/saha/variants";
 
 export interface OpenerSelection {
   key: OpenerVariantKey;

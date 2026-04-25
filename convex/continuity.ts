@@ -145,7 +145,7 @@ export async function getContinuityStateHandler(
 
   // Flare-ongoing run: count consecutive `flare === 'ongoing'` rows
   // walking back from yesterday. A `'no'`/`'yes'` row breaks it.
-  // Matches the engine's use: `flareOngoingDays` is the count Saumya
+  // Matches the engine's use: `flareOngoingDays` is the count Saha
   // would gently stop referencing once it hits 5 (per scoping § Safety
   // rails).
   let flareOngoingDays = 0;

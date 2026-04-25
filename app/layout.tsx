@@ -26,7 +26,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Saumya — a voice-first health companion for autoimmune patients",
+  title: "Saha — a voice-first health companion for autoimmune patients",
   description:
     "A voice-first health companion for people living with autoimmune conditions. So your next doctor visit starts with data, not memory.",
 };
