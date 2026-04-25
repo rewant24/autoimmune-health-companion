@@ -9,6 +9,24 @@
 
 ---
 
+## 2026-04-26 — App shell: persistent BottomNav mounted via per-route layouts (no route-group rename)
+
+**Related ADR:** ADR-023 (post-save terminal route) — the auto-dismiss target shifts from `/` to `/journey/memory` to close the contribute → see-it-back loop.
+
+**What changed.** `/check-in`, `/check-in/saved`, and `/journey/memory` now share a persistent fixed-bottom `<BottomNav />` so the two MVP screens read as tabs of one app. Mounted via two layouts — `app/check-in/layout.tsx` (existing, edited to add the nav after `{children}`) and `app/journey/layout.tsx` (new, mirrors check-in). Post-save auto-dismiss target flipped from `/` to `/journey/memory`. The "View memory" CTA on `/check-in/saved` is no longer gated by `NEXT_PUBLIC_F02_C1_SHIPPED` — it renders unconditionally.
+
+**Why.** Before this change, the demo flow was disconnected: a tester could do a check-in but the post-save auto-redirect bounced them back to the marketing landing, never closing the loop into Memory. Two disconnected URLs read as two products, not one. The unification is structural — no new feature work, just shell mounting + redirect target — but it is the difference between a "demo of two pages" and "an app you can test end-to-end."
+
+**Why not a route-group rename to `app/(app)/...`.** Considered moving both routes under a parens-wrapped route group with a single shared layout. Rejected because: (a) URLs stay identical with the layout-mounting approach too — Next.js layouts already wrap nested routes — so the route group adds no URL value; (b) layout-mounting requires zero file moves and zero test-path churn; (c) two short layouts is fewer LOC than route-group + a shared `(app)/layout.tsx`. **Threshold for refactor:** if a third app-shell screen ships (e.g., a future Medications or Patterns tab), refactor to a shared route group at that point. Two repeats is below the threshold.
+
+**Why drop the env-flag gate.** `NEXT_PUBLIC_F02_C1_SHIPPED` was a pre-F02-C1 guard so the CTA wouldn't render before Memory existed. F02 C1 has been shipped + live in prod since 2026-04-25. The flag was never flipped on Vercel after F02 C1 shipped — so users had a "View memory" CTA invisible behind a stale env-var. Removing the gate is one fewer env-var dependency and the durable fix.
+
+**Side effect: `MemoryTab` bottom padding bumped.** From `pb-[max(1rem,env(safe-area-inset-bottom))]` to `pb-[max(6rem,calc(env(safe-area-inset-bottom)+5rem))]`. Without it, the last event row scrolls under the now-fixed bottom nav.
+
+**Shipped via PR rewant24/autoimmune-health-companion#6 → squash-merge `c0b5b28`.** The PR also bundled the entire onboarding-shell wave-1 work (welcome + 5 onboarding screens + 4 setup steps + `/home` + 5-pillar `BottomNav` + locked profile seam) because the unification branch was cut from `feat/onboarding-shell-build` rather than `main`. For deadline-driven work this was the correct call (one merge, two cycles to prod); for normal cadence, branch from `main` to keep PRs scoped to one architectural change.
+
+---
+
 ## 2026-04-25 — Product rename: Saumya → Saha (full sweep)
 
 **Scope.** Second pre-launch rename in twelve hours. ADR-024 (Sakhi → Saumya) is now superseded by ADR-025 (Saumya → Saha). No public users; no data migration needed.

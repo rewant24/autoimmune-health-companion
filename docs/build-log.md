@@ -635,4 +635,42 @@ State-machine unit tests grew by 19 cases (47/47 total) covering: scripted/hybri
 - Voice WIP carried over an uncommitted `docs/architecture-changelog.md` write-up (substantive — voice C1 pre-flight summary) that I'd missed staging in the WIP commit. Caught it on the build branch via `git status`. Stashed under `voice-changelog-misplaced` for transfer back to the voice branch separately so it ships with that cycle's changelog entry, not this one.
 - Tooling reset CWD between Bash calls a few times mid-pre-flight; first attempt at writing the seam files silently lost them when the working tree changed branches. Retried on a confirmed-correct branch, committed immediately rather than batching, and verified post-commit. Lesson for future pre-flights with parallel branches in play: **commit early, don't accumulate untracked files across `git checkout`s.**
 
+---
+
+## 2026-04-26 — Session 14: Unified app shell SHIPPED (PR #6 → `c0b5b28`)
+
+**Branch.** `feat/unified-app-shell` cut from `feat/onboarding-shell-build` (which already carried the full onboarding-shell wave-1 work — chunks A, B, C — and the F01 C2 green-orb fix `21ef267` and `chore/ship-prod-docs` material). Squash-merged to `main` as **commit `c0b5b28`** via PR rewant24/autoimmune-health-companion#6. Branch deleted on remote (`gh pr merge --squash --delete-branch`).
+
+**Why this cycle (deadline-driven).** Hour-deadline submission ask: tester goes from waitlist → "Try the demo" → can do a check-in but can't see it back, because save auto-redirects to `/` (marketing landing) and Memory lives at a separate disconnected URL. Two-screen disconnection means combined-flow testing is impossible and the submission doesn't read as one product. **Solution: Persistent app shell via Next.js layouts.** Both screens share a fixed bottom nav so they read as tabs of one app; post-save lands on Memory so the contribute → see-it-back loop closes.
+
+**What shipped (the unification slice).**
+- `app/check-in/layout.tsx` — added `<BottomNav />` mount after `{children}`, server component still.
+- `app/journey/layout.tsx` — **new file**, mirrors check-in: passes children + mounts BottomNav.
+- `app/check-in/saved/page.tsx` — `router.push('/')` → `router.push('/journey/memory')` (auto-dismiss target). Removed the `NEXT_PUBLIC_F02_C1_SHIPPED` env-flag gate around the "View memory" CTA — now renders unconditionally. F02 C1 has shipped, the flag was a pre-F02 guard that's no longer needed; removing it eliminates one env-var dependency.
+- `components/memory/MemoryTab.tsx` — bottom padding bumped from `pb-[max(1rem,env(safe-area-inset-bottom))]` to `pb-[max(6rem,calc(env(safe-area-inset-bottom)+5rem))]` so the last event row clears the persistent fixed-bottom nav.
+- `app/LandingPage.tsx` — footer collapsed: removed adjacent `Try the demo` (`/check-in`) + `Memory` (`/memory`) links, replaced with single `Open the app` → `/check-in`. User enters the app shell at the check-in tab; Memory is one tap away.
+- `tests/check-in/saved-route.test.tsx` — three env-flag tests removed; replaced with a single unconditional CTA test; redirect-target assertion updated to `/journey/memory`.
+
+**What also shipped (bundled, because the branch base carried it).** The PR also merged the entire onboarding-shell wave-1 work that was already merged into `feat/onboarding-shell-build`: welcome screen, 5 onboarding screens + dynamic `[step]` route, 4 setup steps (name, dob, email, condition), `/home` page with greeting + check-in card + meds-setup nudge + metric-viz placeholder, the 5-pillar `BottomNav`, the locked seam in `lib/profile/{types,storage}.ts` + 11 contract tests, landing `GetStartedCTA` toggle on `profile.onboarded`, and the `scripts/ship-prod.sh` from `chore/ship-prod-docs`. Did **not** include this session's local-only follow-on commits `c7a60a0` (R3 a11y + test stability + smoke test) and `835a1fd` (R1 Saha-voice copy revisions) — those landed on the branch *after* `9632937` (the unification commit) and were never pushed before the merge. Both are still recoverable from reflog.
+
+**Verification.**
+- `pnpm tsc --noEmit` clean.
+- `pnpm vitest run` → 570/570 passing (vs the 452/452 onboarding-shell baseline; delta is the bundled wave-1 test suites + updated saved-route tests).
+- `pnpm next build` → all 16 routes resolve (`/check-in`, `/check-in/saved`, `/journey/memory`, `/home`, `/welcome`, `/onboarding/[step]`, `/setup/{name,dob,email,condition}`, `/`, `/memory` 307, etc.).
+- **Manual smoke deferred** — Vercel auto-promote of `c0b5b28` was in flight at hand-off. Live walk-through of Landing → "Open the app" → save → land on Memory still TBD on `https://saha-health-companion.vercel.app`.
+
+**Surprises.**
+- Tooling auto-checkout mid-session moved HEAD between branches without warning (reflog confirmed). At one point my unification edits appeared "lost" because HEAD was on `feat/voice-sarvam`. Recovered via `git reflog` + `git stash list` — work was preserved. **Repeats Session 13's lesson:** with multiple feature branches in play, commit + push at every verified milestone, never trust a clean working tree at the start of a step.
+- Branch base inflation: `feat/unified-app-shell` was cut off `feat/onboarding-shell-build` (which had wave-1 already merged in) rather than off `main`. Result: the PR diff was 51 files / +4,554 lines instead of the ~6 files the unification touches. For a deadline ship this was the right call (one merge, two cycles' worth of progress to prod). For normal cadence, branch off `main` to keep PRs scoped.
+- The `View memory` CTA env-gate had been waiting since F02 C1 ship (the flag was never flipped on Vercel). Removing the gate entirely was simpler than setting `NEXT_PUBLIC_F02_C1_SHIPPED=true` and is the durable fix.
+
+**Architectural decision recorded inline (no new ADR).** Mounting the persistent BottomNav via Next.js per-route-group layouts (`app/check-in/layout.tsx`, `app/journey/layout.tsx`) instead of a route-group rename (`app/(app)/...`). Considered route-group syntax but rejected it because: (a) URLs stay identical with the layout approach too, no value-add from the rename; (b) layout-mounting requires zero file moves and zero test-path churn; (c) two layouts is fewer LOC than a route-group + one `(app)/layout.tsx`. The trade-off: if a third app-shell screen ships later (e.g., `/medications`), it'll need its own layout to mount the nav — at three repeats, refactor to a shared route group. Two is below the threshold.
+
+**Open follow-ups.**
+- Live smoke on `https://saha-health-companion.vercel.app` once auto-promote lands: Landing → "Open the app" → check-in → save → Memory → tap Check-in tab → back → BottomNav persistent throughout. Per the ship-day-manual-smoke memory, vitest green is not the same as feature-correct.
+- Verify prod data lands in Convex `usable-zebra-515` waitlist + `checkIns` tables under the same `saha.testUser.v1` user stub.
+- Land the local-only R3 fix-pass commits `c7a60a0` + `835a1fd` (still in reflog) on a follow-up branch off current `main`; those are onboarding polish, not unification.
+- Voice C1 still parked on `feat/voice-sarvam` at `4c8f332`, tag `voice-c1/pre-flight-done`. Resume with Wave 1 dispatch when Rewant calls for it.
+- Stale Vercel aliases (`saumya-*`, `sakhi-*`, `autoimmune-*`) still attached — proxy 308s handle them, leave for cleanup later.
+
 **Next.** Tag `onboarding-shell/pre-flight-done`, push branch + tag. Then Wave 1 dispatch — three parallel build subagents (A onboarding screens, B setup + storage, C welcome + home + nav) in a single multi-tool-call message, per the cycle plan §Task 1.
