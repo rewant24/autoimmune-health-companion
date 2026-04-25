@@ -17,7 +17,7 @@
  * Owned by Build-A — Onboarding Shell cycle, Wave 1, Chunk A.
  */
 
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 
 export interface OnboardingShellProps {
   /** 1-based step index. */
@@ -38,6 +38,17 @@ export interface OnboardingShellProps {
 
 export function OnboardingShell(props: OnboardingShellProps): React.JSX.Element {
   const { step, total, illustration, title, body, ctaLabel, onCta } = props
+
+  // R3 review: move focus to the heading on screen mount so screen-reader
+  // users hear the new step's title after a Next.js route navigation. The
+  // `tabIndex={-1}` keeps the heading programmatically focusable without
+  // entering the tab order. Re-running on `step` covers in-place re-renders
+  // (the `/onboarding/[step]` route currently unmounts/remounts, but this is
+  // robust to a future static-shell refactor too).
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    headingRef.current?.focus()
+  }, [step])
 
   return (
     <div
@@ -76,7 +87,13 @@ export function OnboardingShell(props: OnboardingShellProps): React.JSX.Element 
             {illustration}
           </div>
 
-          <h1 className="type-display-md mb-5 max-w-md text-balance">{title}</h1>
+          <h1
+            ref={headingRef}
+            tabIndex={-1}
+            className="type-display-md mb-5 max-w-md text-balance focus:outline-none"
+          >
+            {title}
+          </h1>
 
           <div className="type-body-lg max-w-md text-balance">{body}</div>
         </div>

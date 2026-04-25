@@ -80,10 +80,13 @@ export function SetupShell({
           aria-disabled={disabled}
           data-testid="setup-next"
           className={
+            // disabled:opacity-60 (was 40) — keeps the WCAG 3:1 contrast
+            // floor on the sage-deep / bg-elevated pairing for non-text UI;
+            // 40% dropped the pair under the threshold per R3 review.
             'flex h-12 w-full items-center justify-center rounded-full ' +
             'bg-[var(--sage-deep)] text-[var(--bg-elevated)] font-medium ' +
             'transition-opacity duration-150 ' +
-            'disabled:cursor-not-allowed disabled:opacity-40'
+            'disabled:cursor-not-allowed disabled:opacity-60'
           }
         >
           {nextLabel}
