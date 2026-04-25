@@ -332,6 +332,55 @@ Final tally:
 - `tsc --noEmit` clean.
 - No remaining `Sakhi`/`sakhi` references in code, configs, or active docs (only references that remain are the few inside Session 7 / ADR-024 / changelog rebrand entries that explicitly *cite* the old name as part of recording the rename — these are intentional).
 
-**Not yet done.**
-- Production redeploy to register `saumya-*` aliases — Rewant to trigger `vercel deploy --prod` after reviewing the launch page locally.
-- Decision on whether to remove the old `sakhi-*.vercel.app` aliases (currently kept so old links don't break).
+**Production deploy + alias cleanup (same session).**
+- Commit `e1e91a3` on `main` (not pushed): 22 files, the rebrand sweep.
+- `vercel deploy --prod` → new deploy `dpl_D1hb8uLygwiACQFnJ2kZT7quk7VJ` (READY).
+- `vercel alias set` → `saumya-health-companion.vercel.app` pointed at new deploy.
+- **Hit a 401 hiccup:** the new alias was blocked by SSO protection (`ssoProtection.deploymentType: "all_except_custom_domains"`). Project's `domains` array still listed the old `sakhi-health-companion.vercel.app` as the auto-exempt primary, not the new saumya one. Fix: `vercel domains add saumya-health-companion.vercel.app` added it to the project's domains list, which auto-exempted it from SSO.
+- Verified: `curl -sI https://saumya-health-companion.vercel.app` → 200; HTML body contains `Saumya`, no `Sakhi`.
+- **Old aliases removed:** `vercel alias rm` ran on `sakhi-health-companion.vercel.app`, `sakhi-health-companion-rewant24s-projects.vercel.app`, and `sakhi-health-companion-rewant24-rewant24s-projects.vercel.app`. All three confirmed 404 after removal.
+- **Still on the project (untouched, not requested):** three `autoimmune-health-companion*` aliases — `autoimmune-health-companion.vercel.app` (now pointing at the new saumya deploy), `autoimmune-health-companion-rewant24s-projects.vercel.app`, and `-rewant24-rewant24s-projects.vercel.app` (the latter two still pointing at the old `autoimmune-*` deploy from 2 days ago). Decide separately whether to remove these.
+
+**Open follow-ups.**
+- Push commit `e1e91a3` to `origin/main` when ready (not pushed automatically).
+- Acquire a custom `saumya` domain if desired (`saumya.app`, `saumya.health`, etc.) — site is currently public on the Vercel-managed subdomain only.
+
+---
+
+## 2026-04-25 — Session 8: Launch page UX scan + WaitlistForm restyle
+
+**Trigger.** Rewant asked for a UI/UX scan of the launch page (waitlist), grounded in established design principles.
+
+**Scan delivered (priority order, not all implemented this session):**
+1. **WaitlistForm breaks the design system.** Page uses sage / cream / Fraunces; form was Tailwind `bg-teal-700` + zinc inputs. Inverts visual hierarchy (Refactoring UI, Wathan & Schoger), dents trust on a health product (aesthetic-usability effect, Tractinsky/Norman). **Implemented this session.**
+2. Headline is poetic; needs a concrete sub-headline naming the thing (Krug). *Not implemented.*
+3. Two competing CTAs in nav vs. inline hero form (Wroblewski). *Not implemented.*
+4. Privacy section sits below final CTA — should be a precondition, not a postscript. *Not implemented.*
+5. `WaitlistCount` "Be among the first" copy under 25 signups is generic; specific count is more honest social proof (Cialdini). *Not implemented.*
+6. Founder note shows initial "R" — real face is higher-leverage trust signal. *Not implemented.*
+7. Mobile order shows differentiator (`VoiceTranscript`) last. *Not implemented.*
+8. Section overlap between "What's inside" and "The daily loop" — possible cut/merge. *Not implemented.*
+
+**Implemented #1: `app/WaitlistForm.tsx` restyled to design system.**
+- Input: `--bg-elevated` bg, `--rule` border, `--ink` text. Focus → `--sage-deep` border + 3px sage glow ring (`rgba(47, 90, 82, 0.18)`). Replaces `border-zinc-300 / focus:ring-teal-600/20`.
+- Button: `--sage-deep` resting → `--ink` on hover, soft sage drop-shadow (`0 6px 18px rgba(47, 90, 82, 0.16)`). Inter weight 500 (was 700/`font-semibold`). `rounded-xl` to match `VoiceTranscript` and pillar cards (was `rounded-lg`).
+- Success card: `--sage-soft` bg, `--sage-deep` border + text, Fraunces italic copy, small breathing dot — same idiom as the hero pill. Replaces `bg-teal-50 / text-teal-900`.
+- Error text: `#A6573B` (the deep terracotta from `VoiceTranscript`) — palette-coherent, ~6:1 on cream, passes WCAG AA. Replaces generic `text-red-700`.
+- Behavior unchanged: state machine, validation regex, `role="status"` / `role="alert"`, `sr-only` label, `autoComplete="email"`, idempotency via Convex `addEmail`. No tests existed against this component; nothing to update.
+- Copy nit: trimmed success message from *"You're on the list. Watch your inbox — we'll email you…"* to *"You're on the list. We'll email you when early access opens."* — "Watch your inbox" is redundant with "We'll email you" and the shorter line breathes better in italic Fraunces.
+
+**Implemented copy edit: pull-quote attribution simplified.**
+- `app/page.tsx:245-247` changed `From 12 patient interviews · 2026` → `Autoimmune patient · arthritis`. Rewant explicitly removed the patient-count and year per request: "we don't need to reference patient numbers or year for that matter."
+
+**Verified.**
+- `tsc --noEmit` clean.
+- `vitest run` → 88/88 pass.
+- `next build` → compiled, 5 static pages generated, no warnings.
+- HMR picked up changes on the already-running dev server (PID 5211 on port 3000).
+
+**Not committed.** All edits are in the working tree only — no commit made this session. Combined with Session 7's unpushed `e1e91a3`, `main` now diverges from `origin/main` by one commit + uncommitted launch-page polish.
+
+**Open follow-ups (carried into next session).**
+- Items 2–8 from the scan above (sub-headline, nav CTA, privacy placement, WaitlistCount copy, founder photo, mobile order, section dedup).
+- F02 C1 dispatch (still gated on Rewant signoff per Session 6).
+- Push `e1e91a3` + a new commit covering Session 8 launch-page polish.

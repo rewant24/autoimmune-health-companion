@@ -39,14 +39,35 @@ export function WaitlistForm() {
     return (
       <div
         role="status"
-        className="rounded-lg bg-teal-50 px-4 py-3 text-sm text-teal-900 dark:bg-teal-950 dark:text-teal-100"
+        className="flex items-start gap-3 rounded-2xl border px-5 py-4"
+        style={{
+          background: "var(--sage-soft)",
+          borderColor: "var(--sage-deep)",
+          color: "var(--sage-deep)",
+        }}
       >
-        {status.alreadyOnList
-          ? "You're already on the list — we'll email you when early access opens."
-          : "You're on the list. Watch your inbox — we'll email you when early access opens."}
+        <span
+          aria-hidden
+          className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full animate-breathe"
+          style={{ background: "var(--sage-deep)" }}
+        />
+        <p
+          className="text-[15px] leading-[1.55]"
+          style={{
+            fontFamily: "var(--font-fraunces), Georgia, serif",
+            fontVariationSettings: "'SOFT' 100, 'opsz' 24, 'wght' 420",
+            fontStyle: "italic",
+          }}
+        >
+          {status.alreadyOnList
+            ? "You're already on the list — we'll email you when early access opens."
+            : "You're on the list. We'll email you when early access opens."}
+        </p>
       </div>
     );
   }
+
+  const isSubmitting = status.kind === "submitting";
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row">
@@ -65,20 +86,51 @@ export function WaitlistForm() {
           setEmail(e.target.value);
           if (status.kind === "error") setStatus({ kind: "idle" });
         }}
-        disabled={status.kind === "submitting"}
-        className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-3 text-base text-zinc-900 placeholder:text-zinc-400 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-500"
+        disabled={isSubmitting}
+        className="flex-1 rounded-xl border px-4 py-3 text-base outline-none transition-colors focus:ring-2 disabled:opacity-60"
+        style={{
+          background: "var(--bg-elevated)",
+          borderColor: "var(--rule)",
+          color: "var(--ink)",
+          fontFamily: "var(--font-inter), system-ui, sans-serif",
+          // Custom focus visuals via CSS vars on a real ring color
+          boxShadow: "none",
+        }}
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = "var(--sage-deep)";
+          e.currentTarget.style.boxShadow = "0 0 0 3px rgba(47, 90, 82, 0.18)";
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = "var(--rule)";
+          e.currentTarget.style.boxShadow = "none";
+        }}
       />
       <button
         type="submit"
-        disabled={status.kind === "submitting"}
-        className="rounded-lg bg-teal-700 px-5 py-3 text-base font-semibold text-white transition-colors hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-600/40 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-teal-600 dark:hover:bg-teal-500"
+        disabled={isSubmitting}
+        className="rounded-xl px-5 py-3 text-base transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+        style={{
+          background: "var(--sage-deep)",
+          color: "var(--bg-elevated)",
+          fontFamily: "var(--font-inter), system-ui, sans-serif",
+          fontWeight: 500,
+          letterSpacing: "-0.005em",
+          boxShadow: "0 1px 0 rgba(31, 42, 36, 0.04), 0 6px 18px rgba(47, 90, 82, 0.16)",
+        }}
+        onMouseEnter={(e) => {
+          if (!isSubmitting) e.currentTarget.style.background = "var(--ink)";
+        }}
+        onMouseLeave={(e) => {
+          if (!isSubmitting) e.currentTarget.style.background = "var(--sage-deep)";
+        }}
       >
-        {status.kind === "submitting" ? "Joining…" : "Join waitlist"}
+        {isSubmitting ? "Joining…" : "Join waitlist"}
       </button>
       {status.kind === "error" && (
         <p
           role="alert"
-          className="text-sm text-red-700 sm:basis-full dark:text-red-400"
+          className="text-[14px] leading-[1.5] sm:basis-full"
+          style={{ color: "#A6573B" }}
         >
           {status.message}
         </p>

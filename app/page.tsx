@@ -243,7 +243,7 @@ export default function Home() {
               what I wanted to ask.&rdquo;
             </p>
             <p className="type-label mt-5">
-              Autoimmune patient · arthritis · 2/6
+              Autoimmune patient · arthritis
             </p>
           </blockquote>
         </section>
