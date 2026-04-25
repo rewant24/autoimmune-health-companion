@@ -2,13 +2,14 @@
 number: 01
 name: Daily Voice Check-in
 slug: daily-checkin
-status: chunked
+status: cycle-1-shipped
 depends_on: []
 blocks: [02-memory, 06-doctor-report, 07-prepare-for-visit]
 owner: rewant
 scoping_ref: docs/scoping.md#feature-1-daily-voice-check-in
 adr_refs: [ADR-005]
 last_updated: 2026-04-25
+cycle_1_commits: [4ebe11f, b002af2, de7e72e, 1aaafd6, 24ec3d9]
 ---
 
 # Feature 01 — Daily Voice Check-in
@@ -64,7 +65,7 @@ tests/check-in/*.test.ts
   - `lib/voice/web-speech-adapter.ts`
   - `lib/voice/openai-realtime-adapter.ts` (stub — interface only, behind a flag)
   - `tests/check-in/voice-provider.test.ts`
-- **Status:** ready
+- **Status:** shipped (2026-04-25)
 - **Stories:** US-1.A.1, US-1.A.2, US-1.A.3
 - **Do-not-touch:** `convex/`, `components/`, `app/`
 
@@ -74,7 +75,7 @@ tests/check-in/*.test.ts
   - `convex/schema.ts` (append `checkIns` table only)
   - `convex/checkIns.ts` (new file)
   - `tests/check-in/convex-checkins.test.ts`
-- **Status:** ready
+- **Status:** shipped (2026-04-25)
 - **Stories:** US-1.B.1, US-1.B.2, US-1.B.3
 - **Do-not-touch:** `components/`, `app/`, `lib/`
 
@@ -88,7 +89,7 @@ tests/check-in/*.test.ts
   - `components/check-in/ScreenShell.tsx`
   - `lib/checkin/state-machine.ts`
   - `tests/check-in/state-machine.test.ts`
-- **Status:** ready
+- **Status:** shipped (2026-04-25)
 - **Stories:** US-1.C.1, US-1.C.2, US-1.C.3
 - **Do-not-touch:** `convex/`, `lib/voice/`
 
@@ -161,6 +162,7 @@ tests/check-in/*.test.ts
   - **UX:** n/a.
   - **UI:** n/a.
   - **Backend / data:** index on `(userId, date)` unique-ish (one check-in per user per IST day; conflict handled in 1.F). Validators enforce ranges. Schema migration documented in `architecture-changelog.md`.
+  - **Time-zone contract (Cycle 1):** `date` is a bare `YYYY-MM-DD` string chosen by the *client* against the device's wall clock. Cycle 1 assumes the user is IST-fixed (Sonakshi). Cross-tz travel is a known edge case — see `post-mvp-backlog.md` §21 ("Check-in date time-zone policy").
   - **UX copy:** none.
 
 ### US-1.B.2 — `createCheckin` mutation

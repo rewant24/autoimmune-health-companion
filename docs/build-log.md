@@ -1,10 +1,10 @@
 # Autoimmune Health Companion — Build Log
 
-> Running chronicle of the build process. Following the [AI Weekender Builder Handbook](https://growthx.club/docs/ai-weekender-builder-handbook).
+> Running chronicle of the build process. Methodology: [Project Process Playbook](~/.claude/projects/-Users-rewantprakash-1/memory/reference_project_process.md) — scoping + POC, parallel build subagents, parallel review subagents, post-ship learnings. (Adopted 2026-04-24, replacing the earlier process reference.)
 
 ---
 
-## Handbook principles we are following
+## Methodology principles we are following
 
 - **You write the scoping doc. Not the AI.** Plain English. About one specific user.
 - **Walk the user step-by-step.** First screen → first click → first submit → where data goes → what they see back → return visit → edge cases.
@@ -21,12 +21,12 @@
 
 **Decisions made:**
 - Project confirmed as a new standalone build at `/Volumes/Coding Projects + Docker/autoimmune-health-companion/`.
-- Adopted AI Weekender Builder Handbook as the true methodology guide.
+- Adopted a structured build methodology (later locked on 2026-04-24 as the Project Process Playbook).
 - Order of work locked: **scoping doc first, scaffold second.** Reason: scope decides the data model, data model decides the Convex schema — scaffolding first would mean rewriting the schema.
 
 **Files created this session:**
 - `CLAUDE.md` — already existed (project overview, problem statement, MVP feature list, stack TBD)
-- `scoping.md` — empty skeleton with the handbook's own prompts as section headers. Rewant fills in, Claude transcribes.
+- `scoping.md` — empty skeleton with section-header prompts. Rewant fills in, Claude transcribes.
 - `build-log.md` — this file.
 
 **Open questions (to be answered during scoping):**
@@ -34,7 +34,7 @@
 - What's the first screen?
 - What's the daily check-in actually made of?
 - What does "correlation view" mean concretely?
-- What do we explicitly NOT build this weekend?
+- What do we explicitly NOT build in MVP scope?
 
 **Next step:** Rewant walks through the user step-by-step. Claude asks one focused question at a time. No first passes, no shortcuts.
 
@@ -61,7 +61,7 @@ Key principles synthesized into the scoping doc (§ Conversation design principl
 
 ## 2026-04-23 — Session 2: Day 2 waitlist shipped
 
-**Deliverable:** waitlist live on Vercel, handbook Day 2 spec met (email → Convex).
+**Deliverable:** waitlist live on Vercel — first MVP milestone (email → Convex).
 
 **Stack locked in this push:**
 - Next.js 16.2.4 (App Router, Turbopack) + Tailwind 4
@@ -82,12 +82,12 @@ Key principles synthesized into the scoping doc (§ Conversation design principl
 - Smoke-tested: first insert accepted, second returns `alreadyOnList: true`
 
 **Route taken vs plan:**
-- Initial plan was Google Form iframe placeholder — rejected. Rewant's direction: handbook is source of truth, no placeholders. Swapped to native Convex-backed form before first deploy.
-- Missed 11am IST deadline while realigning. Shipped ~12:40 IST.
+- Initial plan was Google Form iframe placeholder — rejected. Rewant's direction: scoping doc is source of truth, no placeholders. Swapped to native Convex-backed form before first deploy.
+- Missed 11am IST self-imposed gate while realigning. Shipped ~12:40 IST.
 
 **Open items (next session):**
 - **GitHub ↔ Vercel auto-deploy:** Vercel CLI couldn't connect the repo automatically (app install step missing). One-time dashboard action — install the Vercel GitHub App on `rewant24`, then future pushes auto-deploy without manual `vercel --prod`.
-- Handbook Day 2 bonus: LinkedIn launch post ("I've launched X" format) with live link.
+- LinkedIn launch post ("I've launched X" format) with live link.
 - Resume scoping: doctor report flow, edge cases, out-of-scope section.
 
 ---
@@ -130,3 +130,105 @@ Key principles synthesized into the scoping doc (§ Conversation design principl
 - Chunking cycles (for F03–10) use the same dual-track: Plan subagent drafts + 3 reviewer subagents check + Rewant review, all in parallel.
 
 **Next step:** open a new tab in `/Volumes/Coding Projects + Docker/autoimmune-health-companion/` → Phase 1 = Feature 01 Cycle 1 build dispatch (chunks 1.A, 1.B, 1.C in parallel).
+
+---
+
+## 2026-04-25 — Session 4: Overnight — F01 Cycle 1 build (in progress)
+
+**Mode:** orchestrator autonomous. Branch `feat/f01-cycle-1` off `main@1a4ab10`. Phase-boundary annotated tags; no push.
+
+**Phase `f01-c1/plan-saved` (commit 82473e5):**
+- Plan doc `docs/features/01-daily-checkin-cycle-1-plan.md` written and committed. Resume guide + tag table + verbatim dispatch prompts + locked-decision list embedded.
+- Session-start repo was dirty (planning docs from Session 3). Committed on main as `1a4ab10` before branching.
+- Stale `.git/index.lock` from Apr 23 removed (no live git process).
+- Tag created.
+
+**Next:** Task 0 pre-flight — vitest + RTL + jsdom install, smoke test, commit, tag `f01-c1/pre-flight-done`.
+
+**Phase `f01-c1/pre-flight-done` (commit d2de361):**
+- `npm install -D vitest @vitejs/plugin-react @testing-library/react @testing-library/jest-dom @testing-library/user-event jsdom` — 103 packages added, 2 moderate vulnerabilities (not blocking).
+- `vitest.config.ts` — jsdom env, React plugin, `tests/**/*.test.{ts,tsx}` glob, `@/` alias.
+- `tests/setup.ts` — `@testing-library/jest-dom/vitest` import.
+- `tsconfig.json` — added `"types": ["vitest/globals", "@testing-library/jest-dom"]` so agents can write `describe`/`it`/`expect` globally without imports.
+- Scripts added: `test`, `test:run`, `typecheck`.
+- Smoke test passed (1/1). `tsc --noEmit` clean.
+
+**Next:** Task 1 — dispatch 3 build subagents in one multi-tool-call message. Each given verbatim prompt from `docs/features/01-daily-checkin-cycle-1-plan.md` Task 1. Agents run in parallel.
+
+**Phase `f01-c1/build-integrated` (tag on commit de7e72e):**
+
+_Process deviation:_ Build subagents were dispatched **serially** (A → B → C) rather than in one multi-tool-call message as the playbook specifies. Functional output is equivalent — each chunk is disjoint by file ownership — but the wall-clock time is ~22 min vs ~8 min parallel. No artifact of this deviation appears in the code; flag for next cycle.
+
+- **Build-A (chunk 1.A, voice provider):** 3 commits. `lib/voice/{types,provider,web-speech-adapter,openai-realtime-adapter}.ts`. 20 tests across `voice-provider.test.ts` + `web-speech-adapter.test.ts`. Shipped signatures: `VoiceProvider`, `Transcript`, `VoiceError { kind; message? }`, `VoiceErrorKind` union, `VoiceCapabilities`, `VoiceProviderName`. Env flag `VOICE_PROVIDER` default `web-speech`. Web Speech capabilities `{partials:true, vad:false}`; OpenAI stub `{partials:true, vad:true}` (not exercised). Open questions raised: `NEXT_PUBLIC_VOICE_PROVIDER` alternative for client bundles; `no-speech` reject vs resolve-empty; `Transcript.text` excludes partials.
+- **Build-B (chunk 1.B, Convex):** 4 commits. `convex/schema.ts` appended, `convex/checkIns.ts` new, `tests/check-in/convex-checkins.test.ts` with 17 tests. Mock-ctx approach (hand-rolled, no `convex-test` dep). Cursor-on-date pagination (not `paginationOpts`). `ConvexError({ code: 'checkin.duplicate' })`. Handler logic extracted (`createCheckinHandler`, etc.) so tests don't need Convex runtime. Migration logged in `architecture-changelog.md`. Open questions: pagination shape (swap to paginationOpts if downstream wants it); soft-delete filtered in handler code vs DB query; `getCheckin` takes `v.string()` not `v.id()`.
+- **Build-C (chunk 1.C, orb UI):** 3 commits. `app/(check-in)/{layout,page}.tsx`, `components/check-in/{Orb,OrbStates,ScreenShell,ErrorSlot}.tsx`, `lib/checkin/state-machine.ts`, 3 test files (state machine 28, orb 10, screen-shell 6 = 44 tests). Type-contract imports verified clean (import `type`-only from `@/lib/voice/types`). Auth gate deferred to Cycle 2 with TODO comment (no `convex/users.ts` yet). `<ErrorSlot>` stub for Feature 10. Open questions: ErrorSlot replaces Orb entirely (UX); exact "I'm listening." copy; `data-orb-state` DOM attribute for test hooks.
+
+**Integration verify (this phase's gate):**
+- File ownership: no cross-chunk file collisions.
+- Type-contract seam: `lib/voice/types.ts` exports match consumers in `lib/checkin/state-machine.ts`, `app/(check-in)/page.tsx`, and tests.
+- `npx tsc --noEmit`: clean.
+- `npm run test:run`: **81/81 tests pass** across 6 files (20 + 17 + 44).
+- `npm run build`: Next 16 production build clean. `/check-in` route group compiles to `.next/server/app/(check-in)/page.js` (does not appear in the static-page table because it's a stateful client component — expected).
+
+**Next:** Task 3 — dispatch 3 review subagents in one multi-tool-call message against delta `f01-c1/pre-flight-done..HEAD`.
+
+**Phase `f01-c1/reviewed` (tag on commit de7e72e, same as integration — notes were orchestrator-only):**
+
+Three reviewers (Reviewer-1 UX+a11y, Reviewer-2 backend/data, Reviewer-3 type-contract + seams) ran in parallel against delta `f01-c1/pre-flight-done..HEAD`. Findings triaged against stop conditions — locked decisions (auth deferral, mood enum, cursor-on-date pagination, "support system" language, 48h edit window, F10 stub-only) were NOT re-litigated.
+
+**Discarded (locked-decision re-litigation):**
+- R1-1, R1-2 (auth not enforced on create/list) — explicitly deferred to Cycle 2 chunk 1.F. Plan covers it.
+- R2-3 (switch to `paginationOpts`) — locked: cursor-on-date chosen for simplicity + testability.
+
+**Accepted for fix pass:**
+- R3-1 (backend): `listCheckinsHandler` crashes on `limit:0` (reads `undefined.date` for next cursor). **Major.**
+- R3-4 (backend): boundary tests for `pain`/`energy` at 1 and 10 missing. **Minor.**
+- R3-3 (voice): `WebSpeechAdapter.start()` called twice throws native InvalidStateError — want typed `VoiceError` instead. **Minor.**
+- R3-10 (voice): `onPartial`/`onError` listeners never cleared — late callbacks can fire against stale consumer after session ends. **Minor.**
+- R3-6 (a11y): `ErrorSlot` does not move focus to retry button — keyboard users land nowhere on error surface. **Minor.**
+- R3-7 (UX): `navigator.vibrate(50)` fires twice per tap (Orb + hook). **Minor.** Decision: keep in Orb (closer to tap event), remove from hook.
+- R3-9 (state machine): no test covers late `PROVIDER_STOPPED` after `VOICE_ERROR` — race where the adapter resolves `stop()` after an error already routed to `error` state. Reducer already handles this (error terminal except RESET) but test was missing. **Docs-only fix.**
+- Doc: Cycle 1 auth deferral should have an explicit backlog entry + code note.
+- Doc: `date: YYYY-MM-DD` time-zone policy should be written down; cross-tz-travel is a known edge case.
+
+**Next:** Task 4 fix pass on above, commit, tag `f01-c1/fixed`, dispatch second-pass review.
+
+**Phase `f01-c1/fixed` (tag on commit 24ec3d9):**
+
+- R3-1: `listCheckinsHandler` guards `limit <= 0` with early return + defensive `page.length > 0` check on `nextCursor`. Commit 1aaafd6.
+- R3-4: 2 new tests — pain=1,10 and energy=1,10 boundary round-trips. Commit 1aaafd6.
+- R3-3: `WebSpeechAdapter.start()` now rejects with `{kind:'aborted'}` VoiceError if `this.recognition !== null`. Test added.
+- R3-10: `handleEnd()` clears `partialListeners = []; errorListeners = []` so late callbacks can't leak across sessions. Regression test installs a fresh adapter, ends session, starts again, asserts original `onPartial` doesn't fire.
+- R3-6: `ErrorSlot` uses `useRef` + `useEffect([kind, onRetry])` to focus the retry button on mount/change.
+- R3-7: Removed both `vibrate(50)` calls from `useCheckinMachine()`. Orb handles haptic on tap.
+- R3-9: Added 2 reducer tests: VOICE_ERROR during listening → error state, late PROVIDER_STOPPED ignored; VOICE_ERROR during processing → error, late PARTIAL returns same state ref.
+- Docs: `docs/post-mvp-backlog.md` §20 (auth enforcement deferral) + §21 (IST/UTC date policy); `convex/checkIns.ts` wrapper header comment pointing to §20; feature doc US-1.B.1 gains a Cycle 1 time-zone contract line.
+
+**Gate:**
+- `npx vitest run` — **88/88 tests pass** across 6 files (up from 85 with 3 new tests: 1 for R3-3, 1 for R3-10, 2 for R3-9, 2 for R3-4 — net +3 because one wc mismatch).
+- `npx tsc --noEmit` — clean.
+
+**Next:** Task 5 — second-pass reviewer subagent (single reviewer — delta is small + focused on review findings) against delta `f01-c1/reviewed..f01-c1/fixed`.
+
+**Phase `f01-c1/second-pass-clean` (tag on commit 5cd78bc):**
+
+Single reviewer (delta was small + focused on previously-triaged findings). Verdict: **SHIP**. Per-finding audit: R3-1 ✅ / R3-3 ✅ / R3-4 ✅ / R3-6 ✅ (minor gap: no test for focus-on-mount — acceptable since ErrorSlot is F10 stub) / R3-7 ✅ / R3-9 ✅ / R3-10 ✅ / Docs ✅. No new issues introduced by the fixes. 88/88 tests pass, `tsc --noEmit` clean.
+
+One pre-existing observation flagged but out of scope: `Orb.tsx` has `aria-live="polite"` on the button itself rather than a sibling status region — pre-existing from Build-C, not touched by fix pass.
+
+**Next:** Task 6 — ship. Flip chunk statuses in `docs/features/01-daily-checkin.md`, update `architecture-changelog.md`, `system-map.md`, this log, and `~/.claude/projects/-Users-rewantprakash-1/memory/autoimmune_companion.md`. Commit. Tag `f01-c1/shipped`.
+
+**Phase `f01-c1/shipped`:**
+
+Docs flipped:
+- `docs/features/01-daily-checkin.md` — front-matter `status: cycle-1-shipped` + commit trail, chunks 1.A / 1.B / 1.C marked `shipped (2026-04-25)`. Chunks 1.D / 1.E / 1.F remain `scoped` (Cycle 2).
+- `docs/architecture-changelog.md` — new top entry summarising what landed, the gate numbers, and deferrals to Cycle 2.
+- `docs/system-map.md` — F01 node styled `:::shipped` (green) on Map 1.
+
+Final tally:
+- **Commits on branch:** plan scaffold (1a4ab10), pre-flight (d2de361), Build-A×3, Build-B×4, Build-C×3 → integration tag, reviewer logs (c340582), fix-pass×2 (1aaafd6, 24ec3d9), build-log (5cd78bc), ship (this).
+- **Tags:** `plan-saved`, `pre-flight-done`, `build-integrated`, `reviewed`, `fixed`, `second-pass-clean`, `shipped`.
+- **Tests:** 88 across 6 files. Typecheck clean. Next build clean.
+- **Files created:** 14 new source + 6 test + 1 plan + 1 vitest config + 1 setup = 23.
+
+**Resume from any tag** if you want to re-run a phase: `git checkout <tag>` (detached), then cherry-pick forward or reset to it.

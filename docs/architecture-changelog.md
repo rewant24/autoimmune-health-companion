@@ -9,6 +9,32 @@
 
 ---
 
+## 2026-04-25 — F01 C1 shipped: voice check-in foundation
+
+**Scope.** Feature 01 Cycle 1 (chunks 1.A voice provider, 1.B Convex data, 1.C orb UI) shipped on branch `feat/f01-cycle-1`. Tagged `f01-c1/shipped`.
+
+**What landed.**
+- `lib/voice/` — `VoiceProvider` contract + `WebSpeechAdapter` (`en-IN`, continuous + interim) + `OpenAIRealtimeAdapter` stub. Provider resolved from `VOICE_PROVIDER` env, defaults to `web-speech`.
+- `convex/schema.ts` + `convex/checkIns.ts` — `checkIns` table, `by_user_date` index, `createCheckin` / `listCheckins` / `getCheckin`. Cursor-on-date pagination. `ConvexError({code,message})` for `checkin.duplicate` / `checkin.invalid_range`. Handlers extracted as plain functions (mock-ctx testable).
+- `app/(check-in)/` + `components/check-in/` + `lib/checkin/state-machine.ts` — 7-state reducer (idle → requesting-permission → listening → processing → confirming → saving → saved|error), orb component with 4 visual states + motion-safe animations, `ScreenShell`, `ErrorSlot` (Feature 10 stub).
+- `vitest.config.ts` + `tests/setup.ts` + `package.json` scripts — test infra wired.
+
+**Gate at ship.** 88/88 tests pass across 6 files; `tsc --noEmit` clean; `next build` clean. Two rounds of parallel-subagent review (3 reviewers first pass + 1 reviewer second pass). Fix-pass addressed R3-1/3/4/6/7/9/10.
+
+**Deferred to Cycle 2.** Auth enforcement (chunk 1.F — currently trusts `userId` arg), scripted-metric conversation (chunk 1.D), save wiring + confirmation screen (chunk 1.E). See `docs/post-mvp-backlog.md` §20 for auth note, §21 for tz/IST policy.
+
+**Related ADR.** ADR-005 (skip Stage 2 when open-first covers all 5 metrics) — implemented per lock.
+
+---
+
+## 2026-04-25 — F01 C1: checkIns table
+- New table `checkIns` with index `by_user_date` on (userId, date).
+- Enum `mood`: heavy | flat | okay | bright | great.
+- `clientRequestId` for idempotent create. Soft delete via `deletedAt`.
+- Existing `waitlist` untouched.
+
+---
+
 ## 2026-04-24 — Q1 closed: "support system" is Sonakshi's word
 
 **Related ADR:** none — this is a language/copy decision that aligns with the already-locked § Language conventions.
@@ -46,8 +72,8 @@ Eleven open questions in `scoping.md` resolved in one batch. Open-question count
 
 **Why.**
 - *Community locks collectively:* the MVP Community shell had to be shippable safely with a single admin (Rewant) and zero auto-surfacing of private data. Auto-created channels from AARDA, text-only, pseudonymous, one-admin moderation — all of these pick the simplest shape that still delivers "you are not alone" without inheriting the moderation-heavy architecture of a full community platform.
-- *Single-select + correlation chart deferrals:* both are valuable signals but build-heavy against the weekender clock. The schema and event model are already shaped to absorb them later without migration — the cost of shipping later is very close to the cost of shipping now, but the risk of shipping now is higher. Deferred with explicit architectural hooks.
-- *Scoping doc finalized:* before this batch, 11 questions remained open. After, 0. The doc is the source of truth and the handbook's scope step is complete; per Rewant's direction we pause here before moving to POC.
+- *Single-select + correlation chart deferrals:* both are valuable signals but build-heavy against the MVP launch window. The schema and event model are already shaped to absorb them later without migration — the cost of shipping later is very close to the cost of shipping now, but the risk of shipping now is higher. Deferred with explicit architectural hooks.
+- *Scoping doc finalized:* before this batch, 11 questions remained open. After, 0. The doc is the source of truth and the playbook's scope step is complete; per Rewant's direction we pause here before moving to POC.
 
 ---
 
@@ -73,52 +99,52 @@ Closes open questions #2 and #11 in scoping.md.
 
 **What changed.** Previously open (Q6 in scoping.md). Voice-first architecture decided: **MVP ships as a web app (Next.js 16 mobile-first, installable as a PWA)** with browser-based voice (Web Speech API fallback, OpenAI Realtime / Vapi as primary) behind a provider interface. Native iOS + Android apps are a post-MVP follow-on reusing the Convex backend and voice provider. Post-MVP backlog item added implicitly (native wrappers).
 
-**Why.** Weekender deliverable is Saturday 8pm on a live URL — native app-store review doesn't clear that window. Rewant confirmed mobile-first is the user reality (*"preferably it should be a mobile-based application"*) but accepted web-for-MVP with native as the follow-on. PWA installability gives the home-screen-app feel without the app-store gate. Provider-interface abstraction means swapping from browser voice to a native mic bridge later is a config change, not a refactor.
+**Why.** MVP deliverable is a live URL on launch day — native app-store review doesn't clear that window. Rewant confirmed mobile-first is the user reality (*"preferably it should be a mobile-based application"*) but accepted web-for-MVP with native as the follow-on. PWA installability gives the home-screen-app feel without the app-store gate. Provider-interface abstraction means swapping from browser voice to a native mic bridge later is a config change, not a refactor.
 
 ---
 
 ## 2026-04-24 — Testimonial locked as founder quote (baseline; user quote as upside-swap)
 
-**Related ADR:** ADR-001 (handbook methodology — Thursday L2 deliverable)
+**Related ADR:** ADR-001 (Scope → POC → Build methodology — landing-page deliverable)
 
-**What changed.** Third aha-moment gap (named social proof) closed. Founder quote locked as the shipping baseline for the Thursday L2 landing page:
+**What changed.** Third aha-moment gap (named social proof) closed. Founder quote locked as the shipping baseline for the landing page:
 
 > *"No one should have to be their own medical logbook. Sakhi is for the people I've watched try."*
 > — Rewant Prakash, Founder
 
-If a Sonakshi-sourced or other waitlist-member named quote arrives before Saturday, it swaps in; the founder quote is the guaranteed baseline, not the ceiling.
+If a Sonakshi-sourced or other waitlist-member named quote arrives before launch, it swaps in; the founder quote is the guaranteed baseline, not the ceiling.
 
-**Why.** The handbook's Revenue-track aha-moment rubric asks for one named quote on the landing page. A real user quote is the strongest signal but requires a third-party reply inside a 48-hour window, which is uncertain. A founder quote is honest social proof on its own — founder-market fit is a legitimate story for an early-stage chronic-illness app — and can ship immediately. Picking B2 (mission-framed, shorter) over B1 (problem-framed, longer) reuses the *"logbook"* word from the ROI anchor and persona pitch locked earlier the same day — all three landing-page copy anchors now reinforce the same motif, and B2 is short enough to work as a pull-quote for the Thursday launch post on X / LinkedIn. Alternatives not taken: fabricating a user quote (out of bounds), leaving the space empty with a "coming soon" frame (weakest rubric outcome), waiting on Sonakshi before committing copy (risked an empty social-proof row by Thursday).
+**Why.** The Revenue-track aha-moment rubric asks for one named quote on the landing page. A real user quote is the strongest signal but requires a third-party reply inside a tight window, which is uncertain. A founder quote is honest social proof on its own — founder-market fit is a legitimate story for an early-stage chronic-illness app — and can ship immediately. Picking B2 (mission-framed, shorter) over B1 (problem-framed, longer) reuses the *"logbook"* word from the ROI anchor and persona pitch locked earlier the same day — all three landing-page copy anchors now reinforce the same motif, and B2 is short enough to work as a pull-quote for the launch post on X / LinkedIn. Alternatives not taken: fabricating a user quote (out of bounds), leaving the space empty with a "coming soon" frame (weakest rubric outcome), waiting on Sonakshi before committing copy (risked an empty social-proof row at launch).
 
 ---
 
 ## 2026-04-24 — One-sentence persona pitch locked
 
-**Related ADR:** ADR-001 (handbook methodology — Thursday L2 deliverable)
+**Related ADR:** ADR-001 (Scope → POC → Build methodology — landing-page deliverable)
 
-**What changed.** One-sentence persona pitch locked as: *"Sakhi is for people with chronic autoimmune conditions who shouldn't have to be their own medical logbook."* Ships on the Thursday L2 landing page and opens the public launch post.
+**What changed.** One-sentence persona pitch locked as: *"Sakhi is for people with chronic autoimmune conditions who shouldn't have to be their own medical logbook."* Ships on the landing page and opens the public launch post.
 
-**Why.** The handbook's Revenue-track aha-moment rubric asks for a one-sentence persona job description. Locking one reusable sentence (vs. drafting ad-hoc during the Thursday push) ensures the landing page and launch post share voice. The sentence reuses the "logbook" motif from the ROI anchor (locked same day), so both pieces of landing-page copy reinforce the same pain framing — *the invisible labor of tracking your own condition between visits.* Alternatives considered: between-visits framing, single-voice/woman-specific framing (dropped for gender narrowness), outcome-forward framing (failed the handbook's ask for a *persona* sentence).
+**Why.** The Revenue-track aha-moment rubric asks for a one-sentence persona job description. Locking one reusable sentence (vs. drafting ad-hoc during launch prep) ensures the landing page and launch post share voice. The sentence reuses the "logbook" motif from the ROI anchor (locked same day), so both pieces of landing-page copy reinforce the same pain framing — *the invisible labor of tracking your own condition between visits.* Alternatives considered: between-visits framing, single-voice/woman-specific framing (dropped for gender narrowness), outcome-forward framing (failed the rubric's ask for a *persona* sentence).
 
 ---
 
 ## 2026-04-24 — Landing-page ROI anchor locked
 
-**Related ADR:** ADR-001 (handbook methodology — Thursday L2 landing-page deliverable)
+**Related ADR:** ADR-001 (Scope → POC → Build methodology — landing-page deliverable)
 
-**What changed.** Landing-page ROI anchor copy locked as: *"Stop being the logbook for your own condition. Sakhi remembers every dose change, every flare, every off day — so your doctor sees the full picture, not just today."* Replaces earlier draft (*"One visit you don't have to repeat pays for a year of Sakhi."*). Ships on the Thursday L2 landing-page push.
+**What changed.** Landing-page ROI anchor copy locked as: *"Stop being the logbook for your own condition. Sakhi remembers every dose change, every flare, every off day — so your doctor sees the full picture, not just today."* Replaces earlier draft (*"One visit you don't have to repeat pays for a year of Sakhi."*). Ships on the MVP landing-page push.
 
 **Why.** The earlier draft framed the ROI as saving a repeat visit — which isn't the primary pain. Rewant clarified the pain is the *invisible labor between visits*: patients manually or mentally tracking 2–3 months of symptoms and dosage changes, then compressing it into a 10-minute OPD window. The new copy sells against that cognitive load directly — *"stop being the logbook for your own condition"* names the burden, and the dose-change / flare / off-day list spells out what Sakhi actually remembers. Closes with the doctor-outcome tie-in.
 
 ---
 
-## 2026-04-24 — Handbook rubric positioning locked on Revenue track
+## 2026-04-24 — Rubric positioning locked on Revenue track
 
 **Related ADR:** ADR-001 (Scope → POC → Build methodology)
 
-**What changed.** Added § Handbook rubric positioning to scoping.md. Revenue track (176-pt ceiling) picked as the target over Virality (164) or MaaS (164). Aha-moment features audited against the handbook's Revenue-track rubric; 4 patterns scored (sub-60s time-to-first-value ✅, obvious ROI calc ⚠️, one-sentence persona ⚠️, social proof ❌). Saturday deliverable timeline mapped to explicit Thursday / Friday / Saturday gates.
+**What changed.** Added § Rubric positioning to scoping.md. Revenue track (176-pt ceiling) picked as the target over Virality (164) or MaaS (164). Aha-moment features audited against the Revenue-track rubric; 4 patterns scored (sub-60s time-to-first-value ✅, obvious ROI calc ⚠️, one-sentence persona ⚠️, social proof ❌). Launch-day deliverable timeline mapped to explicit pre-launch gates.
 
-**Why.** The handbook awards most heavily on Signups (20x weight) and Revenue generated (15x), both of which Sakhi can clear with a free-tier + founder-tier pricing model and a waitlist already in motion. Virality was ruled out because chronic-illness apps live in a private category — optimizing Sakhi for shareable mechanics would distort the product. Three aha-moment patterns are addressable inside weekender scope (ROI copy on landing page, one-sentence persona pitch, one named testimonial).
+**Why.** The rubric awards most heavily on Signups (20x weight) and Revenue generated (15x), both of which Sakhi can clear with a free-tier + founder-tier pricing model and a waitlist already in motion. Virality was ruled out because chronic-illness apps live in a private category — optimizing Sakhi for shareable mechanics would distort the product. Three aha-moment patterns are addressable inside MVP scope (ROI copy on landing page, one-sentence persona pitch, one named testimonial).
 
 ---
 
@@ -168,11 +194,11 @@ The *support-system shared read-only view* (backlog item #5) remains — that on
 
 ## 2026-04-24 — Monetization first-pass designed (Revenue track targeting)
 
-**Related ADR:** ADR-001 (Scope → POC → Build — now extends to pricing on Saturday)
+**Related ADR:** ADR-001 (Scope → POC → Build — now extends to pricing at MVP launch)
 
-**What changed.** Post-MVP item #20 *"Monetization / paywall logic"* expanded from one-line placeholder into a first-pass design: two-tier **Free (Sakhi Friend) / Paid (Sakhi Companion)** model, ₹199/month or ₹1,499/year in India, $4.99/month or $39/year internationally, Razorpay + Stripe rails, waitlist early-bird gate (first 100 get 3 months free) landing on the Saturday deliverable page. Gates fall on unlimited Memory history, unlimited reports, Patterns view, and future wearable / support-system features. Daily check-in and Community stay free forever.
+**What changed.** Post-MVP item #20 *"Monetization / paywall logic"* expanded from one-line placeholder into a first-pass design: two-tier **Free (Sakhi Friend) / Paid (Sakhi Companion)** model, ₹199/month or ₹1,499/year in India, $4.99/month or $39/year internationally, Razorpay + Stripe rails, waitlist early-bird gate (first 100 get 3 months free) landing on the MVP launch page. Gates fall on unlimited Memory history, unlimited reports, Patterns view, and future wearable / support-system features. Daily check-in and Community stay free forever.
 
-**Why.** The AI Weekender handbook's Revenue track (176-pt ceiling, highest of the three) awards weighted points for *actual revenue generated* and *paid signups*. A visible pricing page on Saturday — even without live checkout — converts waitlist curiosity into revenue-track evidence. An optional *"Pay ₹99 to skip the waitlist"* founder-tier seeds the *revenue generated* metric at the rubric's scoring moment.
+**Why.** The Revenue track (176-pt ceiling, highest of the three) awards weighted points for *actual revenue generated* and *paid signups*. A visible pricing page at launch — even without live checkout — converts waitlist curiosity into revenue-track evidence. An optional *"Pay ₹99 to skip the waitlist"* founder-tier seeds the *revenue generated* metric at the rubric's scoring moment.
 
 ---
 
@@ -182,7 +208,7 @@ The *support-system shared read-only view* (backlog item #5) remains — that on
 
 **What changed.** Established the four-document documentation practice: `scoping.md` + `post-mvp-backlog.md` + `architecture-decisions.md` + `architecture-changelog.md`, supplementing the existing `build-log.md`.
 
-**Why.** Weekender scope decisions were accumulating in a single scoping doc with no structured place for deferred items, locked architectural decisions, or change history. Rewant called for explicit documentation from the get-go — including out-of-scope reasoning — so the project has complete context recoverable in any future session.
+**Why.** MVP scope decisions were accumulating in a single scoping doc with no structured place for deferred items, locked architectural decisions, or change history. Rewant called for explicit documentation from the get-go — including out-of-scope reasoning — so the project has complete context recoverable in any future session.
 
 ---
 

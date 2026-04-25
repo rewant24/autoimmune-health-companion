@@ -15,7 +15,7 @@ Shows what depends on what, and which features are parallel-safe. Arrows flow fr
 
 ```mermaid
 graph TD
-    F01[01 Daily Check-in<br/>voice + 5 metrics]
+    F01[01 Daily Check-in<br/>voice + 5 metrics<br/>Cycle 1 shipped]:::shipped
     F02[02 Memory<br/>30d scroll + filters]
     F03[03 Patterns<br/>14d+ chart]
     F04[04 Medications<br/>regimen + adherence]

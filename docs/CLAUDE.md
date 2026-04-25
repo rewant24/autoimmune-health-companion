@@ -45,7 +45,7 @@ Helps people living with autoimmune diseases log symptoms, pain, and medication 
 3. Medication adherence and side effects
 4. New or worsening symptoms
 
-## Core features to build (MVP for weekender)
+## Core features to build (MVP)
 1. **Daily check-in** — pain/dysfunction level, morning stiffness, mood, energy (fast, < 1 min)
 2. **Medication log** — current meds, dosage, frequency; flag changes
 3. **Symptom tracker** — log flareups, new symptoms, allergic reactions
@@ -62,7 +62,7 @@ Helps people living with autoimmune diseases log symptoms, pain, and medication 
 - Frontend: Next.js
 - Database: Convex (real-time, good for time-series health logs)
 - Deployment: Vercel
-- Auth: GitHub (for weekender) → email/phone for real users later
+- Auth: GitHub (for MVP) → email/phone for real users later
 
 ## Project operating rules
 

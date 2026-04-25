@@ -1,6 +1,6 @@
 # Post-MVP Backlog
 
-> Everything explicitly **not** in scope for the weekender MVP. Each item has a reason, a sketch of the post-MVP shape, and a note on whether the MVP architecture already leaves room for it. This document exists so we stop re-litigating scope during build, and so nothing we decided to defer gets lost.
+> Everything explicitly **not** in scope for the MVP. Each item has a reason, a sketch of the post-MVP shape, and a note on whether the MVP architecture already leaves room for it. This document exists so we stop re-litigating scope during build, and so nothing we decided to defer gets lost.
 
 **Source of truth convention:** items move between this doc and `scoping.md` when their status changes. If something moves into MVP scope mid-build, note it here with a `→ moved into MVP on YYYY-MM-DD` marker before deleting the entry.
 
@@ -8,7 +8,7 @@
 
 ## 1. Hindi + vernacular languages
 
-- **Why out of MVP:** Single-developer weekender; translation + voice STT/TTS in more languages is multi-week work.
+- **Why out of MVP:** Single-developer scope; translation + voice STT/TTS in more languages is multi-week work.
 - **Post-MVP shape:** Add Hindi first (largest Indian autoimmune-patient demographic overlap with target user). Then Tamil, Telugu, Marathi, Bengali in priority order. Each language requires: UI string translation, STT model support, TTS voice model, plus QA with native speakers.
 - **Architectural hook:** All user-facing copy goes through an i18n string resource system from day one (per § Sakhi's voice → multilingual architecture in scoping.md). Adding a language is a drop-in, not a refactor.
 
@@ -20,7 +20,7 @@
 
 ## 3. Blood work results (not schedule)
 
-- **Why out of MVP:** Parsing lab reports (PDF / image / structured CSV) is non-trivial; rendering multi-analyte results on the doctor report is UI work that exceeds weekender scope.
+- **Why out of MVP:** Parsing lab reports (PDF / image / structured CSV) is non-trivial; rendering multi-analyte results on the doctor report is UI work that exceeds MVP scope.
 - **Post-MVP shape:** Let Sonakshi attach a PDF / image / structured values to any captured blood-test event. Results render as a timeline layer on the Patterns view. Longer-term: OCR the report and auto-populate CRP / ESR / WBC etc.
 - **Architectural hook:** Blood work is already a first-class event type (per § Doctor-visit capture in scoping.md); the event model leaves a `result` slot open.
 
@@ -61,7 +61,7 @@
 
 ## 10. Reminders / alarms for medications
 
-- **Why out of MVP:** Local notifications + schedule engine + miss-handling is a standalone feature. Weekender scope = opportunistic tap + check-in capture only.
+- **Why out of MVP:** Local notifications + schedule engine + miss-handling is a standalone feature. MVP scope = opportunistic tap + check-in capture only.
 - **Post-MVP shape:** Per-medication reminder schedule (morning dose at 8am, evening at 8pm). Missed reminders surface on Home as "did you take X?" nudges.
 - **Architectural hook:** Regimen model in Medications module already captures frequency. Adding reminder scheduling is additive.
 
@@ -91,7 +91,7 @@
 
 ## 15. Native iOS and Android apps (wrapping the web MVP)
 
-- **Why out of MVP:** App-store review timelines don't clear the Saturday 8pm weekender deliverable. Web-PWA MVP (per ADR-017) gets Sakhi in front of real users on a live URL by the handbook deadline; native apps come next.
+- **Why out of MVP:** App-store review timelines don't clear the MVP launch window. Web-PWA MVP (per ADR-017) gets Sakhi in front of real users on a live URL on launch day; native apps come next.
 - **Post-MVP shape:** Native iOS and Android apps that reuse the Convex backend and the voice-provider abstraction — only the surface layer changes. Native mic APIs give first-class voice capture (including background / lock-screen capture for hands-free flare logging). App-store listings also open paid-tier monetization paths that web can't (Apple/Google in-app purchase, optional).
 - **Architectural hook:** ADR-017 locks voice behind a provider interface. The mic bridge is a drop-in replacement; Convex queries/mutations are platform-agnostic. No backend changes needed when native ships.
 
@@ -103,9 +103,9 @@
 
 ---
 
-## 17. Monetization — first-pass design (for handbook Saturday deliverable)
+## 17. Monetization — first-pass design (for MVP launch)
 
-This is the **only backlog item that needs a first pass before Saturday**, because the AI Weekender handbook's Revenue track awards points for *actual revenue generated* (paid signups via Stripe/Razorpay, usage fees, premium upgrades). A clear pricing page on the landing site — even before a single transaction — seeds the story.
+This is the **only backlog item that needs a first pass before MVP launch**, because the Revenue rubric awards points for *actual revenue generated* (paid signups via Stripe/Razorpay, usage fees, premium upgrades). A clear pricing page on the landing site — even before a single transaction — seeds the story.
 
 ### Target track
 
@@ -132,9 +132,9 @@ This is the **only backlog item that needs a first pass before Saturday**, becau
 
 - **India:** Razorpay (UPI + cards + netbanking). UPI is the default — lowest friction, highest success rate.
 - **International:** Stripe (cards + Apple Pay + Google Pay).
-- Both rails are one-line integrations from Next.js; neither blocks weekender scope.
+- Both rails are one-line integrations from Next.js; neither blocks MVP scope.
 
-### What ships on the waitlist / landing page by Saturday
+### What ships on the waitlist / landing page by MVP launch
 
 - **Pricing block** on the landing page (3 rows: Free / Companion Monthly / Companion Annual) — no live checkout needed yet, just *"Join waitlist — early birds get 3 months free of Companion."*
 - **Waitlist → early-bird gate**: first 100 waitlist signups get a 3-months-free promo code for Companion when checkout opens. Drives waitlist conversion and seeds paid-trial funnel.
@@ -154,7 +154,7 @@ This is the **only backlog item that needs a first pass before Saturday**, becau
 - **Community** — "you are not alone" is an emotional outcome, not a premium feature. Free forever.
 - **One report per month** — enough for most patients; demonstrates the value proposition without a paywall.
 
-### Handbook rubric impact
+### Rubric impact
 
 - **Signups (20x weight)** — free tier drives this without friction.
 - **Revenue generated (15x)** — founder-tier + any early paid conversion through the promo moves this off zero.
@@ -173,7 +173,7 @@ This is the **only backlog item that needs a first pass before Saturday**, becau
 
 ## 18. Multi-select medical conditions
 
-**Why out of MVP.** Many autoimmune patients live with more than one condition — RA + Sjögren's, lupus + Hashimoto's, psoriatic arthritis + IBD are common co-occurrences. Single-select risks feeling reductive for these users. But shipping multi-select for MVP means handling channel-membership fan-out in Community (which channel does a user with 3 conditions land in?), multi-condition doctor-report structuring, and a more complex condition-picker UI — none of which earns its keep against the weekender clock.
+**Why out of MVP.** Many autoimmune patients live with more than one condition — RA + Sjögren's, lupus + Hashimoto's, psoriatic arthritis + IBD are common co-occurrences. Single-select risks feeling reductive for these users. But shipping multi-select for MVP means handling channel-membership fan-out in Community (which channel does a user with 3 conditions land in?), multi-condition doctor-report structuring, and a more complex condition-picker UI — none of which earns its keep against the MVP launch window.
 
 **Post-MVP shape.** Setup B.4 becomes a multi-select type-ahead (user can add up to N conditions). Community auto-joins to *all* matched channels; default channel on first entry is the first-listed. Doctor Report adds a condition filter. Memory and Patterns gain a per-condition filter.
 
@@ -185,14 +185,35 @@ This is the **only backlog item that needs a first pass before Saturday**, becau
 
 **Why out of MVP.** The clinical signal is meaningful — *"this flare started 4 days after the prednisone increase"* — and is exactly what the Doctor Report is for. But the chart is build-heavy: two time-series layers need alignment (dose-change markers overlaid on flare-period shaded blocks), correlation windows need detection logic, and annotation callouts need positioning math. The MVP multi-metric stacked line already renders both layers visually on a shared time axis (§ Whoop-style charts — MVP set); a reader can see the relationship even without the automated callout. The delta is an analytical-layer polish, not a missing feature.
 
+
 **Post-MVP shape.** A dedicated chart mode in Journey-Patterns that takes the multi-metric stacked line and adds (a) correlation windows detected between dose-change events and flare periods, (b) labelled callouts on the chart (*"Flare started 4d after 10→15mg increase — subsided 7d later"*), and (c) a summary strip above the chart listing the top 3 detected correlations in the selected window. Ships in the Doctor Report appendix alongside the stacked line.
 
 **Architectural hook.** Dose changes and flare events are both already first-class events in the data model (ADR-010 — events first-class). No schema changes required when this ships — it is purely a rendering + correlation-detection layer on top of existing data.
 
 ---
 
+## 20. Auth enforcement for check-in endpoints
+
+**Why out of MVP (Cycle 1 only).** Feature 01 Cycle 1 ships the voice check-in flow against Convex without a live identity layer. `createCheckin`, `listCheckins`, and `getCheckin` trust the `userId` arg from the client. This is a *deliberate* Cycle 1 deferral — not a missed requirement. Cycle 2 adds the auth slice (chunk 1.F in `docs/features/01-daily-checkin.md`).
+
+**Post-Cycle-1 shape (i.e. what Cycle 2 does).** Swap the trusted arg for `ctx.auth.getUserIdentity()` — derive an app-level `userId` from the token identity inside the handler, drop the arg from the public validators, and add a reject path for unauthenticated callers (`ConvexError({ code: "auth.unauthenticated" })`). Also add an ownership check to `getCheckin` so a caller can't fetch another user's row by ID.
+
+**Architectural hook.** Handler bodies are already extracted as plain functions that take a `MutationHandlerCtx` / `QueryHandlerCtx` — Cycle 2 only changes the wrapper (where `userId` comes from), not the handler. Tests already exercise the handlers with a mock ctx and won't need rewriting when auth lands.
+
+---
+
+## 21. Check-in date time-zone policy (IST vs. UTC)
+
+**Why out of MVP (explicit note, not a deferred feature).** `checkIns.date` is a `YYYY-MM-DD` string. Cycle 1 trusts the *client* to choose the correct day boundary (midnight in the user's local time), and Sonakshi — the primary user — lives in IST. Spec'd behaviour: one check-in per *local* calendar day, where local = the device's wall clock.
+
+**Post-MVP shape / known edge case.** Users who travel across time zones mid-day can produce a `duplicate` error if their device ticks over a day while the previous day's check-in hasn't been cleared. The fix is to persist a `timeZone: string` alongside each check-in (IANA zone) and normalise the day boundary server-side — deferred because the target user is IST-fixed.
+
+**Architectural hook.** Add `timeZone: v.optional(v.string())` to the schema when this ships. The `by_user_date` index remains on the string date field; the tz is metadata for reconciliation.
+
+---
+
 ## Review cadence
 
 This backlog is reviewed at two points:
-1. **Before every weekender build session** — quick skim to confirm nothing scoped-out has become urgent.
+1. **Before every build session** — quick skim to confirm nothing scoped-out has become urgent.
 2. **When a user asks for a feature that's listed here** — reply with the post-MVP shape + expected timeline, don't re-scope on the fly.

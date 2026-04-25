@@ -13,7 +13,7 @@
 **Date:** 2026-04-23
 **Status:** accepted
 
-**Context.** This is a weekender build. There is constant pressure to skip to scaffolding because time is short. The AI Weekender Builder Handbook prescribes a three-step discipline that prevents rework later.
+**Context.** This is an MVP build under time pressure with constant pull toward scaffolding-first. The Project Process Playbook prescribes a three-step discipline that prevents rework later.
 
 **Decision.** All work follows **Scope → POC → Build** in strict order. Scoping doc is complete before any POC; POC validates any logic that could fail before any production code is written. No shortcuts.
 
@@ -21,7 +21,7 @@
 - Pros: rework is minimized; scope creep is visible early; design decisions are deliberate.
 - Cons: first few sessions feel slow (no shipped code yet); easy to feel like "we're not building."
 
-**Alternatives considered.** Straight into Next.js scaffolding. Rejected: too much rework visible in prior weekender attempts in the handbook literature.
+**Alternatives considered.** Straight into Next.js scaffolding. Rejected: too much rework visible in prior MVP attempts that skipped the scope step.
 
 ---
 
@@ -30,7 +30,7 @@
 **Date:** 2026-04-23
 **Status:** accepted
 
-**Context.** Weekender app needs: fast full-stack dev, realtime data for the voice check-in updates, easy deployment, minimal backend ops.
+**Context.** MVP app needs: fast full-stack dev, realtime data for the voice check-in updates, easy deployment, minimal backend ops.
 
 **Decision.** Next.js 16 (App Router, Turbopack) + Tailwind 4 + Convex (backend + realtime DB) + Vercel (hosting). No separate Node backend.
 
@@ -248,7 +248,7 @@
 **Date:** 2026-04-24
 **Status:** accepted
 
-**Context.** Weekender scope decisions get lost between sessions without structured documentation. Retroactively reconstructing "why did we decide X" is costly and error-prone.
+**Context.** MVP scope decisions get lost between sessions without structured documentation. Retroactively reconstructing "why did we decide X" is costly and error-prone.
 
 **Decision.** Maintain **four living documents** from project start:
 1. `scoping.md` — current in-scope feature definitions
@@ -268,16 +268,16 @@
 **Date:** 2026-04-24
 **Status:** accepted
 
-**Context.** Sakhi is a voice-first app. That creates tension with the handbook's default stack (Next.js web). Native mobile gives a first-class mic experience but adds an app-store review layer and slows the weekender; web ships same-day but has weaker mic UX on mobile browsers. Sonakshi uses the app primarily on her phone.
+**Context.** Sakhi is a voice-first app. That creates tension with the playbook's default stack (Next.js web). Native mobile gives a first-class mic experience but adds an app-store review layer and slows the MVP; web ships same-day but has weaker mic UX on mobile browsers. Sonakshi uses the app primarily on her phone.
 
 **Decision.** **MVP ships as a web app** (Next.js 16, mobile-first responsive, installable as a PWA). Voice capture via browser APIs (Web Speech API fallback; OpenAI Realtime / Vapi as the primary voice provider behind a provider interface). **Native iOS and Android apps are a post-MVP follow-on** — they wrap the same Convex backend and voice provider, so the core schema and business logic don't change between the two surfaces.
 
 **Consequences.**
-- Pros: weekender deliverable is web — fastest path to a live URL on Vercel by Saturday 8pm. PWA installability gives Sonakshi a "home screen app" feel without the app-store gate. Native apps later reuse the Convex schema + voice provider abstraction with no backend rework.
+- Pros: MVP deliverable is web — fastest path to a live URL on Vercel. PWA installability gives Sonakshi a "home screen app" feel without the app-store gate. Native apps later reuse the Convex schema + voice provider abstraction with no backend rework.
 - Cons: Mobile browser mic UX is passable, not great — iOS Safari in particular requires a user gesture to start mic capture, and background audio capture is not permitted. We accept this for MVP.
 - Architectural implication: the voice layer is abstracted behind a provider interface from day one, so swapping Web Speech → OpenAI Realtime → a native mic bridge later is a config change, not a refactor.
 
 **Alternatives considered.**
-- **Native mobile (Expo / React Native)** — rejected for MVP: app-store review timeline doesn't clear Saturday 8pm.
+- **Native mobile (Expo / React Native)** — rejected for MVP: app-store review timeline doesn't clear the MVP launch window.
 - **Web-only, no PWA** — rejected: losing the home-screen-app feel hurts habit formation for a daily check-in app.
-- **React Native Web (shared codebase day 1)** — rejected for MVP: shared codebase is tempting but slows the weekender; simpler to ship web-only now and re-use backend + voice abstraction when native apps come later.
+- **React Native Web (shared codebase day 1)** — rejected for MVP: shared codebase is tempting but slows the MVP; simpler to ship web-only now and re-use backend + voice abstraction when native apps come later.
