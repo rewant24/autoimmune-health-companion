@@ -1,4 +1,4 @@
-# Sakhi — Product Taxonomy
+# Saumya — Product Taxonomy
 
 > **Living document.** The feature inventory is how we *build* the app. This taxonomy is how a user would *describe* what the app does. Useful for scoping conversations, marketing copy, deciding where a new idea belongs, and contributor onboarding.
 
@@ -10,7 +10,7 @@
 
 ```mermaid
 mindmap
-  root((Sakhi))
+  root((Saumya))
     Capture
       Voice check-in open-first
       Scripted fallback
@@ -42,8 +42,8 @@ mindmap
       Save fail + retry
       Empty states
     Billing
-      Free Sakhi Friend
-      Paid Sakhi Companion
+      Free Saumya Friend
+      Paid Saumya Companion
       Early-bird 100
       Founder tier optional
 ```

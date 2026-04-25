@@ -184,7 +184,7 @@ export function CheckInGrid() {
         className="text-sm italic"
         style={{ color: "var(--ink-muted)", fontFamily: "var(--font-fraunces)" }}
       >
-        What 30 days of Sakhi looks like — one voice check-in a day, building a
+        What 30 days of Saumya looks like — one voice check-in a day, building a
         record you and your doctor can read at a glance.
       </figcaption>
     </figure>

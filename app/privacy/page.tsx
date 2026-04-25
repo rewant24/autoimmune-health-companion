@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Privacy — Sakhi",
+  title: "Privacy — Saumya",
   description:
-    "What Sakhi collects, what we don't, and how to ask us to forget you. Plain language, no legalese.",
+    "What Saumya collects, what we don't, and how to ask us to forget you. Plain language, no legalese.",
 };
 
 const lastUpdated = "April 25, 2026";
@@ -42,7 +42,7 @@ export default function PrivacyPage() {
                 letterSpacing: "-0.01em",
               }}
             >
-              Sakhi
+              Saumya
             </span>
           </Link>
           <Link href="/" className="type-label transition-colors hover:text-ink">
@@ -59,7 +59,7 @@ export default function PrivacyPage() {
             <em className="italic-soft">No tracking</em> behind the scenes.
           </h1>
           <p className="type-body-lg max-w-xl">
-            This is what Sakhi collects today, what we don&apos;t, and how to
+            This is what Saumya collects today, what we don&apos;t, and how to
             ask us to forget you. We&apos;ll keep it readable as the product
             grows.
           </p>
@@ -69,7 +69,7 @@ export default function PrivacyPage() {
         {/* Where we are right now */}
         <Section label="Where we are right now">
           <P>
-            Sakhi is in active development. The only thing this site does
+            Saumya is in active development. The only thing this site does
             today is collect an email address so we can tell you when early
             access opens. There is no app yet, no voice check-ins yet, no
             health data yet.
@@ -109,7 +109,7 @@ export default function PrivacyPage() {
             />
             <Bullet
               t="No advertising networks"
-              d="Sakhi is not ad-supported. We don't share data with ad networks because we don't have a relationship with any."
+              d="Saumya is not ad-supported. We don't share data with ad networks because we don't have a relationship with any."
             />
             <Bullet
               t="No selling, ever"
@@ -117,7 +117,7 @@ export default function PrivacyPage() {
             />
             <Bullet
               t="No AI training on your transcripts"
-              d="When the product launches and you start speaking to Sakhi, your voice transcripts will not be used to train language models — ours or anyone else's. Your speech belongs to you."
+              d="When the product launches and you start speaking to Saumya, your voice transcripts will not be used to train language models — ours or anyone else's. Your speech belongs to you."
             />
           </ul>
         </Section>
@@ -125,7 +125,7 @@ export default function PrivacyPage() {
         {/* What we'll collect when the product launches */}
         <Section label="What we'll collect when the product launches">
           <P>
-            We&apos;re writing this so you know what&apos;s coming. When Sakhi
+            We&apos;re writing this so you know what&apos;s coming. When Saumya
             opens to early access, the app will need a few categories of data
             to do its job:
           </P>
@@ -136,7 +136,7 @@ export default function PrivacyPage() {
             />
             <Bullet
               t="Health data you enter"
-              d="Medications, doctor visits, blood work, symptoms, mood. Anything you tell Sakhi about your health. Stored to power patterns and reports."
+              d="Medications, doctor visits, blood work, symptoms, mood. Anything you tell Saumya about your health. Stored to power patterns and reports."
             />
             <Bullet
               t="Account basics"
@@ -154,7 +154,7 @@ export default function PrivacyPage() {
         <Section label="Who can see your data">
           <P>
             Right now, the only people with access to the waitlist are the
-            small team building Sakhi. We use your email to send you one or
+            small team building Saumya. We use your email to send you one or
             two messages: a confirmation, and a notification when early
             access opens. We don&apos;t add you to a marketing list. We
             don&apos;t share it with partners.
@@ -224,7 +224,7 @@ export default function PrivacyPage() {
         {/* Children */}
         <Section label="Children">
           <P>
-            Sakhi is not designed for children under 13 and we don&apos;t
+            Saumya is not designed for children under 13 and we don&apos;t
             knowingly collect data from them. If you believe a child has
             joined the waitlist, email us and we&apos;ll remove their entry.
           </P>
@@ -243,7 +243,7 @@ export default function PrivacyPage() {
         {/* Not medical advice */}
         <Section label="Not medical advice">
           <P>
-            Sakhi is being built as a companion for people living with
+            Saumya is being built as a companion for people living with
             autoimmune conditions. It will not be a substitute for medical
             care, diagnosis, or treatment. Talk to your doctor about any
             health decisions.
@@ -289,13 +289,13 @@ export default function PrivacyPage() {
                 letterSpacing: "-0.01em",
               }}
             >
-              Sakhi
+              Saumya
             </Link>
             <Link href="/" className="type-label transition-colors hover:text-ink">
               ← Back home
             </Link>
           </div>
-          <p className="type-label">© {new Date().getFullYear()} Sakhi · in active development · not medical advice</p>
+          <p className="type-label">© {new Date().getFullYear()} Saumya · in active development · not medical advice</p>
         </footer>
       </main>
     </div>

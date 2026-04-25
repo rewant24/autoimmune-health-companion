@@ -16,7 +16,7 @@ export function WaitlistCount({ variant = "warm" }: { variant?: Variant }) {
 
   const text =
     count < 25
-      ? "Be among the first to try Sakhi."
+      ? "Be among the first to try Saumya."
       : `${count.toLocaleString()} people already on the list.`;
 
   if (variant === "calm") {

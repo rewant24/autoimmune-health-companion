@@ -1,15 +1,15 @@
-# Sakhi — Wholesome Build Plan
+# Saumya — Wholesome Build Plan
 
 > **Status:** Plan ready for review.
 > **Date:** 2026-04-25
-> **Project:** Autoimmune Health Companion (Sakhi)
+> **Project:** Autoimmune Health Companion (Saumya)
 > **Location:** `/Volumes/Coding Projects + Docker/autoimmune-health-companion/`
 
 ---
 
 ## Section 1 — Context
 
-Sakhi is a 10-feature MVP. `docs/scoping.md` is canonical but narrative — it does not yet contain deliverable chunks, user stories, or acceptance criteria. Building it feature-by-feature without structure risks: (a) losing sight of cross-feature dependencies (Memory reads Check-in data; Patterns needs ≥14d of data), (b) drifting from four-doc discipline, (c) not exploiting the 3-build + 3-review parallel pattern defined in the Project Process Playbook.
+Saumya is a 10-feature MVP. `docs/scoping.md` is canonical but narrative — it does not yet contain deliverable chunks, user stories, or acceptance criteria. Building it feature-by-feature without structure risks: (a) losing sight of cross-feature dependencies (Memory reads Check-in data; Patterns needs ≥14d of data), (b) drifting from four-doc discipline, (c) not exploiting the 3-build + 3-review parallel pattern defined in the Project Process Playbook.
 
 **Intended outcome:** a hierarchy — scoping doc → feature MD → chunks → user stories → 4-lane acceptance — that lets Rewant dispatch parallel build work across multiple tabs on deliberately disjoint file slices, with a status vocabulary and review cadence that makes every cycle auditable.
 
@@ -388,7 +388,7 @@ tests/check-in/*.test.ts
   - **UX:** saved confirmation visible ≥1.5s with haptic tick, then auto-route. Error is non-dismissible until retry or explicit "save later" (queues in-memory for this session).
   - **UI:** success: full-screen confirmation with orb in "settled" state. Error: edge-case template with clear next action.
   - **Backend / data:** retry passes same `clientRequestId` so mutation is idempotent.
-  - **UX copy:** success heading: "Got it. See you tomorrow, Sakhi's here." Error: "Couldn't save just now. Try again?" Save-later button: "Keep this for later".
+  - **UX copy:** success heading: "Got it. See you tomorrow, Saumya's here." Error: "Couldn't save just now. Try again?" Save-later button: "Keep this for later".
 
 **Do-not-touch:** `lib/`, `Orb*`, `ScriptedPrompt`, `TapInput`, `convex/schema.ts`.
 
@@ -593,7 +593,7 @@ tests/memory/*.test.ts
   - **UX:** banner doesn't block scroll — sits at list end.
   - **UI:** subtle, not intrusive; one primary CTA.
   - **Backend / data:** reads tier + clamp flag.
-  - **UX copy:** "You're seeing the last 30 days. Sakhi Companion keeps your full history. — See plans".
+  - **UX copy:** "You're seeing the last 30 days. Saumya Companion keeps your full history. — See plans".
 
 **US-2.F.3 — Integration test — full Memory flow**
 - *As* the team *I want* one end-to-end test of Memory *so that* regressions are caught.
@@ -881,7 +881,7 @@ graph TD
 
 ```mermaid
 mindmap
-  root((Sakhi))
+  root((Saumya))
     Capture
       Voice check-in open-first
       Scripted fallback
@@ -913,8 +913,8 @@ mindmap
       Save fail + retry
       Empty states
     Billing
-      Free Sakhi Friend
-      Paid Sakhi Companion
+      Free Saumya Friend
+      Paid Saumya Companion
       Early-bird 100
       Founder tier optional
 ```
@@ -1063,13 +1063,13 @@ Pin attention whenever any of these upgrade:
 - `docs/CLAUDE.md` — rewritten top section so every new session auto-loads canonical context. Exact header to prepend:
 
   ```markdown
-  # Sakhi — Autoimmune Health Companion
+  # Saumya — Autoimmune Health Companion
 
   > **On session start, read these files first — in this order:**
   > 1. `docs/scoping.md` — canonical product spec (Rewant-authored). Primary source of truth.
   > 2. `docs/build-plan.md` — active build plan. Structure, conventions, feature breakdowns.
   > 3. `docs/system-map.md` — current visual state: features, subagents, status.
-  > 4. `docs/product-taxonomy.md` — capability-level view of what Sakhi does.
+  > 4. `docs/product-taxonomy.md` — capability-level view of what Saumya does.
   > 5. `docs/tech-stack.md` — current versions + upgrade rules.
   > 6. If the user mentions a specific feature (e.g., "Check-in"), also read `docs/features/NN-slug.md`.
   >
@@ -1095,7 +1095,7 @@ Pin attention whenever any of these upgrade:
 4. **Feature 10 timing:** stub inside F01 Cycle 1 (1.C error slot); each feature adds its templates as it ships; F10 gets one finalization cycle at the end.
 5. **Parallel lanes:** decide each time — I ask at each phase's review step whether to fire the parallel track; Rewant answers based on bandwidth.
 6. **F03–10 chunking authorship:** agent drafts; 3 review subagents check the draft in parallel with Rewant's review; merged fix list applied before feature enters `ready`.
-7. **Session-start context rule:** every new session about Sakhi auto-loads the 5 canonical docs (scoping, build-plan, system-map, product-taxonomy, tech-stack) + named feature MD if relevant. Enforced via `docs/CLAUDE.md` header (project-level) and a memory file pointer (cross-tab).
+7. **Session-start context rule:** every new session about Saumya auto-loads the 5 canonical docs (scoping, build-plan, system-map, product-taxonomy, tech-stack) + named feature MD if relevant. Enforced via `docs/CLAUDE.md` header (project-level) and a memory file pointer (cross-tab).
 
 ---
 

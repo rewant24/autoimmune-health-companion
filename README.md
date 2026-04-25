@@ -1,8 +1,8 @@
-# Sakhi
+# Saumya
 
 A voice-first health companion for people living with autoimmune conditions.
 
-> *Sakhi* means "friend" in Hindi — the one who remembers with you, so you don't walk into that room alone.
+> *Saumya* (सौम्य) is Sanskrit for *gentle, soft, calm, kind* — the presence we want next to you on a hard day, remembering with you so you don't walk into that room alone.
 
 **Live:** https://autoimmune-health-companion.vercel.app
 

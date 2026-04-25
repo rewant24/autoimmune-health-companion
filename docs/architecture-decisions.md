@@ -62,9 +62,9 @@
 
 **Context.** Pure open-question check-in (*"how's your day?"*) leaves data gaps. Pure scripted sequence feels like a voice-answered form. Neither matches a friend-app's tone while also producing reliable data.
 
-**Decision.** **Hybrid: open-first, scripted-fallback.** Sakhi opens with one warm question, listens, and only falls back to scripted probes for required metrics Sonakshi didn't cover in free-flow.
+**Decision.** **Hybrid: open-first, scripted-fallback.** Saumya opens with one warm question, listens, and only falls back to scripted probes for required metrics Sonakshi didn't cover in free-flow.
 
-**Consequences.** Warm on good days (she talks freely), reliable on quiet days (Stage 2 fills the gaps). Increases NLP burden modestly — Sakhi must extract required metrics from free-form speech in real time.
+**Consequences.** Warm on good days (she talks freely), reliable on quiet days (Stage 2 fills the gaps). Increases NLP burden modestly — Saumya must extract required metrics from free-form speech in real time.
 
 **Alternatives considered.** Pure open (rejected — data gaps). Pure scripted (rejected — cold).
 
@@ -92,7 +92,7 @@
 **Date:** 2026-04-24
 **Status:** accepted
 
-**Context.** The opener is the single most load-bearing line of copy. It sets whether Sakhi feels like a friend or a tool.
+**Context.** The opener is the single most load-bearing line of copy. It sets whether Saumya feels like a friend or a tool.
 
 **Decision.** **Continuity-aware opener driven by a deterministic rules engine.** The opener draws on yesterday's check-in, streak state, upcoming events, and recent flare-up status to pick from a bounded set of variants. Not LLM-generated on the fly.
 
@@ -188,7 +188,7 @@
 
 **Context.** Internal placeholder `[LOG]` was too clinical / legal-sounding. Needed a warmer term.
 
-**Decision.** **"Memory"** — makes the README tagline operative (*"Sakhi means friend — the one who remembers with you"*). Used as a proper noun with possessive (*"your Memory"*). Section label inside Journey is *Memory*.
+**Decision.** **"Memory"** — makes the README tagline operative (*"Saumya means gentle — the presence that remembers with you"*). Used as a proper noun with possessive (*"your Memory"*). Section label inside Journey is *Memory*.
 
 **Consequences.** Save prompt reads *"Good to save these to your Memory?"*. Journey tab is *Memory*. Slight ambiguity with the English word "memory" (used in the tagline *"data, not memory"*) — disambiguated by capitalization in app copy.
 
@@ -268,7 +268,7 @@
 **Date:** 2026-04-24
 **Status:** accepted
 
-**Context.** Sakhi is a voice-first app. That creates tension with the playbook's default stack (Next.js web). Native mobile gives a first-class mic experience but adds an app-store review layer and slows the MVP; web ships same-day but has weaker mic UX on mobile browsers. Sonakshi uses the app primarily on her phone.
+**Context.** Saumya is a voice-first app. That creates tension with the playbook's default stack (Next.js web). Native mobile gives a first-class mic experience but adds an app-store review layer and slows the MVP; web ships same-day but has weaker mic UX on mobile browsers. Sonakshi uses the app primarily on her phone.
 
 **Decision.** **MVP ships as a web app** (Next.js 16, mobile-first responsive, installable as a PWA). Voice capture via browser APIs (Web Speech API fallback; OpenAI Realtime / Vapi as the primary voice provider behind a provider interface). **Native iOS and Android apps are a post-MVP follow-on** — they wrap the same Convex backend and voice provider, so the core schema and business logic don't change between the two surfaces.
 
@@ -325,7 +325,7 @@
 **Date:** 2026-04-25
 **Status:** accepted
 
-**Context.** F01 chunk 1.D (`extractMetrics`) needs an LLM call that takes a free-form transcript and emits structured JSON for the 5 required metrics (US-1.D.1). Three placement options were on the table: (A) Convex action, (B) Next.js Route Handler / Server Action with a direct provider SDK, (C) Vercel AI Gateway via the Vercel AI SDK from Next.js. Sakhi will need an LLM call in at least three places over the MVP roadmap — F01 metric extraction, F03 Patterns insights past 14 days, F06 Doctor Report narrative.
+**Context.** F01 chunk 1.D (`extractMetrics`) needs an LLM call that takes a free-form transcript and emits structured JSON for the 5 required metrics (US-1.D.1). Three placement options were on the table: (A) Convex action, (B) Next.js Route Handler / Server Action with a direct provider SDK, (C) Vercel AI Gateway via the Vercel AI SDK from Next.js. Saumya will need an LLM call in at least three places over the MVP roadmap — F01 metric extraction, F03 Patterns insights past 14 days, F06 Doctor Report narrative.
 
 **Decision.** **Option C: Vercel AI Gateway via the Vercel AI SDK, called from Next.js server-side handlers.**
 - **Default model:** `gpt-4o-mini` (reliable JSON-mode, ~50–100ms latency, ≈ $0.0001 per check-in).
@@ -339,7 +339,7 @@
 - Cost-guard counter requires a small Convex doc per (userId, date) — built alongside `extractMetrics` in chunk 1.D.
 
 **Alternatives considered.**
-- **Option A (Convex action).** Rejected: Sakhi will set up Gateway anyway for F03 / F06; running two LLM call paths increases ops surface.
+- **Option A (Convex action).** Rejected: Saumya will set up Gateway anyway for F03 / F06; running two LLM call paths increases ops surface.
 - **Option B (Next.js + direct OpenAI / Anthropic SDK).** Rejected: forfeits Gateway's failover, observability, and single-key model.
 
 ---
@@ -376,7 +376,7 @@
 **Context.** US-1.F.2 specifies that on save failure (network / mutation error), the user can choose "save later" — the check-in queues for retry. Original spec said "in-memory for this session," meaning a tab close loses the queued check-in. For a daily habit app where the user may have spent 60s recording a transcript, losing that on tab close is a meaningful trust failure.
 
 **Decision.** **Save-later queue persists to `localStorage`** (not just in-memory). On save failure:
-1. Check-in payload (validated metrics + transcript + `clientRequestId`) is written to `localStorage` under a versioned key (e.g. `sakhi.saveLater.v1`).
+1. Check-in payload (validated metrics + transcript + `clientRequestId`) is written to `localStorage` under a versioned key (e.g. `saumya.saveLater.v1`).
 2. UI offers retry now or "keep this for later."
 3. On next app load (or on regaining network), a background hook reads the queue and retries each entry via `createCheckin`. Idempotency is already handled via `clientRequestId` (ADR not needed — shipped behavior at `convex/checkIns.ts:122-130`).
 4. Successful retries clear their entry; failures stay in the queue.
@@ -404,7 +404,7 @@
 
 | Phase | Screen | CTAs / behavior |
 |---|---|---|
-| **F01 C2 ships, F02 not yet** | Settled-orb success + "Got it. See you tomorrow, Sakhi's here." Auto-dismiss to `/` after 2s. | "View memory" CTA hidden. Home `/` shows static "You checked in today." |
+| **F01 C2 ships, F02 not yet** | Settled-orb success + "Got it. See you tomorrow, Saumya's here." Auto-dismiss to `/` after 2s. | "View memory" CTA hidden. Home `/` shows static "You checked in today." |
 | **After F02 C1** | Same screen. | "View memory" CTA enabled → `/memory`. Home shows status + tappable card. |
 | **After F08 (Journey)** | Same screen. | "View memory" → `/journey/memory` per scoping doc structure. Home gains wellness ring + streak bar. |
 
@@ -415,3 +415,26 @@
 **Alternatives considered.**
 - **Direct route to `/` (home) and let home render appropriately.** Rejected: home is a multi-purpose surface that gets aggregated content over time; bouncing the user there immediately after save loses the "your check-in landed" moment.
 - **Direct route to Memory.** Rejected: Memory doesn't exist yet, and even after F02 it's the wrong default (post-save is about "today is logged," not about "browse past").
+
+---
+
+## ADR-024 — Product rename: Sakhi → Saumya
+
+**Date:** 2026-04-25
+**Status:** accepted
+
+**Context.** Pre-launch rebrand. The earlier name *Sakhi* (Hindi for "friend") leaned on a literal label for the product's relational stance. *Saumya* (Sanskrit सौम्य — gentle, soft, calm, kind) describes the *quality* of the companion rather than the relationship category, and reads better as a unisex consumer brand across Indian and international markets.
+
+**Decision.** Rename the product to **Saumya** everywhere — launch page, app code, package metadata, active docs (scoping, build-plan, system-map, product-taxonomy, tech-stack, features, post-MVP backlog, README, CLAUDE), prior ADRs, build-log, architecture-changelog, the planned `localStorage` save-later key (`saumya.saveLater.v1`, not yet shipped), and the Vercel project (renamed to `saumya-health-companion`).
+
+**Exception to ADR immutability rule.** This file's preamble states ADRs are never edited. A one-time exception is taken here: ADR-001 through ADR-023 had their *Sakhi* product references replaced with *Saumya*. The decisions themselves are unchanged — only the product noun is updated. The exception is bounded: future content changes to a recorded ADR continue to require a new superseding ADR.
+
+**Consequences.**
+- Pros: Single brand across the entire codebase. Tone of voice ("gentle presence") is now embedded in the name itself. After-note line on the waitlist CTA does the meaning lift in one sentence. Vercel project + URL aligned.
+- Cons: One-time edit to nominally append-only files. Existing global memory entries that describe past sessions may still read *Sakhi* — those are outside this repo and acceptable.
+- Old `sakhi-health-companion.vercel.app` aliases still resolve (Vercel preserves them on rename) so existing links don't break. Removing them is a separate decision.
+
+**Alternatives considered.**
+- **Keep *Sakhi* and tighten the tagline.** Rejected: the friend framing was working, but locked the brand into a single relational frame; *Saumya* is broader and reads as a name first.
+- **Soft-launch the new name post-MVP.** Rejected: pre-launch (no public users yet) is the cheapest possible moment to do this — every week later compounds the cost.
+- **Preserve historical ADR text with original *Sakhi* references.** Initial draft of this ADR took this position. Rejected on Rewant's directive: full transformation reads cleaner for any future contributor and the decision content (not the noun) is what the immutability rule is meant to protect.

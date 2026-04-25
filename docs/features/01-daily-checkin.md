@@ -262,7 +262,7 @@ tests/check-in/*.test.ts
   - **UX:** saved confirmation visible ≥1.5s with haptic tick, then auto-route. Error is non-dismissible until retry or explicit "save later" (queues in-memory for this session).
   - **UI:** success: full-screen confirmation with orb in "settled" state. Error: edge-case template with clear next action.
   - **Backend / data:** retry passes same `clientRequestId` so mutation is idempotent.
-  - **UX copy:** success heading: "Got it. See you tomorrow, Sakhi's here." Error: "Couldn't save just now. Try again?" Save-later button: "Keep this for later".
+  - **UX copy:** success heading: "Got it. See you tomorrow, Saumya's here." Error: "Couldn't save just now. Try again?" Save-later button: "Keep this for later".
 
 ---
 

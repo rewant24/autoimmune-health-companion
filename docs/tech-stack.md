@@ -1,4 +1,4 @@
-# Sakhi — Tech Stack
+# Saumya — Tech Stack
 
 > **Living document.** Authoritative record of every dependency, version, and upgrade policy.
 

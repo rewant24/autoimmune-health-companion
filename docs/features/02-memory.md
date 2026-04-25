@@ -6,108 +6,135 @@ status: chunked
 depends_on: [01-daily-checkin]
 blocks: [06-doctor-report, 08-journey]
 owner: rewant
-scoping_ref: docs/scoping.md#feature-2-memory
-adr_refs: []
+scoping_ref: docs/scoping.md#memory-landing--visual--structural-spec
+adr_refs: [ADR-003, ADR-012, ADR-015, ADR-019]
 last_updated: 2026-04-25
 ---
 
 # Feature 02 — Memory
 
+> **Note on this revision (2026-04-25).** The previous chunking of this MD diverged from canonical scoping on five structural points (placement, calendar shape, filter set, row visuals, search). It was an unreviewed agent draft from Session 3 — F01/F02 skipped the reviewer-subagent pass that F03–10 will get. This rewrite reconciles to `scoping.md` § Memory landing — visual + structural spec. See `architecture-changelog.md` 2026-04-25 entry "F02 MD reconciled to scoping."
+
 ## Intent
 
-Sonakshi opens Memory to see her last 30 days at a glance. Scroll through a timeline of check-ins, filter by metric or flare status, jump to a date via calendar scrubber, tap any day to see the full detail, edit or delete (MVP allows edit within 48h).
+Memory is the **browse-past-check-ins surface inside the Journey pillar** (ADR-003). Sonakshi taps Journey → Memory tab; she sees a horizontal **week-at-a-time** calendar strip at top, filter tabs under it (All / Check-ins / Intake events / Flare-ups / Visits), and a reverse-chronological list of day entries below. Each day groups mixed event types (check-in metrics, medication intakes, opportunistic captures) into sections with task-state visual vocabulary (empty circle / green check / red strikethrough). Tap any entry → detail sheet with [Edit] and [Delete]. Search icon on the header opens a search bar that queries free-flow transcript text.
 
 ## Scope in / out
 
-- **In (MVP):** 30-day list (free tier clamp), filter bar, calendar scrubber, detail view, edit within 48h, soft delete with undo toast, paywall banner at 30d boundary.
-- **Out (backlog):** full edit on older check-ins, blood-test attachments, support-system shared read-only.
+- **In (MVP):** Memory tab inside Journey, week-at-a-time scrubber, filter tabs (5 categories), reverse-chronological day list, mixed-event grouping per day, task-state visual vocabulary, tap-to-detail sheet, edit-in-place within 48h, soft-delete with confirm + 5s undo toast, keyword search (client-side debounce against transcript text), empty-state template ("Your memory starts today."), paywall banner at 30-day boundary for free tier.
+- **Out (backlog):**
+  - Full edit on past-window check-ins (post-48h) — backlog §22 (full audit history + redact-from-report).
+  - Search index (Convex full-text) — backlog §23. Client-side filter for MVP (dataset small per scoping line 695).
+  - Cross-linking from flare/dose markers in Patterns → Memory entry — depends on F03 / F04 surfaces; backlog §24.
+  - Shared read-only view for support system — backlog §25 (architecture must not preclude per scoping line 720).
+  - Offline cached read — backlog §26 (per scoping line 721 open question).
 
 ## Dependencies
 
-- **Reads:** Feature 01 check-in data (`checkIns` table).
-- **Blocks:** Feature 06 Doctor Report (aggregates), Feature 08 Journey (references).
+- **Reads:**
+  - `checkIns` table (F01, shipped) — primary event source for MVP.
+  - `medicationIntakes` (F04, future) — populates "Intake events" filter and "Medication intake" day-section.
+  - `doctorVisits`, `bloodWorkTests` (F05, future) — populates "Visits" filter and "Other events" day-section.
+  - User tier (F02 introduces the user record + auth per ADR-019; tier read for paywall clamp).
+- **Blocks:**
+  - F06 Doctor Report (aggregates check-ins + events).
+  - F08 Journey (Memory is one of Journey's five surfaces; F08 wraps with the Journey landing screen).
+- **Architectural responsibility (this feature):** **introduces the event-type architecture** that F04 and F05 will plug into. F02 C1 ships the discriminated-union event type, the mixed-source list query shape, and the day-grouping component — all with check-ins as the only populated source. F04 and F05 land additively, no Memory refactor.
 
 ## Files owned (feature-wide)
 
 ```
-app/(memory)/page.tsx
-app/(memory)/[date]/page.tsx
-components/memory/CheckinList.tsx
-components/memory/CheckinListItem.tsx
-components/memory/CheckinDetail.tsx
-components/memory/CalendarScrubber.tsx
-components/memory/FilterBar.tsx
-components/memory/EmptyState.tsx
-components/memory/PaywallBanner.tsx
-lib/memory/filters.ts
-convex/checkIns.ts            // extend — update, softDelete, filtered list
-tests/memory/*.test.ts
+app/journey/memory/page.tsx                  // Memory tab landing
+app/journey/memory/[date]/page.tsx           // Detail sheet (one day)
+components/memory/MemoryTab.tsx              // Header + scrubber + filter tabs + day list
+components/memory/WeekScrubber.tsx           // Horizontal week-at-a-time S/M/T/W/T/F/S strip
+components/memory/FilterTabs.tsx             // All / Check-ins / Intake events / Flare-ups / Visits
+components/memory/DayView.tsx                // One day, grouped sections, event rows
+components/memory/EventRow.tsx               // Time + title + meta + task-state icon
+components/memory/EventGroup.tsx             // Section header inside a day
+components/memory/CheckinDetail.tsx          // Full structured capture in detail sheet
+components/memory/SearchBar.tsx              // Toggleable from header
+components/memory/EmptyState.tsx             // "Your memory starts today." template
+components/memory/PaywallBanner.tsx          // 30-day boundary banner for free tier
+lib/memory/event-types.ts                    // Discriminated-union event type
+lib/memory/filters.ts                        // Pure filter predicates
+convex/checkIns.ts                           // Extend — listEventsByRange, updateCheckin, softDeleteCheckin
+tests/memory/*.test.ts(x)
 ```
 
 ---
 
 ## Chunks
 
-### Cycle 1 — List + detail + scrubber
+### Cycle 1 — Memory tab structure + scrubber + day list + event-type architecture
 
-#### Chunk 2.A — 30-day list query + pagination
+#### Chunk 2.A — Event-type architecture + `listEventsByRange` query + filter predicates
 - **Owner:** build-agent-A
 - **Files owned:**
-  - `convex/checkIns.ts` (extend — `listByRange`, `listPaged`)
+  - `lib/memory/event-types.ts`
   - `lib/memory/filters.ts`
-  - `tests/memory/list-query.test.ts`
+  - `convex/checkIns.ts` (extend — `listEventsByRange`)
+  - `tests/memory/event-types.test.ts`
+  - `tests/memory/filters.test.ts`
+  - `tests/memory/list-events-query.test.ts`
 - **Status:** scoped
-- **Stories:** US-2.A.1, US-2.A.2
+- **Stories:** US-2.A.1, US-2.A.2, US-2.A.3
 - **Do-not-touch:** `components/`, `app/`
 
-#### Chunk 2.B — List item UI + detail view
+#### Chunk 2.B — Memory tab shell + week scrubber + filter tabs
 - **Owner:** build-agent-B
 - **Files owned:**
-  - `app/(memory)/page.tsx`
-  - `app/(memory)/[date]/page.tsx`
-  - `components/memory/CheckinList.tsx`
-  - `components/memory/CheckinListItem.tsx`
-  - `components/memory/CheckinDetail.tsx`
-  - `tests/memory/list-ui.test.tsx`
+  - `app/journey/memory/page.tsx`
+  - `components/memory/MemoryTab.tsx`
+  - `components/memory/WeekScrubber.tsx`
+  - `components/memory/FilterTabs.tsx`
+  - `tests/memory/week-scrubber.test.tsx`
+  - `tests/memory/filter-tabs.test.tsx`
 - **Status:** scoped
 - **Stories:** US-2.B.1, US-2.B.2, US-2.B.3
-- **Do-not-touch:** `CalendarScrubber`, `FilterBar`, `convex/`
+- **Do-not-touch:** `convex/`, `lib/memory/`, `DayView`, `EventRow`
 
-#### Chunk 2.C — Calendar scrubber
+#### Chunk 2.C — Day view + event rows + task-state vocabulary + grouped sections
 - **Owner:** build-agent-C
 - **Files owned:**
-  - `components/memory/CalendarScrubber.tsx`
-  - `tests/memory/scrubber.test.tsx`
+  - `components/memory/DayView.tsx`
+  - `components/memory/EventRow.tsx`
+  - `components/memory/EventGroup.tsx`
+  - `tests/memory/day-view.test.tsx`
+  - `tests/memory/event-row.test.tsx`
 - **Status:** scoped
-- **Stories:** US-2.C.1
-- **Do-not-touch:** anything else
+- **Stories:** US-2.C.1, US-2.C.2, US-2.C.3
+- **Do-not-touch:** `WeekScrubber`, `FilterTabs`, `convex/`, `lib/memory/`
 
-### Cycle 2 — Filters, edit/delete, paywall polish
+### Cycle 2 — Detail sheet, edit/delete, search, empty/paywall states
 
-#### Chunk 2.D — Filter bar (metric / flare / missed meds)
+#### Chunk 2.D — Detail sheet + edit-in-place (48h) + soft-delete with undo
 - **Owner:** build-agent-A
 - **Files owned:**
-  - `components/memory/FilterBar.tsx`
-  - `tests/memory/filter-bar.test.tsx`
+  - `app/journey/memory/[date]/page.tsx`
+  - `components/memory/CheckinDetail.tsx`
+  - `convex/checkIns.ts` (extend — `updateCheckin`, `softDeleteCheckin`)
+  - `tests/memory/checkin-detail.test.tsx`
+  - `tests/memory/edit-delete.test.ts`
 - **Status:** scoped
-- **Stories:** US-2.D.1, US-2.D.2
-- **Do-not-touch:** list, detail, scrubber
+- **Stories:** US-2.D.1, US-2.D.2, US-2.D.3
+- **Do-not-touch:** `WeekScrubber`, `FilterTabs`, `DayView`, `EventRow`, `MemoryTab`
 
-#### Chunk 2.E — Edit / delete + confirmations
+#### Chunk 2.E — Keyword search across transcript
 - **Owner:** build-agent-B
 - **Files owned:**
-  - `convex/checkIns.ts` (extend — `updateCheckin`, `softDeleteCheckin`)
-  - `components/memory/CheckinDetail.tsx` (extend — wire edit/delete buttons)
-  - `tests/memory/edit-delete.test.tsx`
+  - `components/memory/SearchBar.tsx`
+  - `tests/memory/search.test.tsx`
 - **Status:** scoped
-- **Stories:** US-2.E.1, US-2.E.2
-- **Do-not-touch:** `CalendarScrubber`, `FilterBar`, `CheckinList`, `CheckinListItem`
+- **Stories:** US-2.E.1
+- **Do-not-touch:** all other files
 
-#### Chunk 2.F — Empty states + paywall banner + integration tests
+#### Chunk 2.F — Empty state + paywall banner + integration test
 - **Owner:** build-agent-C
 - **Files owned:**
   - `components/memory/EmptyState.tsx`
   - `components/memory/PaywallBanner.tsx`
+  - `tests/memory/empty-state.test.tsx`
   - `tests/memory/integration.test.tsx`
 - **Status:** scoped
 - **Stories:** US-2.F.1, US-2.F.2, US-2.F.3
@@ -117,124 +144,166 @@ tests/memory/*.test.ts
 
 ## User Stories
 
-### US-2.A.1 — Range-based list with paywall boundary
-- **As** Memory **I want** a query that returns at most the last 30 days for free users **so that** the paywall is enforced server-side.
-- **Functional requirement:** `listByRange({ fromDate, toDate, limit, cursor, filters? })`. For free tier: `fromDate` clamped to `today - 30d`. Paid tier: no clamp. Returns `{ items, nextCursor, clampedByTier: bool }`.
+### US-2.A.1 — Event-type discriminated union
+- **As** Memory **I want** a single event type that can represent check-ins, intakes, flares, and visits **so that** the day list is uniform and F04 / F05 plug in additively.
+- **Functional requirement:** `lib/memory/event-types.ts` exports `MemoryEvent` discriminated union: `{ type: 'check-in', ...checkInPayload } | { type: 'flare', ...flarePayload } | { type: 'intake', ...intakePayload } | { type: 'visit', ...visitPayload }`. Each variant carries `date` (YYYY-MM-DD), `time` (HH:MM), `title`, `meta`, and `taskState` (`'pending' | 'done' | 'missed'`). Helper `eventFromCheckin(row): MemoryEvent[]` produces a check-in event plus a flare event if `flare=true`. F04 / F05 will add `eventFromIntake` / `eventFromVisit` later.
+- **Acceptance:**
+  - **UX:** n/a.
+  - **UI:** n/a.
+  - **Backend / data:** pure types; unit-tested with check-in fixtures (flare=true → 2 events emitted, flare=false → 1 event).
+  - **UX copy:** none.
+
+### US-2.A.2 — `listEventsByRange` server query
+- **As** Memory **I want** a single query that returns mixed events in a date range **so that** the UI doesn't need to merge sources.
+- **Functional requirement:** `listEventsByRange({ fromDate, toDate, filters?, tier }): { events: MemoryEvent[], clampedByTier: bool }`. F02 C1 reads only `checkIns` (soft-deleted excluded); future F04 / F05 calls extend the merge. Free tier: `fromDate` clamped to `today - 30d`. Paid tier: no clamp. Returns events sorted reverse-chronological by `(date, time)`.
 - **Acceptance:**
   - **UX:** clamp not visible as an error — UI shows paywall banner when `clampedByTier` true.
   - **UI:** n/a in this chunk.
-  - **Backend / data:** tier read from user record. Index `(userId, date desc)` used.
+  - **Backend / data:** uses existing `by_user_date` index; `userId` continues from client arg until F02 introduces auth (ADR-019). Tier read from user record (introduced in this feature; hardcoded to `'free'` until tier model lands).
   - **UX copy:** none.
 
-### US-2.A.2 — Filter predicate layer
-- **As** Memory **I want** pure filter predicates **so that** client and server share filter logic.
-- **Functional requirement:** `lib/memory/filters.ts`: `applyFilters(rows, { painMin?, painMax?, mood?, flareOnly?, missedMedsOnly? })`. Server uses same predicates for queries that can be indexed; client uses for in-memory refinement.
+### US-2.A.3 — Filter predicate layer
+- **As** Memory **I want** pure filter predicates that map to the 5 filter tabs **so that** server and client share filter logic.
+- **Functional requirement:** `lib/memory/filters.ts` exports `applyFilter(events, filter): MemoryEvent[]` where `filter ∈ { 'all', 'check-ins', 'intake-events', 'flare-ups', 'visits' }`. `'all'` returns all; the rest filter by `event.type`. Pure functions, no I/O.
+- **Acceptance:**
+  - **UX:** in F02 C1, `'intake-events'` and `'visits'` always return empty (F04 / F05 not shipped) — this is correct, not a bug.
+  - **UI:** n/a.
+  - **Backend / data:** unit-tested with fixtures covering each filter against a 5-event mixed array (when fixtures simulate future event types).
+  - **UX copy:** none.
+
+### US-2.B.1 — Memory tab shell
+- **As** Sonakshi **I want** a Memory screen with a clear title, search icon, scrubber, filter tabs, and a day list area **so that** the structure feels like a familiar journal.
+- **Functional requirement:** `app/journey/memory/page.tsx` renders `<MemoryTab>`. `<MemoryTab>` lays out: header (title "Memory" + search icon, top-right) → `<WeekScrubber>` → `<FilterTabs>` → day list area (composed in 2.C). Tap search icon toggles `<SearchBar>` into header (search bar built in 2.E; in 2.B it's a stub).
+- **Acceptance:**
+  - **UX:** safe-area padding; mobile-first; no horizontal scroll on the page itself (only the scrubber strip).
+  - **UI:** title centered or left-aligned per brand direction; search icon 44pt min hit target.
+  - **Backend / data:** none.
+  - **UX copy:** title: "Memory". Search icon `aria-label`: "Search your check-ins".
+
+### US-2.B.2 — Week-at-a-time scrubber
+- **As** Sonakshi **I want** a horizontal calendar strip showing one week at a time **so that** I can swipe to navigate weeks without scrolling endlessly.
+- **Functional requirement:** `<WeekScrubber>` renders a row of 7 cells (S / M / T / W / T / F / S) with the date number on each. Selected day highlighted in the accent color (teal). Swipe left → next week. Swipe right → previous week. Today's day cell carries a today-indicator. Each cell shows a small dot if a check-in exists for that day, and a flare marker if `flare=true`. Free tier: scrubber clamps to weeks within last 30 days; paid tier: full history navigable.
+- **Acceptance:**
+  - **UX:** snap to week boundaries on swipe. Tap a day cell → updates selected day (parent state). Haptic tick on selection if supported.
+  - **UI:** cell ~14% width × 56pt tall. Today-indicator visually distinct from selection. Month label above strip: "April 2026" — sticky, updates as Sonakshi swipes weeks.
+  - **Backend / data:** reads the same `listEventsByRange` payload as the day list (state lifted to page).
+  - **UX copy:** day cell `aria-label`: "Tuesday, 22 April. Check-in saved." (varies by state). Month label format: "MMMM YYYY".
+
+### US-2.B.3 — Filter tabs
+- **As** Sonakshi **I want** filter tabs immediately under the scrubber **so that** I can narrow what shows without leaving the day I'm viewing.
+- **Functional requirement:** `<FilterTabs>` renders 5 tabs in fixed order: **All** (default) / **Check-ins** / **Intake events** / **Flare-ups** / **Visits**. Single-select. Tab state lifted to page; consumed by day list. Filter state reflected in URL `?filter=flare-ups` so refresh preserves.
+- **Acceptance:**
+  - **UX:** horizontally scrollable if cramped on small phones. Selected tab visually distinct (filled chip or underline per brand direction).
+  - **UI:** 44pt min hit target per tab.
+  - **Backend / data:** filter passed into `applyFilter` from US-2.A.3.
+  - **UX copy:** verbatim tab labels: "All", "Check-ins", "Intake events", "Flare-ups", "Visits".
+
+### US-2.C.1 — Day view structure
+- **As** Sonakshi **I want** each day rendered as a grouped section with task states **so that** I can see at a glance what's done, missed, and pending.
+- **Functional requirement:** `<DayView>` accepts `{ date, events }` and renders: day header ("Today" if today, otherwise "Tue, 22 Apr") → `<EventGroup>` per category in fixed order (Today's check-in / Medication intake / Other events) → completed items collapse into a "Completed" group at the bottom of the day. Reverse-chronological scroll loads previous days as Sonakshi scrolls past today; scroll position syncs back into the scrubber's selected-day state.
+- **Acceptance:**
+  - **UX:** smooth scroll; sticky day header. Completed group collapsible (tap header to expand / collapse).
+  - **UI:** day header format: "Tue, 22 Apr" (IST). Section headers small, secondary text.
+  - **Backend / data:** consumes filtered events from page state; calls `listEventsByRange` for new ranges as Sonakshi scrolls back.
+  - **UX copy:** group labels: "Today's check-in", "Medication intake", "Other events", "Completed". Today's date row label: "Today".
+
+### US-2.C.2 — Event row
+- **As** Sonakshi **I want** each event as a clean row with time, title, and meta line **so that** I can scan a day quickly.
+- **Functional requirement:** `<EventRow>` renders: task-state icon (left, 24pt) → time (HH:MM) → title (main, primary text) → meta line below (small, secondary). Task-state icon variants: empty circle (`'pending'`), green check (`'done'`), red strikethrough (`'missed'`). Tap full row to open detail sheet (wired in 2.D). Row min-height 72pt.
+- **Acceptance:**
+  - **UX:** entire row tappable. Visible focus ring for keyboard users.
+  - **UI:** task-state icons colour-independent (icon + label hidden in `sr-only` text) — colour-blind safe per scoping. Reduced-motion: no row entrance animation.
+  - **Backend / data:** receives a single `MemoryEvent` prop.
+  - **UX copy:** `aria-label` for row: "{time}, {title}, {state}". Sr-only state labels: "Pending", "Done", "Missed".
+
+### US-2.C.3 — Task-state vocabulary lock
+- **As** the design system **I want** the three task states defined once **so that** Memory, Home, and Patterns share the vocabulary.
+- **Functional requirement:** `<EventRow>`'s task-state icon imports from a single component (`<TaskStateIcon state>`) so future surfaces reuse it. F02 C1 ships the icons + sr-only labels; F03 / F08 import.
 - **Acceptance:**
   - **UX:** n/a.
-  - **UI:** n/a.
-  - **Backend / data:** pure functions; unit-tested with 10+ fixtures.
-  - **UX copy:** none.
+  - **UI:** consistent rendering across consumers.
+  - **Backend / data:** none.
+  - **UX copy:** none directly; sr-only labels per US-2.C.2.
 
-### US-2.B.1 — Chronological list
-- **As** Sonakshi **I want** to scroll my recent check-ins by day **so that** I can remember what I felt.
-- **Functional requirement:** `<CheckinList>` renders paged results from `listByRange`. Each row = `<CheckinListItem>`. Infinite scroll uses cursor.
+### US-2.D.1 — Detail sheet
+- **As** Sonakshi **I want** to tap an entry and see the full structured capture **so that** I can re-read what I said.
+- **Functional requirement:** `app/journey/memory/[date]/page.tsx` loads check-in by `(userId, date)`. `<CheckinDetail>` renders all 5 metrics (pain / mood / medications / flare / energy) as labeled cards plus the full transcript ("What you said") plus any captured events that day (placeholders for F04 / F05; for F02 just the check-in). [Edit] and [Delete] buttons in the header.
 - **Acceptance:**
-  - **UX:** smooth scroll; no layout shift on load. Day-header sticky.
-  - **UI:** list rows min-height 72pt; flare days carry a small marker; missed-meds days a different marker.
-  - **Backend / data:** page size 20.
-  - **UX copy:** day header format: "Tue, 22 Apr" (IST). Today row: "Today".
-
-### US-2.B.2 — List item content
-- **As** Sonakshi **I want** a one-glance summary on each row **so that** I don't have to open each one.
-- **Functional requirement:** row shows: date, pain number, mood chip, flare badge (if true), missed-meds badge (if true).
-- **Acceptance:**
-  - **UX:** tap entire row to open detail.
-  - **UI:** badges colour-independent (icon + label) for colour-blind safety.
-  - **Backend / data:** from list item payload.
-  - **UX copy:** flare badge label: "flare". Meds badge: "missed meds".
-
-### US-2.B.3 — Detail view
-- **As** Sonakshi **I want** to open one day **so that** I can see everything — metrics, transcript, what I said.
-- **Functional requirement:** `app/(memory)/[date]/page.tsx` loads one check-in by date. Renders `<CheckinDetail>` with all 5 metrics + transcript + edit/delete buttons (wired in 2.E).
-- **Acceptance:**
-  - **UX:** back navigation returns to prior scroll position.
+  - **UX:** back navigation returns to prior scroll position in Memory list. Sheet style (full-screen on mobile, modal on desktop) per brand direction.
   - **UI:** full transcript readable; metrics as labeled cards.
-  - **Backend / data:** `getCheckin` by `(userId, date)`.
-  - **UX copy:** heading = date. Section labels: "Pain", "Mood", "Medications", "Flare", "Energy", "What you said".
+  - **Backend / data:** `getCheckin(id)` already shipped F01 — wraps it.
+  - **UX copy:** heading = formatted date. Section labels: "Pain", "Mood", "Medications", "Flare", "Energy", "What you said". Header buttons: "Edit", "Delete".
 
-### US-2.C.1 — Horizontal calendar scrubber
-- **As** Sonakshi **I want** a quick way to jump to a date **so that** I don't scroll endlessly.
-- **Functional requirement:** horizontal-scroll strip of last 30 days (free) / full history (paid). Each cell marks presence of check-in + flare status. Tap cell → scrolls list to that date.
-- **Acceptance:**
-  - **UX:** current day centered on mount. Snap-scroll. Haptic tick on cell select.
-  - **UI:** cell 48pt wide × 56pt tall. Clear today-indicator.
-  - **Backend / data:** reads the same list payload as `<CheckinList>` (sibling, no duplicate query — lift state to page).
-  - **UX copy:** month label sticky above strip: "April 2026".
-
-### US-2.D.1 — Filter controls
-- **As** Sonakshi **I want** to narrow Memory to "only flare days" or "only missed-meds days" **so that** I can spot patterns.
-- **Functional requirement:** chips: "All", "Flare days", "Missed meds", "High pain (≥7)". Multi-select; applied via `applyFilters` (2.A).
-- **Acceptance:**
-  - **UX:** filter state reflected in URL `?filters=flare,missedMeds` so refresh preserves.
-  - **UI:** chip row horizontally scrollable; selected chip visually distinct.
-  - **Backend / data:** filters passed to `listByRange`.
-  - **UX copy:** chip labels verbatim above.
-
-### US-2.D.2 — Empty filtered state
-- **As** Sonakshi **I want** a clear message when filters match nothing **so that** I'm not confused by a blank list.
-- **Functional requirement:** when filtered list empty but underlying data exists, render a filter-specific empty card.
-- **Acceptance:**
-  - **UX:** card offers "Clear filters" button.
-  - **UI:** distinct from global empty state (2.F).
-  - **Backend / data:** driven by filter metadata, not query errors.
-  - **UX copy:** "No days match these filters. {Clear filters}."
-
-### US-2.E.1 — Edit within 48h
+### US-2.D.2 — Edit-in-place within 48h
 - **As** Sonakshi **I want** to fix yesterday's check-in **so that** a mistyped pain value doesn't poison Patterns.
-- **Functional requirement:** `updateCheckin(id, patch)` mutation. Server enforces edit window: only if `now - createdAt < 48h`. Past that, mutation throws `EditWindowExpired`. Post-MVP full-edit is in backlog.
+- **Functional requirement:** `updateCheckin(id, patch)` mutation. Server enforces edit window: only if `now - createdAt < 48h` (per locked decision 2026-04-25). Past that, mutation throws `EditWindowExpired`. **Edit overwrites in place; no audit history retained in MVP** (per scoping line 696). `editedAt` timestamp written.
 - **Acceptance:**
-  - **UX:** edit button visible only within window. After window, button replaced by "Edits locked after 48h" help text.
-  - **UI:** edit triggers same TapInput components from Feature 01 (reuse, do not duplicate).
-  - **Backend / data:** audit trail: `editedAt` timestamp written; original values not retained in MVP (ADR hook noted in review).
-  - **UX copy:** lock copy: "Locked — you can edit check-ins within 48 hours."
+  - **UX:** edit button visible only within window. After window, button replaced by help text "Edits locked after 48 hours."
+  - **UI:** edit triggers same TapInput components from F01 chunk 1.E (reuse, do not duplicate).
+  - **Backend / data:** server checks window; returns typed error.
+  - **UX copy:** lock text: "Locked — you can edit check-ins within 48 hours." Save button: "Save changes".
 
-### US-2.E.2 — Soft delete with confirmation
-- **As** Sonakshi **I want** to delete a check-in **so that** a day I don't want to remember can go.
-- **Functional requirement:** `softDeleteCheckin(id)` sets `deletedAt`. Queries exclude soft-deleted. No hard delete (compliance + undo hook).
+### US-2.D.3 — Soft-delete with confirm + 5s undo toast
+- **As** Sonakshi **I want** to delete a day I don't want to remember **so that** my Memory reflects only what I want.
+- **Functional requirement:** `softDeleteCheckin(id)` sets `deletedAt`. Queries already exclude soft-deleted (shipped F01). Two-tap confirm: tap Delete → modal → confirm. After confirm, undo toast for 5s — tap to restore (clears `deletedAt`). After 5s, deletion is user-facing irreversible (row stays in DB for compliance + future restore mechanism). **This is a refinement on scoping line 696's "delete is irreversible and requires confirm"** — soft-delete + 5s undo gives a grace window without changing the irreversibility promise after that window. ADR hook noted in review.
 - **Acceptance:**
-  - **UX:** two-tap confirm (tap delete → modal → confirm). Undo toast for 5s after delete.
-  - **UI:** modal full-screen on mobile; destructive button distinct.
-  - **Backend / data:** row retained in DB; queries filter `deletedAt === undefined`.
-  - **UX copy:** modal heading: "Delete this check-in?" body: "It'll be removed from Memory and your Doctor Report." primary: "Delete". secondary: "Keep it".
+  - **UX:** modal full-screen on mobile; destructive button visually distinct. Toast accessible (ARIA live region + visible 5s).
+  - **UI:** modal: heading + body + primary destructive + secondary cancel.
+  - **Backend / data:** row retained in DB; queries filter `deletedAt === undefined`. Restore mutation `restoreCheckin(id)` wired only for the toast path; no UI surface for restoring after toast expires.
+  - **UX copy:** modal heading: "Delete this check-in?" body: "It'll be removed from Memory and your Doctor Report." primary: "Delete". secondary: "Keep it". Toast: "Check-in deleted. Undo".
+
+### US-2.E.1 — Keyword search across transcripts
+- **As** Sonakshi **I want** to search "stiffness" and see every day I mentioned it **so that** I can find a moment without scrolling.
+- **Functional requirement:** Tap search icon in `<MemoryTab>` header → `<SearchBar>` slides in. Debounced (250ms) input. Per scoping (line 695), MVP is **client-side**: load all check-ins in current scrubber range, filter `transcript.toLowerCase().includes(query.toLowerCase())`. Results render as a flat list (groups suspended) with day labels per row. Highlights matched substring in transcript snippet.
+- **Acceptance:**
+  - **UX:** clearing the input restores the normal day list. Empty results show "No mention of '{query}' yet."
+  - **UI:** search bar replaces title in header; close (×) icon to dismiss.
+  - **Backend / data:** no new mutation; reuses `listEventsByRange` payload + client-side filter (post-MVP backlog §23 covers Convex full-text index when dataset grows).
+  - **UX copy:** placeholder: "Search what you've said". Empty result: "No mention of '{query}' yet."
 
 ### US-2.F.1 — First-time empty state
 - **As** a new user **I want** a friendly Memory screen on day 0 **so that** I understand what goes here.
-- **Functional requirement:** when user has zero check-ins, render `<EmptyState mode="first-time">` with primary CTA to start a check-in.
+- **Functional requirement:** When user has zero events and no paywall clamp, `<EmptyState mode="first-time">` renders. Uses Feature 10 template family (illustration + title + body + primary CTA + bottom nav preserved per ADR-015). Primary CTA routes to `/check-in`.
 - **Acceptance:**
-  - **UX:** CTA routes to `/check-in`.
-  - **UI:** illustration placeholder + heading + CTA.
-  - **Backend / data:** driven by list query returning `items.length === 0` and no paywall clamp.
-  - **UX copy:** "Your first check-in starts your story. — Start today's check-in".
+  - **UX:** CTA leads to check-in.
+  - **UI:** consistent with other Feature 10 templates.
+  - **Backend / data:** driven by `events.length === 0 && !clampedByTier`.
+  - **UX copy:** title: "Your memory starts today." body: "Tap the orb and tell me how today's feeling — your check-ins live here." primary: "Start today's check-in".
 
 ### US-2.F.2 — Paywall banner (free tier, >30d)
 - **As** Sonakshi **I want** to know when older check-ins are hidden **so that** I can decide to upgrade.
-- **Functional requirement:** when `clampedByTier` true from 2.A, show `<PaywallBanner>` at list bottom. Tap → pricing page.
+- **Functional requirement:** When `clampedByTier === true` from `listEventsByRange`, `<PaywallBanner>` renders at the *end* of the day list (not blocking scroll). Tap → pricing page (route stub for MVP — actual pricing page is post-MVP).
 - **Acceptance:**
-  - **UX:** banner doesn't block scroll — sits at list end.
-  - **UI:** subtle, not intrusive; one primary CTA.
-  - **Backend / data:** reads tier + clamp flag.
-  - **UX copy:** "You're seeing the last 30 days. Sakhi Companion keeps your full history. — See plans".
+  - **UX:** banner sits at list end; doesn't intercept scroll.
+  - **UI:** subtle, single primary CTA.
+  - **Backend / data:** reads tier + clamp flag from query payload.
+  - **UX copy:** "You're seeing the last 30 days. Saumya Companion keeps your full history. — See plans".
 
 ### US-2.F.3 — Integration test — full Memory flow
 - **As** the team **I want** one end-to-end test of Memory **so that** regressions are caught.
-- **Functional requirement:** seed 45 check-ins across 60 days; sign in as free user; assert only 30 visible; assert paywall banner renders; apply flare filter; assert list filters correctly; edit a check-in within 48h; assert update visible; soft-delete; assert removal.
+- **Functional requirement:** Seed 45 check-ins across 60 days (mix: 10 with `flare=true`); sign in as free user; assert only 30 days of events visible; assert paywall banner renders at list end; switch filter to "Flare-ups"; assert only flare events render; tap a check-in → detail sheet renders; edit metrics within 48h → save → assert update reflected in list; soft-delete → confirm → assert row hidden; trigger undo within 5s → assert row restored.
 - **Acceptance:**
   - **UX:** n/a.
   - **UI:** n/a.
-  - **Backend / data:** test uses Convex test runtime; seeded fixtures in `tests/fixtures/memory-seed.ts`.
+  - **Backend / data:** Convex test runtime; seeded fixtures in `tests/fixtures/memory-seed.ts`.
   - **UX copy:** none.
 
 ---
+
+## Open scoping items inherited (not blocking F02 C1 build)
+
+These are open in `scoping.md` § Open mechanics for the Journey module (line 714+); F02 C1 design is compatible with any resolution:
+
+1. **Journey landing screen** (line 718) — tabs vs. hub. F02 C1 routes Memory at `/journey/memory` regardless; F08 wraps with the chosen Journey landing structure.
+2. **Cross-linking** (line 719) — flare-up → Memory entry, dosage change → Medications. F02 C1 emits stable per-event URLs (`/journey/memory/{date}#{eventId}`) so future cross-links land correctly.
+3. **Sharing scope** (line 720) — support-system shared read-only. Out of MVP; backlog §25.
+4. **Offline cached read** (line 721) — out of MVP; backlog §26.
+
+## Assumptions to validate during build
+
+- **`stage` field surfacing in detail sheet.** ADR-021 locked the enum semantics. Detail sheet does not surface stage to Sonakshi (it's analytics-internal). Confirm with reviewers.
+- **Search debounce on small device.** 250ms is a guess; test on a low-end Android during 2.E review.
+- **Reverse-chronological scroll with week scrubber sync.** When Sonakshi scrolls past today, the scrubber should swipe automatically to the previous week. Edge case: scroll velocity vs. week boundary. Test on real device.
 
 ## Review notes
 

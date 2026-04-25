@@ -11,7 +11,7 @@ Two terms were explicitly off-limits in app copy and have now been resolved:
 | Avoid | Reason | Resolution |
 |---|---|---|
 | **"caregiving" / "caregiver"** | too clinical / implies dependence | **Sentence-level rewrites** — dropped the noun entirely. Where a referent was needed, replaced with **"support system"** (e.g. *"the patient, her doctor, and her support system"*). Onboarding framing rewritten from scratch to drop "journey" (collision with the Journey pillar). |
-| **"log"** | too technical / legal-sounding | **"Memory"** — makes the README tagline operative (*"Sakhi means friend — the one who remembers with you"*). Used in copy as *"your Memory"* (possessive). Section label inside Journey is **Memory**. Also appears in the save prompt on the summary card (*"Good to save these to your Memory?"*). |
+| **"log"** | too technical / legal-sounding | **"Memory"** — makes the README tagline operative (*"Saumya means friend — the one who remembers with you"*). Used in copy as *"your Memory"* (possessive). Section label inside Journey is **Memory**. Also appears in the save prompt on the summary card (*"Good to save these to your Memory?"*). |
 | **"Medications module"** | evaluated; no change | **Kept as "Medications"** — clinically neutral, universally understood, no warmer alternative lands without sounding casual or still-clinical. |
 
 ## Brand direction (visual language)
@@ -20,7 +20,7 @@ Not a design spec — a direction. Final visual language locks during build.
 
 - **Muted pastel tinted backgrounds** — soft tints, no loud chroma. Mirrors a clinical calm.
 - **One illustration per meaningful screen** — onboarding, splash, error, empty-state. Illustrations are warm and human (not clip-art, not stock photography, not medical imagery).
-- **Single-accent-color CTA treatment** — Sakhi's accent is **teal** (already established on the waitlist page). Every primary CTA uses it; nothing else competes.
+- **Single-accent-color CTA treatment** — Saumya's accent is **teal** (already established on the waitlist page). Every primary CTA uses it; nothing else competes.
 - **Consistent card geometry** — rounded corners, soft shadows, padded interior; cards are the default container for any piece of content with its own identity (event, nudge, report section).
 - **Whoop-style data visualization direction** — rings, streak bars, stacked timelines. Data first, but the glance is warm, not dashboard-cold.
 
@@ -31,12 +31,12 @@ These are direction, not mandates. Anything that conflicts with accessibility (c
 Three pieces of landing-page and launch-post copy are locked (2026-04-24). All three reuse the *"logbook"* motif for consistency across the landing page and launch post.
 
 - **ROI anchor.** Sells against the cognitive labor between visits, not the cost of a visit.
-  *"Stop being the logbook for your own condition. Sakhi remembers every dose change, every flare, every off day — so your doctor sees the full picture, not just today."*
+  *"Stop being the logbook for your own condition. Saumya remembers every dose change, every flare, every off day — so your doctor sees the full picture, not just today."*
   Lands above or beside the pricing block.
 - **One-sentence persona pitch.** Opens the public launch post.
-  *"Sakhi is for people with chronic autoimmune conditions who shouldn't have to be their own medical logbook."*
+  *"Saumya is for people with chronic autoimmune conditions who shouldn't have to be their own medical logbook."*
 - **Founder quote (social proof baseline).** Upside-swap for a Sonakshi- or waitlist-sourced named quote if one lands in time; otherwise this is what ships.
-  *"No one should have to be their own medical logbook. Sakhi is for the people I've watched try."* — Rewant Prakash, Founder.
+  *"No one should have to be their own medical logbook. Saumya is for the people I've watched try."* — Rewant Prakash, Founder.
 
 **Not locked in this doc:**
 - Exact full landing-page copy — drafted during the landing-page pass, not pre-committed here.
@@ -125,16 +125,16 @@ Framing: *"A digital friend for the day-to-day of living with a chronic conditio
 ### Onboarding Screen 3
 Framing: *"You take command of your own life."* Positions the app as a conversational assistant that makes this easier.
 
-### Onboarding Screens 4 and 5 — two features, Sakhi speaking in first person
+### Onboarding Screens 4 and 5 — two features, Saumya speaking in first person
 
-Each screen highlights **one** feature the app provides. Written in **Sakhi's first-person voice** (*"I'll remember"*, not *"Sakhi remembers"*) — consistent with the friend/companion framing. Two screens, not three — **Voice check-in** (the core loop) and **Memory / Patterns** (what she gets from showing up). Community and Doctor Report reveal themselves through use; they don't need a dedicated onboarding screen.
+Each screen highlights **one** feature the app provides. Written in **Saumya's first-person voice** (*"I'll remember"*, not *"Saumya remembers"*) — consistent with the friend/companion framing. Two screens, not three — **Voice check-in** (the core loop) and **Memory / Patterns** (what she gets from showing up). Community and Doctor Report reveal themselves through use; they don't need a dedicated onboarding screen.
 
 **Template for each objective screen** — one card per screen, consistent visual treatment:
 
 - **Pastel tinted background** (per § Brand direction)
 - **One illustration** — warm, human, not clinical
-- **Short title** — direct, first-person from Sakhi
-- **Body copy** — 1–2 sentences, first-person from Sakhi, reusing the "logbook / record" motif for copy coherence with the landing page
+- **Short title** — direct, first-person from Saumya
+- **Body copy** — 1–2 sentences, first-person from Saumya, reusing the "logbook / record" motif for copy coherence with the landing page
 - **Single "Next" CTA** on screen 4 → **"Start my first check-in"** CTA on screen 5 (final screen switches the CTA to kick off the first use)
 
 #### Screen 4 — Voice check-in (the daily loop)
@@ -252,7 +252,7 @@ These shape how the home surface presents mixed content types without becoming c
 - **Event feed uses type-tagged pill labels on card headers.** Any event or task card on Home (intake tap, upcoming appointment, upcoming blood work, recent flare-up) carries a small coloured pill chip at the top indicating its type — e.g. `INTAKE`, `APPOINTMENT`, `BLOOD WORK`, `FLARE-UP`. This keeps a unified feed glanceable when event types are mixed.
 - **Intake tap section shows a progress counter.** The dosage intake reminder area has a small header indicator like `2 of 3 doses today` — so the state is visible without opening the card. Completed doses visually dim; missed doses mark in red per the task-state vocabulary (see § Journey module → Memory landing).
 - **Cards beat flat lists** for every mixed-content surface. Each event / nudge / prompt is its own card with time + title + meta + inline CTA. No unsorted bullet lists for event types.
-- **Inline education cards as empty-state prompts** — where a section has nothing yet, show a soft educational card inline (not a help menu, not a modal). Example: *"Did you know Sakhi captures flare-ups alongside your doses?"* Dismissible; rotates through a bank.
+- **Inline education cards as empty-state prompts** — where a section has nothing yet, show a soft educational card inline (not a help menu, not a modal). Example: *"Did you know Saumya captures flare-ups alongside your doses?"* Dismissible; rotates through a bank.
 
 ### Daily check-in — voice conversation
 
@@ -267,13 +267,13 @@ She can answer by voice, or supplement with a numeric scale / text.
 
 #### Conversation shape — hybrid (open-first, scripted-fallback)
 
-The check-in is **not** a rigid form, and **not** a fully open free-association. It's a **hybrid**: Sakhi starts with a single warm open question, lets Sonakshi free-flow, then falls back to short scripted probes *only for the data points she hasn't already covered*.
+The check-in is **not** a rigid form, and **not** a fully open free-association. It's a **hybrid**: Saumya starts with a single warm open question, lets Sonakshi free-flow, then falls back to short scripted probes *only for the data points she hasn't already covered*.
 
 **Why hybrid.** A pure open question (*"how's your day?"*) feels like a friend but leaves gaps — on some days Sonakshi won't mention pain, on others she won't mention meds, and the report data thins out. A pure scripted sequence feels like a voice-answered form — reliable but cold, and doesn't match a friend-app's tone. Hybrid gives us both: warm on the good days where she talks freely, reliable on the quiet days where she'd otherwise give a one-word answer.
 
 **How it flows (high-level — full screen mechanics in § Multimodal input below).**
 
-1. **Open opener (always).** Sakhi asks one warm question — *"Hey Sonakshi, how's your day been?"* (exact copy TBD). Sonakshi talks for however long feels natural — 10 seconds to 2 minutes. No visible progress indicator during this part. This is the free-flow window.
+1. **Open opener (always).** Saumya asks one warm question — *"Hey Sonakshi, how's your day been?"* (exact copy TBD). Sonakshi talks for however long feels natural — 10 seconds to 2 minutes. No visible progress indicator during this part. This is the free-flow window.
 
 2. **Live extraction while she talks.** The AI listens for the required data points (see below) and passively marks each one as *covered* or *missing* as she speaks. No interruption — she finishes her thought.
 
@@ -283,13 +283,13 @@ The check-in is **not** a rigid form, and **not** a fully open free-association.
 
 #### The opener — continuity-aware, remembered
 
-The first thing Sakhi says each morning is **not a fixed greeting**. It draws on state from yesterday (and the running recent history) so it sounds like a friend who actually keeps track, not a form that resets every day. This is the single most load-bearing line of copy in the app — the moment that decides whether Sakhi feels like a friend or a tool.
+The first thing Saumya says each morning is **not a fixed greeting**. It draws on state from yesterday (and the running recent history) so it sounds like a friend who actually keeps track, not a form that resets every day. This is the single most load-bearing line of copy in the app — the moment that decides whether Saumya feels like a friend or a tool.
 
 **State the opener draws from.**
 
 - **Yesterday's check-in** — pain level, mood, flare-up status, whether she actually did the check-in (skip days matter).
 - **Streak state** — how many consecutive days she's checked in (for positive callouts on milestones, see § After save → milestone celebration).
-- **Upcoming events in Journey** — a doctor visit or blood test within the next 24–48 hours (so Sakhi can gently orient the check-in toward prep).
+- **Upcoming events in Journey** — a doctor visit or blood test within the next 24–48 hours (so Saumya can gently orient the check-in toward prep).
 - **Recent flare-up status** — if a flare was marked *"still ongoing"* on the last check-in, today's opener should acknowledge it's probably still on her mind.
 
 **Example opener variants (exact copy TBD — these are shape, not final language):**
@@ -306,10 +306,10 @@ The first thing Sakhi says each morning is **not a fixed greeting**. It draws on
 
 **Safety rails — when to go neutral even if state suggests otherwise.**
 
-Continuity-awareness can backfire on edge days. Sakhi defaults to the neutral opener in these cases:
+Continuity-awareness can backfire on edge days. Saumya defaults to the neutral opener in these cases:
 
 - If yesterday's check-in was flagged as *unusually bad* (worst pain in 30+ days, severe flare, explicit qualitative note of distress) — reference it softly or skip reference entirely. Never lead with *"yesterday was terrible"*; that's a friend being heavy-handed.
-- If Sonakshi explicitly asks Sakhi to *"not bring up yesterday"* (post-MVP feature — not required for Day 1 build, but flag in the data model so this preference can be respected later).
+- If Sonakshi explicitly asks Saumya to *"not bring up yesterday"* (post-MVP feature — not required for Day 1 build, but flag in the data model so this preference can be respected later).
 - If the prior-day data is stale (last check-in >2 days ago) — fall back to the multi-day-skip variant, don't reference specifics from further back.
 - If the flare has been *"still ongoing"* for 5+ consecutive days — stop referencing it daily (tiring to be reminded); shift to a neutral opener.
 
@@ -330,7 +330,7 @@ The rules engine picks one variant based on a priority order — e.g. *upcoming 
 
 #### The closer — continuity-aware, evidence-led
 
-The last line Sakhi says at the end of a check-in. Sonakshi hears it twice: once on the summary card (as the fixed closing line above the save prompt) and once as a short post-save confirmation. Same copy both places.
+The last line Saumya says at the end of a check-in. Sonakshi hears it twice: once on the summary card (as the fixed closing line above the save prompt) and once as a short post-save confirmation. Same copy both places.
 
 **Design principles (research-backed — see sources in build notes).**
 
@@ -356,7 +356,7 @@ The last line Sakhi says at the end of a check-in. Sonakshi hears it twice: once
 
 - *"One day at a time."* — flagged in toxic-positivity critiques; reads as minimizing on flare days.
 - *"Be kind to yourself today."* — prescriptive; tells her how to feel.
-- *"Thank you for trusting this."* — anthropomorphizes Sakhi in a way the rest of the copy doesn't.
+- *"Thank you for trusting this."* — anthropomorphizes Saumya in a way the rest of the copy doesn't.
 - *"You're doing amazing!"* / *"Great job!"* — generic praise; MI research shows this *reduces* intrinsic motivation over time.
 - *"Take it gentle today."* — softer than the above but still prescriptive; ruled out on the same principle.
 
@@ -364,13 +364,13 @@ The last line Sakhi says at the end of a check-in. Sonakshi hears it twice: once
 
 **Still TBD on closers.**
 
-- Whether the closer is **spoken** by Sakhi (TTS) or **text-only** on the summary card. Leaning spoken + text for voice-first coherence; confirm during build when we know TTS latency.
+- Whether the closer is **spoken** by Saumya (TTS) or **text-only** on the summary card. Leaning spoken + text for voice-first coherence; confirm during build when we know TTS latency.
 - Exact number threshold phrasing at higher streaks (*"Thirty days. That's real."* fine at day 30 — does it still land at day 90 or does it need a different shape?). Tune during build.
 - Whether the post-save surface shows the **same** closer as the summary card, or a **shorter** variant (e.g. summary shows *"Saved. See you tomorrow."* and post-save shows just *"See you tomorrow."* without the *"Saved."* — since the save just happened). Probably yes, shorter post-save. Confirm during build.
 
 #### Nudge bank — non-check-in moments
 
-The locked closer set covers the end of a daily check-in. But Sakhi ends **every interaction** with a short line — intake taps, visit captures, report generation, returns after silence, empty states. This bank covers those. All lines follow the same rules as the closer: **first-person Sakhi**, witness-don't-prescribe, specific over generic, short. Reuses closer phrases (*"I'm here"*, *"Good to hear you"*, *"Today's its own day"*) for voice consistency.
+The locked closer set covers the end of a daily check-in. But Saumya ends **every interaction** with a short line — intake taps, visit captures, report generation, returns after silence, empty states. This bank covers those. All lines follow the same rules as the closer: **first-person Saumya**, witness-don't-prescribe, specific over generic, short. Reuses closer phrases (*"I'm here"*, *"Good to hear you"*, *"Today's its own day"*) for voice consistency.
 
 | Moment | Trigger | Line |
 |---|---|---|
@@ -409,13 +409,13 @@ Everything else Sonakshi brings up in the free-flow — stiffness, sleep, what's
 
 The check-in surface is **progressive, two-stage**:
 
-**Stage 1 — the voice moment.** When she taps the check-in CTA, she lands on a deliberately spare screen: a large breathing mic glow, Sakhi's opening question (*"How's your day been?"*), a small *"tap to pause"* affordance, nothing else. No controls are visible. No dashboard noise. This is the protected voice moment — just her and the mic, like a friend waiting for her to start talking.
+**Stage 1 — the voice moment.** When she taps the check-in CTA, she lands on a deliberately spare screen: a large breathing mic glow, Saumya's opening question (*"How's your day been?"*), a small *"tap to pause"* affordance, nothing else. No controls are visible. No dashboard noise. This is the protected voice moment — just her and the mic, like a friend waiting for her to start talking.
 
 - If she **talks**, the AI listens and passively marks each of the five required metrics as *covered* as she speaks.
 - If she **doesn't want to talk today** (rough morning), she taps the mic to pause → goes straight to Stage 2 with nothing covered yet.
-- If she **talks partially** and then finishes / pauses long enough, Sakhi transitions to Stage 2 with the covered metrics already marked.
+- If she **talks partially** and then finishes / pauses long enough, Saumya transitions to Stage 2 with the covered metrics already marked.
 
-**Stage 2 — only-what's-missing.** After she pauses, stops, or taps-to-pause, the screen transitions to a short review view. At the top: *"Heard you on: ✓ mood, ✓ meds, ✓ flare"* — a small recap of what was captured from voice (so she can trust Sakhi heard her). Below that, **only the required metrics she did NOT cover** appear as tappable controls, under a gentle header like *"Just two more:"*. If she covered all five in voice, Stage 2 is skipped entirely and she goes straight to the summary card.
+**Stage 2 — only-what's-missing.** After she pauses, stops, or taps-to-pause, the screen transitions to a short review view. At the top: *"Heard you on: ✓ mood, ✓ meds, ✓ flare"* — a small recap of what was captured from voice (so she can trust Saumya heard her). Below that, **only the required metrics she did NOT cover** appear as tappable controls, under a gentle header like *"Just two more:"*. If she covered all five in voice, Stage 2 is skipped entirely and she goes straight to the summary card.
 
 The controls for each required metric (shown in Stage 2 only when that metric is uncovered):
 
@@ -427,7 +427,7 @@ The controls for each required metric (shown in Stage 2 only when that metric is
 
 **Why progressive beats always-visible.** An always-visible dashboard of five controls during the voice moment dilutes the warmth — suddenly it looks like a form. Hiding them in Stage 1 protects the feeling of a conversation; revealing them in Stage 2 only for what's missing produces an efficient, non-redundant cleanup. Two stages match the two different modes of her morning: *"I want to be heard"* and *"I just need to log this and move on."*
 
-**Correction inside Stage 2.** The Stage 2 recap lists what was captured from voice (*"✓ mood — okay"*). If Sakhi heard something wrong, Sonakshi can tap the recap item to reveal the control for that metric and correct it — same one-tap adjustment as if it were a missing item.
+**Correction inside Stage 2.** The Stage 2 recap lists what was captured from voice (*"✓ mood — okay"*). If Saumya heard something wrong, Sonakshi can tap the recap item to reveal the control for that metric and correct it — same one-tap adjustment as if it were a missing item.
 
 **Scripted probes become Stage-2 controls, not spoken turns.** The earlier framing of spoken follow-up probes (*"and the pain today?"*) is **replaced** by the Stage 2 reveal of missing-metric controls. Visual, silent, non-interrogative. A probe is never a blocking modal or a forced spoken turn — it's just a control appearing in the cleanup stage. This is softer and more voice-optional than a verbal probe.
 
@@ -502,7 +502,7 @@ The check-in is the give; the feedback loop is the get. If the get doesn't outwe
 
 **The core design principle — graduated: visual early, verbal later.**
 
-The app **visualizes** what Sonakshi has logged from Day 1 (reflection, no interpretation). It **speaks** — offers verbal insights, correlations, patterns she couldn't have spotted alone — only once the pattern engine has enough data to be honest. This prevents two failure modes: (1) an empty-feeling app in the first two weeks ("*I'm doing this every day and nothing happens*"), and (2) over-claimed patterns on thin data ("*Sakhi says my sleep causes my flares after 4 days of data — that can't be right*").
+The app **visualizes** what Sonakshi has logged from Day 1 (reflection, no interpretation). It **speaks** — offers verbal insights, correlations, patterns she couldn't have spotted alone — only once the pattern engine has enough data to be honest. This prevents two failure modes: (1) an empty-feeling app in the first two weeks ("*I'm doing this every day and nothing happens*"), and (2) over-claimed patterns on thin data ("*Saumya says my sleep causes my flares after 4 days of data — that can't be right*").
 
 Graduated means: the app is visually alive from Day 1, but it doesn't talk above its evidence.
 
@@ -541,7 +541,7 @@ What's on Home in this window:
 
 What's NOT on Home in this window:
 
-- No verbal insights (*"Sakhi noticed…"* text).
+- No verbal insights (*"Saumya noticed…"* text).
 - No correlation claims (*"your pain is higher on low-sleep days"*).
 - No pattern charts inside Journey → Patterns (that view shows an empty-state template with *"Patterns unlock once you've checked in for a couple of weeks"* and the rough threshold).
 
@@ -565,7 +565,7 @@ This is the "verbal later" half. On roughly day 14, the pattern engine starts ha
 - Always include the path to action. *"Worth flagging to your doctor"* / *"Might be worth watching"* — connects the insight to what she can actually do with it.
 - Insights are always dismissable. Dismissed insights don't re-fire for the same pattern within 14 days (avoid nagging).
 
-**Notification behavior — MVP = none.** The app does NOT push notifications for insights. Insights surface when she opens the app. Rationale: push notifications on chronic-illness data risk feeling alarming or intrusive (*"Sakhi wants to tell you something about your pain"* — no thanks at 9pm). Post-MVP, an opt-in daily digest notification could be added. For MVP: pull model, not push.
+**Notification behavior — MVP = none.** The app does NOT push notifications for insights. Insights surface when she opens the app. Rationale: push notifications on chronic-illness data risk feeling alarming or intrusive (*"Saumya wants to tell you something about your pain"* — no thanks at 9pm). Post-MVP, an opt-in daily digest notification could be added. For MVP: pull model, not push.
 
 **Latency summary.**
 
@@ -653,7 +653,7 @@ The mechanics below lock the MVP shape. Everything heavier (images, polls, curat
 
 ## Journey module (the "looking back" pillar)
 
-Accessed from the bottom menu bar. The aggregated surface where Sonakshi and her doctor can see everything Sakhi has quietly been remembering — her check-ins, her medications, her flare-ups, her dosage changes, her doctor visits, and the patterns between them.
+Accessed from the bottom menu bar. The aggregated surface where Sonakshi and her doctor can see everything Saumya has quietly been remembering — her check-ins, her medications, her flare-ups, her dosage changes, her doctor visits, and the patterns between them.
 
 ### What it contains
 
@@ -674,7 +674,7 @@ The Journey module houses **five content surfaces**, all drawn from the same und
 
 ### Why this pillar exists
 
-Sakhi's promise is *"your next doctor visit starts with data, not memory."* The Journey pillar is how that promise shows up in the app — it is the single surface where the aggregated record lives, so Sonakshi can both (a) look back on her own and (b) walk into any clinical conversation with context already prepared.
+Saumya's promise is *"your next doctor visit starts with data, not memory."* The Journey pillar is how that promise shows up in the app — it is the single surface where the aggregated record lives, so Sonakshi can both (a) look back on her own and (b) walk into any clinical conversation with context already prepared.
 
 It also resolves a structural problem: the Doctor Report, the Memory history, and the pattern views were each homeless in the old nav. Bundling them into one "looking back" pillar keeps the bottom menu at 5 items, gives the report a natural home, and makes the Memory discoverable instead of buried.
 
@@ -817,7 +817,7 @@ This return pattern directly enacts Conversation Design Principle #2 (reference 
 
 ### Doctor report flow
 
-The report is the communication artifact Sakhi produces for Sonakshi's doctor visits — the tangible output of every daily check-in, the Memory, and the medication history. It exists to translate her fluctuating, hard-to-describe chronic illness into something a clinician can read quickly.
+The report is the communication artifact Saumya produces for Sonakshi's doctor visits — the tangible output of every daily check-in, the Memory, and the medication history. It exists to translate her fluctuating, hard-to-describe chronic illness into something a clinician can read quickly.
 
 **Where it lives in the app:** inside the **Journey** pillar (see § Journey module). Journey is the aggregated "looking back" surface that houses the Doctor Report alongside the Memory history, pattern views, flare-up timeline, and doctor-visit history.
 
@@ -876,7 +876,7 @@ Because the on-demand report is anchored to "from the last doctor's visit to now
 
 Sonakshi has **two sharing modes** — and only these two. No hosted-link portal, no clinic-portal integration, no email export for MVP.
 
-1. **Show on phone screen (in-app).** She opens the report inside Sakhi and hands her phone to the doctor — or turns it toward them across the desk. The doctor interacts with the in-app view directly (scrolls the chart, changes the time filter, taps through to the qualitative context). This is the primary mode for an in-person visit.
+1. **Show on phone screen (in-app).** She opens the report inside Saumya and hands her phone to the doctor — or turns it toward them across the desk. The doctor interacts with the in-app view directly (scrolls the chart, changes the time filter, taps through to the qualitative context). This is the primary mode for an in-person visit.
 
 2. **Share the PDF via WhatsApp.** She exports the report as a PDF and shares it through WhatsApp — using the OS-level share sheet to send the PDF directly to her doctor's chat. WhatsApp is the channel of record for doctor communication in India, so the PDF needs to be WhatsApp-friendly: reasonable file size, viewable inline or with one tap, self-contained (no external font / image loads).
 
@@ -892,7 +892,7 @@ This keeps the sharing story tight: **one in-app view, one PDF export.** Nothing
 **MVP rule:** Sonakshi can **annotate** the report before sharing. She **cannot redact, delete, or hide** any underlying data.
 
 - **Annotation is additive context.** She can add short notes on top of the report — e.g. *"this week was my wedding, high stress and not a typical week"* or *"my water broke mid-week — the flare the day after is pregnancy-related, not med-related."* Annotations attach to a time range or a specific event and appear alongside the chart / narrative.
-- **The underlying data is untouchable.** Every entry that Sakhi captured during check-ins, every intake event, every flare-up — all of it stays in the report. She cannot remove a panic-attack entry from three weeks ago, cannot hide a missed dose, cannot trim a bad week.
+- **The underlying data is untouchable.** Every entry that Saumya captured during check-ins, every intake event, every flare-up — all of it stays in the report. She cannot remove a panic-attack entry from three weeks ago, cannot hide a missed dose, cannot trim a bad week.
 - **Why this posture for MVP.** The report's clinical value depends on the data being trustworthy. If Sonakshi can hide entries, the doctor is no longer looking at her record — they are looking at her curated story of her record, and the moment a clinician learns that, the report loses its weight. Annotate-only lets her provide *context* without breaking *trust*.
 
 **Future (post-MVP):** full edit — where she can annotate **and** selectively hide or redact entries — is on the roadmap. The use case is real: some entries may be deeply personal (mental-health detail, relationship context, intimate-life context) that she wants to discuss with some doctors but not others. The architecture should not preclude this — specifically:
@@ -907,7 +907,7 @@ For MVP: build the annotate path. Do not build the redact path. Keep the data mo
 
 **MVP:** English only — both in the app and in the generated report / PDF.
 
-**Architecture:** the app is designed so language is a **user preference, not a hardcoded assumption.** Sakhi should be able to address:
+**Architecture:** the app is designed so language is a **user preference, not a hardcoded assumption.** Saumya should be able to address:
 
 - **English** (default, MVP)
 - **Hindi** (next priority, post-MVP)
@@ -930,7 +930,7 @@ The PDF exported for WhatsApp sharing uses a **hybrid layout**: a one-page summa
 
 A single printable page designed to be readable in a clinician's 30-second glance:
 
-- **Header:** Sonakshi's name, her medical condition, report time window (*"From your last visit on 2 Mar 2026 to today, 23 Apr 2026"*), report generation timestamp, Sakhi branding. If a doctor name/specialty was captured on the associated visit, it appears here.
+- **Header:** Sonakshi's name, her medical condition, report time window (*"From your last visit on 2 Mar 2026 to today, 23 Apr 2026"*), report generation timestamp, Saumya branding. If a doctor name/specialty was captured on the associated visit, it appears here.
 - **Headline metrics strip** — 4–5 numbers that summarize the window at a glance. Exact metrics still TBD; candidates: number of flare-ups, number of dosage changes, intake adherence %, average dysfunction-scale score, mood-trajectory direction (trending up / flat / trending down).
 - **Small static chart** — compressed version of the dynamic chart showing the key timeline at a readable size.
 - **3–5 narrative bullets** — the most important qualitative takeaways from the window, plus any annotations Sonakshi added. (*"Wrist pain worsened in week 2 after methotrexate was raised. Sonakshi notes: this was also the week of her wedding — high stress baseline."*)
@@ -945,7 +945,7 @@ All three content blocks from the in-app report render at full fidelity:
 2. **Flare-up ↔ medication-change correlation — visual + text.** A static visual (timeline with correlation annotations) paired with the narrative text explaining when each flare-up occurred, how many days after a dosage change it began, and how long it took to subside.
 3. **Qualitative context — narrative section.** What Sonakshi felt and experienced beyond the measured metrics. Drawn from her check-in conversations.
 
-**Annotations** (from § Edit-before-share rule) render **inline with the affected time range** in the appendix — as callouts next to the relevant week on the chart, and as inline italics in the narrative text where they apply. They are visually distinguishable from Sakhi-generated content (colour / typography) so the doctor can tell what came from the data vs. what came from Sonakshi's own note.
+**Annotations** (from § Edit-before-share rule) render **inline with the affected time range** in the appendix — as callouts next to the relevant week on the chart, and as inline italics in the narrative text where they apply. They are visually distinguishable from Saumya-generated content (colour / typography) so the doctor can tell what came from the data vs. what came from Sonakshi's own note.
 
 **Why hybrid over pure full-fidelity.** A full-fidelity-only PDF is long and dense; a busy OPD doctor may skim only the first page anyway. The one-page summary ensures the clinical value lands in the first 30 seconds; the appendix means she doesn't have to choose between "quick" and "thorough" — both live in the same file.
 
@@ -973,7 +973,7 @@ The auto-generated report is **one continuously-refreshed dataset** (rebuilt eve
 
 Doctor visits — and adjacent clinical events — are captured through **two paths**:
 
-**Primary path: opportunistic capture during the voice check-in.** If Sonakshi says anything like *"saw my rheumatologist today"* / *"I had my blood test yesterday"* / *"my appointment with Dr. Mehta is next Tuesday"* during a check-in, the AI extracts it and presents a **confirm card** during the summary step — same pattern as opportunistic dosage-change capture. Example: *"I heard: visit with your rheumatologist on 23 Apr 2026. Save this to your visits?"* On confirm, the event writes to the data model and anchors on the timeline. This is the primary path because it requires zero deliberate action from her — she just talks, Sakhi listens.
+**Primary path: opportunistic capture during the voice check-in.** If Sonakshi says anything like *"saw my rheumatologist today"* / *"I had my blood test yesterday"* / *"my appointment with Dr. Mehta is next Tuesday"* during a check-in, the AI extracts it and presents a **confirm card** during the summary step — same pattern as opportunistic dosage-change capture. Example: *"I heard: visit with your rheumatologist on 23 Apr 2026. Save this to your visits?"* On confirm, the event writes to the data model and anchors on the timeline. This is the primary path because it requires zero deliberate action from her — she just talks, Saumya listens.
 
 **Secondary path: a "+" icon inside the Journey pillar for manual add.** Not every event gets mentioned in a check-in. A "+" (plus) icon lives inside the Journey pillar and opens a short menu of event types she can add directly:
 
@@ -1032,7 +1032,7 @@ Annotations and pre-visit prep live inside a **dedicated "Prepare for Visit" flo
    - *Print the questions list (or keep it pulled up on the phone)*
    - *Take the 9am methotrexate dose before leaving*
 
-   Checklist items are simple text + checkbox. Sonakshi can add her own, and Sakhi can seed a few sensible defaults based on what's in her Journey (e.g. *if a blood test result exists in the last 14 days → suggest "bring blood work report"*; *if any dose was changed since the last visit → suggest "bring current pill bottles"*). Checking items off is client-side — no network required the morning of the visit.
+   Checklist items are simple text + checkbox. Sonakshi can add her own, and Saumya can seed a few sensible defaults based on what's in her Journey (e.g. *if a blood test result exists in the last 14 days → suggest "bring blood work report"*; *if any dose was changed since the last visit → suggest "bring current pill bottles"*). Checking items off is client-side — no network required the morning of the visit.
 
 2. **Annotations on the report itself.** The flow walks her chronologically through the on-demand report for the upcoming visit. At notable events — flare-ups, dosage changes, unusually bad or unusually good weeks — she gets an optional prompt to add context for the doctor. *"This week was my wedding, high stress and not a typical week."* / *"My water broke mid-week — the flare the day after is pregnancy-related, not med-related."* These annotations attach to the relevant time range in the report (see § Edit-before-share rule).
 
@@ -1041,9 +1041,9 @@ Annotations and pre-visit prep live inside a **dedicated "Prepare for Visit" flo
    - *"Is this level of fatigue normal on this dose, or should we be concerned?"*
    - *"I'm thinking of travelling for 2 weeks next month — anything I should plan around?"*
 
-   This is not medical advice Sakhi is giving. This is **Sonakshi's own voice** — her own prepared questions, captured so she doesn't forget them in the 10-minute OPD window. A patient walking into a visit with a written list of questions is a well-documented practice in patient-advocacy literature; it flips the dynamic from passive recipient to active participant in the conversation. This is what a *friend* would help her prepare.
+   This is not medical advice Saumya is giving. This is **Sonakshi's own voice** — her own prepared questions, captured so she doesn't forget them in the 10-minute OPD window. A patient walking into a visit with a written list of questions is a well-documented practice in patient-advocacy literature; it flips the dynamic from passive recipient to active participant in the conversation. This is what a *friend* would help her prepare.
 
-**Where the flow lives.** Accessed from the Journey pillar — either as a dedicated button ("Prepare for visit") on the report view, or surfaced proactively when Sakhi notices an upcoming doctor visit in the event timeline (say 24–48 hours before the appointment). Likely both — TBD.
+**Where the flow lives.** Accessed from the Journey pillar — either as a dedicated button ("Prepare for visit") on the report view, or surfaced proactively when Saumya notices an upcoming doctor visit in the event timeline (say 24–48 hours before the appointment). Likely both — TBD.
 
 **How the three content types render in the PDF.**
 
@@ -1061,13 +1061,13 @@ Annotations and pre-visit prep live inside a **dedicated "Prepare for Visit" flo
 - ~~Edit-before-share rule~~ — **answered.** MVP = annotate-only. Post-MVP = full edit (annotate + selective redact-per-report). Data model must keep Memory canonical and treat the report as a view, so redact can be added later without migration.
 - ~~PDF layout~~ — **answered.** Hybrid — Page 1 one-page summary (cover + headline metrics + small chart + narrative bullets + annotations), Pages 2+ full-fidelity appendix (static chart snapshot + flare-up correlation visual + narrative + qualitative context). One-page summary also available as an in-app standalone view.
 - ~~PDF language~~ — **answered.** MVP = English only. Architecture = multilingual-ready (Hindi + Indian vernacular languages post-MVP). All copy goes through an i18n string layer from day one.
-- PDF still-TBD — headline metrics for the summary page (exact 4–5 numbers), file size target, whether the Sakhi brand is prominent or muted, cover-page fields when doctor name/specialty isn't captured.
+- PDF still-TBD — headline metrics for the summary page (exact 4–5 numbers), file size target, whether the Saumya brand is prominent or muted, cover-page fields when doctor name/specialty isn't captured.
 - ~~Does the doctor see a different view if they open a shared link, vs. Sonakshi's in-app view?~~ — **n/a.** No shared link exists. Doctor either sees Sonakshi's phone or the PDF.
 - ~~Annotation UX~~ — **answered.** Dedicated "Prepare for Visit" flow inside Journey. Tripartite structure: **Checklists** (for Sonakshi — bring blood work, pill bottles, etc.), **Annotations** (chronological walk through the report with optional prompts at notable events), and **Open questions for the doctor** (free-form list). Questions render as a dedicated "Questions from Sonakshi" section in the PDF. Checklists stay in-app only (not on the doctor-facing PDF).
-- Prepare for Visit flow — still TBD: does Sakhi surface the flow proactively 24–48h before an upcoming visit, or is it user-initiated only? How many annotations / questions / checklist items per visit (cap, or unlimited)? What are the seeded-by-default checklist items (if any) vs. pure blank start?
+- Prepare for Visit flow — still TBD: does Saumya surface the flow proactively 24–48h before an upcoming visit, or is it user-initiated only? How many annotations / questions / checklist items per visit (cap, or unlimited)? What are the seeded-by-default checklist items (if any) vs. pure blank start?
 - ~~Default time windows for the auto-generated version~~ — **answered.** Single auto-refreshed dataset (24h cadence), Daily / Weekly / Monthly granularity toggle controlled by the user. Default granularity auto-picks based on data history (Daily <2wks, Weekly 2wks–3mo, Monthly 3mo+). Window is user-adjustable alongside the granularity.
 - ~~Doctor visits as first-class events — capture UI~~ — **answered.** Primary = opportunistic capture during voice check-in (confirm card in summary step). Secondary = "+" icon inside Journey with event types (appointment/doctor visit, blood work schedule, extensible to scans/procedures/etc.). Blood work tests are now their own first-class event type alongside doctor visits.
-- Upcoming-visit reminders — still TBD. Does Sakhi nudge Sonakshi 24h before an upcoming appointment to generate the on-demand report? Does she nudge the day-of? How does a captured "upcoming" event differ in the UI from a captured "past" event?
+- Upcoming-visit reminders — still TBD. Does Saumya nudge Sonakshi 24h before an upcoming appointment to generate the on-demand report? Does she nudge the day-of? How does a captured "upcoming" event differ in the UI from a captured "past" event?
 - ~~Edit/cancel of captured events~~ — **answered (in MVP).** See § Edit/cancel of captured events below.
 - Blood work results (not schedule) — post-MVP. But the data model should leave room to attach a result (file or structured values) to a captured blood-work event later.
 -->
@@ -1099,9 +1099,9 @@ Why dedicated screens beat inline error strips: a friend-app has to *hold the mo
 **Still TBD for edge cases:**
 - Exact copy for each screen (awaiting language/copy pass post-scoping).
 - Illustration style direction — to be locked with the Brand direction pass.
-- Whether Sakhi's voice/personality shows up in error copy, or whether error screens are deliberately flat and factual. Likely a warm-but-brief middle ground.
+- Whether Saumya's voice/personality shows up in error copy, or whether error screens are deliberately flat and factual. Likely a warm-but-brief middle ground.
 - Specific retry/backoff strategy (how many auto-retries before surfacing the error screen).
-- Behavior on sustained outage — does Sakhi show a status-page style message if Convex or the transcription service is down platform-wide?
+- Behavior on sustained outage — does Saumya show a status-page style message if Convex or the transcription service is down platform-wide?
 
 ## MVP scope
 
@@ -1129,11 +1129,11 @@ One-time regimen setup (voice-first, then editable), ongoing dosage-change captu
 
 ### Pillar 3 — Journey: the "looking back" surface
 
-The aggregated record where the **Doctor Report**, the **Memory**, **Whoop-style patterns**, **flare-up history**, and **doctor-visit timeline** all live together. See § Journey module. This is how Sakhi delivers on *"your next doctor visit starts with data, not memory."*
+The aggregated record where the **Doctor Report**, the **Memory**, **Whoop-style patterns**, **flare-up history**, and **doctor-visit timeline** all live together. See § Journey module. This is how Saumya delivers on *"your next doctor visit starts with data, not memory."*
 
 ### Pillar 4 — Community: condition-based channels
 
-A Slack-style channel space (see § Community module) where users create channels around their autoimmune condition, share news, educate each other, and connect with people who live with the same disease. In MVP because "you are not alone" is a core emotional outcome Sakhi is meant to deliver, not just patient-to-doctor data.
+A Slack-style channel space (see § Community module) where users create channels around their autoimmune condition, share news, educate each other, and connect with people who live with the same disease. In MVP because "you are not alone" is a core emotional outcome Saumya is meant to deliver, not just patient-to-doctor data.
 
 ### What's deliberately minimal inside each pillar
 
@@ -1158,7 +1158,7 @@ Theme 4 analytics, projections, and causal-inference live inside Journey only as
 ## Open questions (tracking)
 
 1. ~~Replacement term for "caregiving"~~ — **answered (2026-04-24).** **"Support system."** This is the word Sonakshi uses for the concept. Aligns with the already-locked language-conventions table (§ Language conventions) — *"support system"* and *"support-system member"* are the canonical terms across all in-product copy and docs, replacing *caregiver* / *squad* / Kinery-adjacent vocabulary.
-2. ~~Objectives taught on onboarding screens 4 and 5~~ — **answered (2026-04-24).** Two screens: **Screen 4 — Voice check-in** (activation), **Screen 5 — Memory + Patterns** (retention payoff). Sakhi speaks first-person throughout. Copy locked in § Onboarding Screens 4 and 5.
+2. ~~Objectives taught on onboarding screens 4 and 5~~ — **answered (2026-04-24).** Two screens: **Screen 4 — Voice check-in** (activation), **Screen 5 — Memory + Patterns** (retention payoff). Saumya speaks first-person throughout. Copy locked in § Onboarding Screens 4 and 5.
 3. ~~Exact onboarding copy for each screen~~ — **deferred (2026-04-24).** Screens 1–3 verbatim copy rolls into the landing-page copy pass (single writing session covering both surfaces). Screens 4 and 5 already locked in § Onboarding Screens 4 and 5.
 4. ~~Medical condition dropdown source + cardinality~~ — **answered (2026-04-24).** Source: **AARDA** (American Autoimmune Related Diseases Association) master list — publicly maintained, 100+ conditions. Cardinality: **single-select for MVP.** Schema stores `conditions: string[]` from day one so multi-select (post-MVP backlog #18) is a UI-only change later. See § Setup Part B → Screen B.4.
 5. ~~Searchable dropdown?~~ — **answered (2026-04-24).** Yes — searchable type-ahead input (client-side filter over the AARDA list). See § Setup Part B → Screen B.4.

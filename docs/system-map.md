@@ -1,4 +1,4 @@
-# Sakhi — System Map
+# Saumya — System Map
 
 > **Living document.** Updated after every shipped cycle. See also: [build-plan.md](build-plan.md) Section 9A.
 

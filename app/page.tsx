@@ -22,7 +22,7 @@ const pillars = [
     bucket: "Capture",
     label: "01",
     items: [
-      { t: "Voice check-in", d: "Sixty seconds a day. No forms — Sakhi listens." },
+      { t: "Voice check-in", d: "Sixty seconds a day. No forms — Saumya listens." },
       { t: "Medications", d: "Dosage, schedule, adherence. Track every dose change." },
       { t: "Visits & blood work", d: "Captured by hand or pulled from your voice." },
     ],
@@ -54,7 +54,7 @@ const privacyClaims = [
   },
   {
     t: "Your transcripts never train an AI.",
-    d: "What you say to Sakhi stays between you and Sakhi. Not used for model training. Not sold.",
+    d: "What you say to Saumya stays between you and Saumya. Not used for model training. Not sold.",
   },
   {
     t: "Delete in one tap.",
@@ -95,7 +95,7 @@ export default function Home() {
                 letterSpacing: "-0.01em",
               }}
             >
-              Sakhi
+              Saumya
             </span>
           </div>
           <a
@@ -243,7 +243,7 @@ export default function Home() {
         {/* What's inside — three buckets, story not dump */}
         <section className="grid grid-cols-1 gap-10 md:grid-cols-12">
           <div className="md:col-span-4">
-            <p className="type-label">What&apos;s inside Sakhi</p>
+            <p className="type-label">What&apos;s inside Saumya</p>
             <h2 className="type-display-md mt-3">
               Three jobs.
               <br />
@@ -369,7 +369,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Founder note + Why Sakhi — combined trust block */}
+        {/* Founder note + Why Saumya — combined trust block */}
         <section className="grid grid-cols-1 gap-10 md:grid-cols-12">
           <div className="md:col-span-4">
             <p className="type-label">A note from the builder</p>
@@ -399,14 +399,14 @@ export default function Home() {
                   className="type-label"
                   style={{ letterSpacing: "0.14em" }}
                 >
-                  Building Sakhi
+                  Building Saumya
                 </span>
               </div>
             </div>
 
             <div className="mt-6 flex flex-col gap-4">
               <p className="type-body">
-                I started Sakhi after a year of patient interviews. The same
+                I started Saumya after a year of patient interviews. The same
                 story, again and again: people doing real work to manage their
                 condition, then losing the thread the moment the visit started.
               </p>
@@ -418,7 +418,7 @@ export default function Home() {
           </div>
 
           <div className="md:col-span-8 md:pl-12 md:border-l" style={{ borderColor: "var(--rule)" }}>
-            <p className="type-label">Why Sakhi</p>
+            <p className="type-label">Why Saumya</p>
             <h2
               className="type-display-lg mt-3"
               style={{ fontSize: "clamp(1.75rem, 3.5vw, 2.5rem)" }}
@@ -441,7 +441,7 @@ export default function Home() {
                 mattered last Tuesday is gone.
               </p>
               <p>
-                Sakhi removes the cognitive load. You speak — naturally,
+                Saumya removes the cognitive load. You speak — naturally,
                 briefly — and a quiet record builds itself. When your visit
                 comes, the data is already there.
               </p>
@@ -454,9 +454,9 @@ export default function Home() {
                   fontVariationSettings: "'SOFT' 100, 'opsz' 24, 'wght' 380",
                 }}
               >
-                Sakhi means &ldquo;friend&rdquo; in Hindi — the one who
-                remembers with you, so you don&apos;t walk into that room
-                alone.
+                Saumya means &ldquo;gentle&rdquo; — सौम्य, soft, calm, kind.
+                The presence you want next to you on a hard day, remembering
+                with you so you don&apos;t walk into that room alone.
               </p>
             </div>
           </div>
@@ -501,6 +501,18 @@ export default function Home() {
                   </li>
                 ))}
               </ul>
+              <p
+                className="mt-8 max-w-md text-[14px]"
+                style={{
+                  fontFamily: "var(--font-fraunces)",
+                  fontStyle: "italic",
+                  color: "var(--sage-deep)",
+                  fontVariationSettings: "'SOFT' 100, 'opsz' 24, 'wght' 380",
+                }}
+              >
+                Saumya — सौम्य — Sanskrit for gentle, soft, calm, kind. The
+                presence we&apos;re building toward.
+              </p>
             </div>
 
             <div className="md:col-span-5 md:self-end">
@@ -537,7 +549,7 @@ export default function Home() {
               style={{ color: "var(--ink-muted)" }}
             >
               Most health apps say &ldquo;we care about privacy&rdquo; and run
-              ad pixels behind the page. Here&apos;s exactly where Sakhi
+              ad pixels behind the page. Here&apos;s exactly where Saumya
               stands.
             </p>
           </div>
@@ -564,7 +576,7 @@ export default function Home() {
               ))}
             </ul>
             <p className="type-label mt-5">
-              Sakhi is in active development · not medical advice · talk to
+              Saumya is in active development · not medical advice · talk to
               your doctor about health decisions
             </p>
           </div>
@@ -585,7 +597,7 @@ export default function Home() {
                 letterSpacing: "-0.01em",
               }}
             >
-              Sakhi
+              Saumya
             </span>
             <p
               className="type-body mt-3 max-w-xs"
@@ -621,7 +633,7 @@ export default function Home() {
                 In active development
               </span>
               <span className="type-label" style={{ color: "var(--ink-subtle)" }}>
-                © {new Date().getFullYear()} Sakhi
+                © {new Date().getFullYear()} Saumya
               </span>
             </div>
           </div>

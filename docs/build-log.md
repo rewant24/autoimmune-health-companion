@@ -267,3 +267,71 @@ Final tally:
 **Scope drift flagged (open, not yet resolved):** `02-memory.md` diverges from `scoping.md` § Memory landing on five points — placement (Memory tab inside Journey vs. top-level `app/(memory)/`), calendar shape (week-at-a-time vs. 30-day strip), filter set (event types vs. check-in metadata), row visuals (task-state vocabulary vs. metric badges), and keyword search (in scoping, not in feature MD). Edit window already aligned at 48h per the locked decision. Reconciliation needed before F02 C1 build dispatch.
 
 **Next decision for Rewant:** reconcile `02-memory.md` against `scoping.md` (rewrite the feature MD to match canonical scoping), OR accept the divergence and treat current `02-memory.md` as the authoritative target for F02 C1 build. Conflict rule says scoping wins — but the feature MD's current shape may reflect post-scoping refinements that should flow back into scoping.md instead.
+
+---
+
+## 2026-04-25 — Session 6: F02 spec rewrite + Vercel production deploy
+
+**Deliverable:** `docs/features/02-memory.md` rewritten end-to-end to match canonical `scoping.md` § Memory landing. F01 deployed to Vercel production.
+
+**F02 spec rewrite (scope drift resolved, option B — direct review, no reviewer subagents).**
+- Placement: Memory is a tab inside Journey pillar. Routes: `app/journey/memory/page.tsx`, `app/journey/memory/[date]/page.tsx`.
+- Calendar: week-at-a-time S/M/T/W/T/F/S strip with swipe nav (replaces 30-day horizontal scrubber).
+- Filters: All / Check-ins / Intake events / Flare-ups / Visits (canonical 5-set).
+- Row visuals: task-state vocabulary (empty circle / green check / red strikethrough). Per-day groups: Today's check-in → Medication intake → Other events → Completed.
+- Keyword search added as Chunk 2.E (debounced, client-side per scoping line 695).
+- Architecture: event-type discriminated union `MemoryEvent = CheckInEvent | IntakeEvent | FlareEvent | VisitEvent`. F02 C1 implements `CheckInEvent` only; F04/F05 plug in additively.
+- 6 chunks across 2 cycles: 2.A (event-type architecture + listEventsByRange + filter predicates), 2.B (tab shell + week scrubber + filter tabs), 2.C (day view + event rows + task-state vocabulary), 2.D (detail sheet + edit-in-place 48h + soft-delete with 5s undo), 2.E (keyword search), 2.F (empty state + paywall + integration test).
+- 12 user stories with full acceptance criteria.
+- Refinement on scoping: soft-delete with 5s undo toast → hard-delete after window. Scoping says "delete is irreversible" — flagged in doc as a refinement, awaiting Rewant signoff.
+- Inherited open scoping items listed (don't block C1): pillar nav shell, `/journey` landing page, auth gate (lands with F02 per ADR-019), paywall mechanics.
+
+**Vercel production deploy (F01 main).**
+- `main` is the production branch on this Vercel project — preview deploy not applicable from main.
+- Production env var `NEXT_PUBLIC_CONVEX_URL=https://hardy-hamster-888.convex.cloud` already set; preview env add attempted but blocked by CLI ("cannot set production branch for a preview env var") — moot since main → production.
+- `vercel deploy --prod --yes` → deployment `dpl_GtwHRAe3xRBwhbRKBPc3377JRQXT`, READY in 36s.
+- Live URLs:
+  - Stable: https://saumya-health-companion.vercel.app
+  - This deploy: https://saumya-health-companion-kg6x4g07r-rewant24s-projects.vercel.app
+  - Check-in flow: https://saumya-health-companion.vercel.app/check-in
+- Caveats for testers: voice = Web Speech (Chrome/Safari, mic prompt on first tap); no auth (placeholder userId, all testers write to same dev row); Convex backend still `dev:hardy-hamster-888` (not prod Convex).
+
+**Working tree state (uncommitted, on `main`):**
+- `M docs/features/02-memory.md` — rewrite awaiting Rewant signoff.
+- `?? .claude/` — backup of handbook content (already in .gitignore at commit `969b5e7`).
+
+**Open for Rewant before F02 C1 build dispatch:**
+1. Sign off on `02-memory.md` rewrite as authoritative spec.
+2. Confirm or revert soft-delete-with-5s-undo refinement (scoping says hard-delete only).
+3. Decide whether to resolve any of the 4 inherited open items now vs. parking them.
+4. Smoke-test F01 on the live Vercel URL — report what breaks.
+
+**Next:** when Rewant returns: dispatch F02 C1 build (chunks 2.A + 2.B + 2.C in parallel as **one multi-tool-call message** per playbook — correcting the F01 C1 deviation where dispatch was serial).
+
+---
+
+## 2026-04-25 — Session 7: Product rename Sakhi → Saumya
+
+**Trigger.** Rewant: "We're going to do a rebranding from Sakhi. Let's go to Saumya."
+
+**Decision rationale.** Captured in ADR-024. Pre-launch, no public users — cheapest moment for a brand swap. *Saumya* (सौम्य, Sanskrit for *gentle, soft, calm, kind*) describes the *quality* of the companion rather than the relationship category, and reads better as a unisex consumer brand.
+
+**What changed (full sweep).**
+- **Launch page (`app/page.tsx`)**: nav wordmark, hero copy, footer wordmark, "What's inside" header, "Why Saumya" section, founder note, italic meaning line in the *Why* block (now: *"Saumya means gentle — सौम्य, soft, calm, kind…"*). New italic after-note added under the waitlist CTA bullets, displayed inline with the bullet list, copy: *"Saumya — सौम्य — Sanskrit for gentle, soft, calm, kind. The presence we're building toward."*
+- **Layout / metadata** (`app/layout.tsx`): page title.
+- **Privacy page** (`app/privacy/page.tsx`): all references.
+- **Components**: `VoiceTranscript.tsx`, `CheckInGrid.tsx`, `WaitlistCount.tsx`.
+- **Package**: `package.json` and `package-lock.json` `name` field both → `saumya`.
+- **Vercel project**: renamed `sakhi-health-companion` → `saumya-health-companion` (project ID `prj_GZxZGm2MVBup58aumsOGecX9gjPU` unchanged so deploys, env vars, integrations stay intact). Local `.vercel/project.json` synced. Old `sakhi-*.vercel.app` aliases continue to resolve. New `saumya-*` aliases will be created on the next `vercel deploy --prod`.
+- **Active docs**: scoping, build-plan, system-map, product-taxonomy, tech-stack, post-mvp-backlog, README, docs/CLAUDE.md, features/01-daily-checkin.md, features/01-daily-checkin-cycle-1-plan.md, features/02-memory.md.
+- **History docs (immutability exception, recorded in ADR-024)**: ADR-001 through ADR-023 product noun replaced (decision content unchanged); prior architecture-changelog entries; prior session entries in this build-log.
+- **Planned save-later key**: `sakhi.saveLater.v1` → `saumya.saveLater.v1` everywhere it appears (ADR-022, ADR-024, this log, changelog). Verified no shipped code uses the old key — purely a forward plan.
+- **ADR-024** added to `architecture-decisions.md`.
+
+**Verified.**
+- `tsc --noEmit` clean.
+- No remaining `Sakhi`/`sakhi` references in code, configs, or active docs (only references that remain are the few inside Session 7 / ADR-024 / changelog rebrand entries that explicitly *cite* the old name as part of recording the rename — these are intentional).
+
+**Not yet done.**
+- Production redeploy to register `saumya-*` aliases — Rewant to trigger `vercel deploy --prod` after reviewing the launch page locally.
+- Decision on whether to remove the old `sakhi-*.vercel.app` aliases (currently kept so old links don't break).

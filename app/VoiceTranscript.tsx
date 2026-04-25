@@ -3,7 +3,7 @@
  *
  * Shows the product's actual differentiator: speech in, structured data out.
  * Three lines of plausible check-in transcript with extracted entities
- * highlighted. Below: a strip of the chips Sakhi would have captured.
+ * highlighted. Below: a strip of the chips Saumya would have captured.
  *
  * No real audio — this is a static, accessible visual representation.
  */
@@ -151,7 +151,7 @@ export function VoiceTranscript() {
       </div>
 
       <figcaption className="type-body italic-soft">
-        Speak naturally. Sakhi pulls the structure.
+        Speak naturally. Saumya pulls the structure.
       </figcaption>
     </figure>
   );

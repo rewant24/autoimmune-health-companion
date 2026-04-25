@@ -9,6 +9,21 @@
 
 ---
 
+## 2026-04-25 — Product rename: Saumya → Saumya (full sweep)
+
+**Scope.** Pre-launch brand rename. ADR-024 records the decision, rationale, and the one-time exception to the ADR-immutability rule.
+
+- **App code:** `app/page.tsx`, `app/layout.tsx`, `app/privacy/page.tsx`, `app/VoiceTranscript.tsx`, `app/CheckInGrid.tsx`, `app/WaitlistCount.tsx`, `package.json` name field, `package-lock.json` name field.
+- **Active docs:** scoping, build-plan, system-map, product-taxonomy, tech-stack, features/*, post-mvp-backlog, README, docs/CLAUDE.md.
+- **History docs (full sweep, immutability exception):** ADR-001 through ADR-023 (product noun replaced; decision content unchanged), prior entries in this changelog, prior session entries in `build-log.md`.
+- **Launch page:** italic *meaning* line in the *Why Saumya* block reads "Saumya means gentle…"; new italic after-note under the waitlist CTA bullets explaining सौम्य.
+- **Planned key:** the (not-yet-shipped) save-later `localStorage` key now spec'd as `saumya.saveLater.v1` everywhere it appears (ADR-022 + this changelog). Verified no shipped code uses the old key, so no migration needed.
+- **Vercel:** project renamed `sakhi-health-companion` → `saumya-health-companion`; project ID unchanged so deployments, env vars, integrations are intact. Old aliases (e.g. `sakhi-health-companion.vercel.app`) continue to resolve — removing them is a separate decision.
+
+**Related.** Adds ADR-024. No prior ADR superseded.
+
+---
+
 ## 2026-04-25 — F01 C2 prep: 6 ADRs locked
 
 **Scope.** Pre-F01-C2 open questions resolved into ADRs 018–023.
@@ -17,7 +32,7 @@
 - **ADR-019** Auth introduction moves out of F01 C2 into F02 work. F01 C2 ships save/confirm/extract with `userId` continuing as a client-trusted arg. Production launch gated on F02 shipping with auth enforced.
 - **ADR-020** Metric extraction (`extractMetrics`, F01 chunk 1.D) routed via Vercel AI Gateway + AI SDK from Next.js. Default model `gpt-4o-mini`. Cost guards (input truncation 2000 tokens, output cap 200 tokens, per-user-per-day attempt counter).
 - **ADR-021** `stage` enum semantics locked: `"open"` (Stage 2 skipped), `"hybrid"` (transcript + Stage 2 fill), `"scripted"` (no usable transcript). Enables ADR-005 success metric (`count(open) / count(open+hybrid)`).
-- **ADR-022** Save-later queue persists to `localStorage` (versioned key `sakhi.saveLater.v1`). Retry-on-reload via shipped idempotency contract (`clientRequestId`).
+- **ADR-022** Save-later queue persists to `localStorage` (versioned key `saumya.saveLater.v1`). Retry-on-reload via shipped idempotency contract (`clientRequestId`).
 - **ADR-023** Post-save confirmation screen is `/check-in/saved` — stable anchor. CTAs evolve as F02 / F08 land; route does not.
 
 **Related.** No prior ADR superseded. Two pre-existing items confirmed (no new ADR needed): mood enum already locked at `convex/schema.ts:19-25`; idempotency already shipped at `convex/checkIns.ts:122-130`.
@@ -99,7 +114,7 @@ Eleven open questions in `scoping.md` resolved in one batch. Open-question count
 **Related ADR:** ADR-006 (opener rules engine), ADR-009 (closer rules engine), ADR-014 (graduated feedback)
 
 **What changed.**
-1. **Onboarding screens 4 and 5 content locked.** Two screens, one feature each, Sakhi speaking first-person. Screen 4 = Voice check-in (*"Talk to me. I'll remember."*) — the activation story. Screen 5 = Memory + Patterns (*"Look back. See what's changed."*) — the retention payoff. Doctor Report and Community deliberately excluded from onboarding — Doctor Report lives on the landing page (revenue-track payoff), Community reveals organically.
+1. **Onboarding screens 4 and 5 content locked.** Two screens, one feature each, Saumya speaking first-person. Screen 4 = Voice check-in (*"Talk to me. I'll remember."*) — the activation story. Screen 5 = Memory + Patterns (*"Look back. See what's changed."*) — the retention payoff. Doctor Report and Community deliberately excluded from onboarding — Doctor Report lives on the landing page (revenue-track payoff), Community reveals organically.
 2. **Nudge bank for non-check-in moments landed** as a new § in scoping.md. 12 lines covering intake tap, dosage/visit capture confirm, Doctor Report generation, annotation, 2+ and 7+ day return, empty Journey/Patterns, missed intake, flare flag, network-retry sync. Separate from the 7-variant closer bank already locked for check-in endings.
 
 Closes open questions #2 and #11 in scoping.md.
@@ -126,7 +141,7 @@ Closes open questions #2 and #11 in scoping.md.
 
 **What changed.** Third aha-moment gap (named social proof) closed. Founder quote locked as the shipping baseline for the landing page:
 
-> *"No one should have to be their own medical logbook. Sakhi is for the people I've watched try."*
+> *"No one should have to be their own medical logbook. Saumya is for the people I've watched try."*
 > — Rewant Prakash, Founder
 
 If a Sonakshi-sourced or other waitlist-member named quote arrives before launch, it swaps in; the founder quote is the guaranteed baseline, not the ceiling.
@@ -139,7 +154,7 @@ If a Sonakshi-sourced or other waitlist-member named quote arrives before launch
 
 **Related ADR:** ADR-001 (Scope → POC → Build methodology — landing-page deliverable)
 
-**What changed.** One-sentence persona pitch locked as: *"Sakhi is for people with chronic autoimmune conditions who shouldn't have to be their own medical logbook."* Ships on the landing page and opens the public launch post.
+**What changed.** One-sentence persona pitch locked as: *"Saumya is for people with chronic autoimmune conditions who shouldn't have to be their own medical logbook."* Ships on the landing page and opens the public launch post.
 
 **Why.** The Revenue-track aha-moment rubric asks for a one-sentence persona job description. Locking one reusable sentence (vs. drafting ad-hoc during launch prep) ensures the landing page and launch post share voice. The sentence reuses the "logbook" motif from the ROI anchor (locked same day), so both pieces of landing-page copy reinforce the same pain framing — *the invisible labor of tracking your own condition between visits.* Alternatives considered: between-visits framing, single-voice/woman-specific framing (dropped for gender narrowness), outcome-forward framing (failed the rubric's ask for a *persona* sentence).
 
@@ -149,9 +164,9 @@ If a Sonakshi-sourced or other waitlist-member named quote arrives before launch
 
 **Related ADR:** ADR-001 (Scope → POC → Build methodology — landing-page deliverable)
 
-**What changed.** Landing-page ROI anchor copy locked as: *"Stop being the logbook for your own condition. Sakhi remembers every dose change, every flare, every off day — so your doctor sees the full picture, not just today."* Replaces earlier draft (*"One visit you don't have to repeat pays for a year of Sakhi."*). Ships on the MVP landing-page push.
+**What changed.** Landing-page ROI anchor copy locked as: *"Stop being the logbook for your own condition. Saumya remembers every dose change, every flare, every off day — so your doctor sees the full picture, not just today."* Replaces earlier draft (*"One visit you don't have to repeat pays for a year of Saumya."*). Ships on the MVP landing-page push.
 
-**Why.** The earlier draft framed the ROI as saving a repeat visit — which isn't the primary pain. Rewant clarified the pain is the *invisible labor between visits*: patients manually or mentally tracking 2–3 months of symptoms and dosage changes, then compressing it into a 10-minute OPD window. The new copy sells against that cognitive load directly — *"stop being the logbook for your own condition"* names the burden, and the dose-change / flare / off-day list spells out what Sakhi actually remembers. Closes with the doctor-outcome tie-in.
+**Why.** The earlier draft framed the ROI as saving a repeat visit — which isn't the primary pain. Rewant clarified the pain is the *invisible labor between visits*: patients manually or mentally tracking 2–3 months of symptoms and dosage changes, then compressing it into a 10-minute OPD window. The new copy sells against that cognitive load directly — *"stop being the logbook for your own condition"* names the burden, and the dose-change / flare / off-day list spells out what Saumya actually remembers. Closes with the doctor-outcome tie-in.
 
 ---
 
@@ -161,7 +176,7 @@ If a Sonakshi-sourced or other waitlist-member named quote arrives before launch
 
 **What changed.** Added § Rubric positioning to scoping.md. Revenue track (176-pt ceiling) picked as the target over Virality (164) or MaaS (164). Aha-moment features audited against the Revenue-track rubric; 4 patterns scored (sub-60s time-to-first-value ✅, obvious ROI calc ⚠️, one-sentence persona ⚠️, social proof ❌). Launch-day deliverable timeline mapped to explicit pre-launch gates.
 
-**Why.** The rubric awards most heavily on Signups (20x weight) and Revenue generated (15x), both of which Sakhi can clear with a free-tier + founder-tier pricing model and a waitlist already in motion. Virality was ruled out because chronic-illness apps live in a private category — optimizing Sakhi for shareable mechanics would distort the product. Three aha-moment patterns are addressable inside MVP scope (ROI copy on landing page, one-sentence persona pitch, one named testimonial).
+**Why.** The rubric awards most heavily on Signups (20x weight) and Revenue generated (15x), both of which Saumya can clear with a free-tier + founder-tier pricing model and a waitlist already in motion. Virality was ruled out because chronic-illness apps live in a private category — optimizing Saumya for shareable mechanics would distort the product. Three aha-moment patterns are addressable inside MVP scope (ROI copy on landing page, one-sentence persona pitch, one named testimonial).
 
 ---
 
@@ -200,12 +215,12 @@ If a Sonakshi-sourced or other waitlist-member named quote arrives before launch
 **Related ADR:** ADR-013 (Tripartite Prepare-for-Visit)
 
 **What changed.** Two post-MVP items dropped from backlog:
-1. *Provider result attachments* — file upload + PHI storage for doctor notes / prescriptions. Removed because the reference-app inspiration was purely layout-based and this workflow was never part of Sakhi's own scope.
-2. *Squad / caregiver co-use mode* — multi-user squad editing. Removed because the conceptual framing is from the reference app (Kinery / Sandy's Squad), not Sakhi's.
+1. *Provider result attachments* — file upload + PHI storage for doctor notes / prescriptions. Removed because the reference-app inspiration was purely layout-based and this workflow was never part of Saumya's own scope.
+2. *Squad / caregiver co-use mode* — multi-user squad editing. Removed because the conceptual framing is from the reference app (Kinery / Sandy's Squad), not Saumya's.
 
-The *support-system shared read-only view* (backlog item #5) remains — that one is Sakhi-native and was scoped independently. Language updated to *"support system"*, never *"squad"* or *"caregiver"*.
+The *support-system shared read-only view* (backlog item #5) remains — that one is Saumya-native and was scoped independently. Language updated to *"support system"*, never *"squad"* or *"caregiver"*.
 
-**Why.** Rewant confirmed the reference-app Figma was inspiration only — layout patterns (cards, stepwise forms, checklists) port; workflows (squad coordination, provider file sharing) do not. Keeping those workflows in the backlog created drift toward a product shape Sakhi is not.
+**Why.** Rewant confirmed the reference-app Figma was inspiration only — layout patterns (cards, stepwise forms, checklists) port; workflows (squad coordination, provider file sharing) do not. Keeping those workflows in the backlog created drift toward a product shape Saumya is not.
 
 ---
 
@@ -213,7 +228,7 @@ The *support-system shared read-only view* (backlog item #5) remains — that on
 
 **Related ADR:** ADR-001 (Scope → POC → Build — now extends to pricing at MVP launch)
 
-**What changed.** Post-MVP item #20 *"Monetization / paywall logic"* expanded from one-line placeholder into a first-pass design: two-tier **Free (Sakhi Friend) / Paid (Sakhi Companion)** model, ₹199/month or ₹1,499/year in India, $4.99/month or $39/year internationally, Razorpay + Stripe rails, waitlist early-bird gate (first 100 get 3 months free) landing on the MVP launch page. Gates fall on unlimited Memory history, unlimited reports, Patterns view, and future wearable / support-system features. Daily check-in and Community stay free forever.
+**What changed.** Post-MVP item #20 *"Monetization / paywall logic"* expanded from one-line placeholder into a first-pass design: two-tier **Free (Saumya Friend) / Paid (Saumya Companion)** model, ₹199/month or ₹1,499/year in India, $4.99/month or $39/year internationally, Razorpay + Stripe rails, waitlist early-bird gate (first 100 get 3 months free) landing on the MVP launch page. Gates fall on unlimited Memory history, unlimited reports, Patterns view, and future wearable / support-system features. Daily check-in and Community stay free forever.
 
 **Why.** The Revenue track (176-pt ceiling, highest of the three) awards weighted points for *actual revenue generated* and *paid signups*. A visible pricing page at launch — even without live checkout — converts waitlist curiosity into revenue-track evidence. An optional *"Pay ₹99 to skip the waitlist"* founder-tier seeds the *revenue generated* metric at the rubric's scoring moment.
 
@@ -245,7 +260,7 @@ The *support-system shared read-only view* (backlog item #5) remains — that on
 
 **What changed.** Internal placeholder `[LOG]` (used throughout early scoping) was resolved to the user-facing term **"Memory"**. Find-and-replace completed across `scoping.md` (31 occurrences). Future copy uses "Memory" as a proper noun with possessive forms (*"your Memory"*).
 
-**Why.** The original placeholder was too clinical; "Memory" ties directly to the README's brand story (*"Sakhi means friend — the one who remembers with you"*). Candidate alternatives (Journal, Timeline, Diary) were warmer than `[LOG]` but less brand-operative.
+**Why.** The original placeholder was too clinical; "Memory" ties directly to the README's brand story (*"Saumya means gentle — the presence that remembers with you"*). Candidate alternatives (Journal, Timeline, Diary) were warmer than `[LOG]` but less brand-operative.
 
 ---
 
