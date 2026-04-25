@@ -7,8 +7,10 @@
  * Feature 01, Cycle 2, Chunk 2.E, US-1.H.2 + US-1.H.3.
  *
  * Behaviour:
- *   - Renders `<p>{text}</p>` plus a small speaker-icon button labelled
- *     "Replay" that re-speaks the current text on click.
+ *   - Renders the opener text inside an `<h1>` page heading (a11y
+ *     landmark — the orb screen would otherwise have no heading) plus
+ *     a small speaker-icon button labelled "Replay" that re-speaks
+ *     the current text on click.
  *   - On mount (and when `variantKey` changes), auto-speaks the text
  *     if all three conditions hold:
  *       1. `isTtsAvailable()` returns true.
@@ -19,9 +21,10 @@
  *   - When TTS is unavailable, the speaker button is hidden entirely.
  *
  * Mute long-press (US-1.H.3): a 1s press-and-hold on the speaker icon
- * opens a small popover with a single "Mute Saumya's voice" action;
- * confirming sets `saumya.ttsDisabled = 'true'` in localStorage. A
- * short tap is a normal replay click.
+ * opens a small popover with a "Mute Saumya's voice" action when TTS
+ * is currently active, or an "Un-mute Saumya's voice" action when it's
+ * been muted. Confirming flips `saumya.ttsDisabled` in localStorage.
+ * A short tap is a normal replay click.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -85,6 +88,11 @@ export function SpokenOpener({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFired = useRef(false)
   const [muteOpen, setMuteOpen] = useState(false)
+  // Re-read `ttsDisabled` whenever the popover opens so the popover's
+  // action text reflects the current state. We don't subscribe to
+  // localStorage changes globally — the only place that flips this is
+  // the popover itself, so refreshing on open is sufficient.
+  const [muted, setMuted] = useState(false)
 
   const speak = useCallback(
     (value: string): void => {
@@ -115,6 +123,7 @@ export function SpokenOpener({
     if (longPressTimer.current) clearTimeout(longPressTimer.current)
     longPressTimer.current = setTimeout(() => {
       longPressFired.current = true
+      setMuted(readTtsDisabled())
       setMuteOpen(true)
     }, LONG_PRESS_MS)
   }, [])
@@ -140,14 +149,23 @@ export function SpokenOpener({
   const onConfirmMute = useCallback(() => {
     writeTtsDisabled(true)
     ttsRef.current?.cancel()
+    setMuted(true)
     setMuteOpen(false)
   }, [])
+
+  const onConfirmUnmute = useCallback(() => {
+    writeTtsDisabled(false)
+    setMuted(false)
+    setMuteOpen(false)
+    // Speak immediately so the user gets confirmation that voice is back.
+    if (available) speak(text)
+  }, [available, speak, text])
 
   const onDismissMute = useCallback(() => setMuteOpen(false), [])
 
   return (
     <div className="relative flex flex-col items-center gap-2">
-      <p className="text-center text-base text-zinc-800 dark:text-zinc-100">
+      <h1 className="text-center text-base font-normal text-zinc-800 dark:text-zinc-100">
         <span data-testid="spoken-opener-text">{text}</span>
         {available ? (
           <button
@@ -169,7 +187,7 @@ export function SpokenOpener({
             <SpeakerGlyph />
           </button>
         ) : null}
-      </p>
+      </h1>
 
       {muteOpen ? (
         <div
@@ -181,17 +199,30 @@ export function SpokenOpener({
             'dark:border-zinc-800 dark:bg-zinc-900'
           }
         >
-          <button
-            type="button"
-            onClick={onConfirmMute}
-            className={
-              'rounded-md bg-zinc-900 px-3 py-2 text-xs font-medium text-white ' +
-              'hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 ' +
-              'dark:hover:bg-zinc-200'
-            }
-          >
-            Mute Saumya&apos;s voice
-          </button>
+          {muted ? (
+            <button
+              type="button"
+              onClick={onConfirmUnmute}
+              className={
+                'rounded-md bg-teal-700 px-3 py-2 text-xs font-medium text-white ' +
+                'hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-700'
+              }
+            >
+              Un-mute Saumya&apos;s voice
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onConfirmMute}
+              className={
+                'rounded-md bg-zinc-900 px-3 py-2 text-xs font-medium text-white ' +
+                'hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 ' +
+                'dark:hover:bg-zinc-200'
+              }
+            >
+              Mute Saumya&apos;s voice
+            </button>
+          )}
           <button
             type="button"
             onClick={onDismissMute}

@@ -27,6 +27,8 @@
  *     and so jsdom-driven tests don't need a matchMedia polyfill.
  */
 
+import { useEffect, useRef } from 'react'
+
 import type { MilestoneKind } from '@/lib/checkin/types'
 
 const DAY_COUNT_FOR_KIND: Record<MilestoneKind, number> = {
@@ -39,6 +41,35 @@ const DAY_COUNT_FOR_KIND: Record<MilestoneKind, number> = {
 }
 
 const RING_VISUAL_CAP = 30
+
+/**
+ * Friendly aria-label per milestone kind. Avoid "day-30 milestone"
+ * jargon — screen readers should announce "30-day streak celebration".
+ * `day-1` reads as "first check-in" since it isn't a streak yet.
+ */
+const ARIA_LABEL_FOR_KIND: Record<MilestoneKind, string> = {
+  'day-1': 'First check-in celebration',
+  'day-7': '7-day streak celebration',
+  'day-30': '30-day streak celebration',
+  'day-90': '90-day streak celebration',
+  'day-180': '180-day streak celebration',
+  'day-365': '365-day streak celebration',
+}
+
+/**
+ * Visible tier label. day-30/90/180/365 all render the same 30-ring
+ * grid (cap), so without this label the four longer milestones look
+ * identical. The label is also the only place the actual day count is
+ * surfaced for `day-90` / `day-180` / `day-365`.
+ */
+const TIER_LABEL_FOR_KIND: Record<MilestoneKind, string> = {
+  'day-1': 'Day 1',
+  'day-7': '7 days',
+  'day-30': '30 days',
+  'day-90': '90 days',
+  'day-180': '180 days',
+  'day-365': '365 days',
+}
 
 export interface MilestoneCelebrationProps {
   kind: MilestoneKind
@@ -56,6 +87,15 @@ export function MilestoneCelebration({
   const dayCount = DAY_COUNT_FOR_KIND[kind]
   const ringCount = Math.min(dayCount, RING_VISUAL_CAP)
   const reducedAttr = prefersReducedMotion ? 'true' : 'false'
+  const continueButtonRef = useRef<HTMLButtonElement | null>(null)
+
+  // Move focus to the continue button on mount — without this, focus
+  // stays on whatever was focused before the overlay opened (often the
+  // ConfirmSummary save button, now hidden), which strands keyboard
+  // and screen-reader users outside the dialog.
+  useEffect(() => {
+    continueButtonRef.current?.focus()
+  }, [])
 
   return (
     <section
@@ -63,7 +103,8 @@ export function MilestoneCelebration({
       data-kind={kind}
       data-day-count={dayCount}
       role="dialog"
-      aria-label={`${kind} milestone`}
+      aria-modal="true"
+      aria-label={ARIA_LABEL_FOR_KIND[kind]}
       className={
         'fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 ' +
         'bg-white/95 px-6 backdrop-blur dark:bg-zinc-950/95'
@@ -75,6 +116,13 @@ export function MilestoneCelebration({
       >
         {closerText}
       </h2>
+
+      <p
+        data-testid="milestone-tier-label"
+        className="text-center text-sm font-semibold uppercase tracking-wider text-teal-700 dark:text-teal-300"
+      >
+        {TIER_LABEL_FOR_KIND[kind]}
+      </p>
 
       <div
         data-testid="milestone-ring-stack"
@@ -101,12 +149,13 @@ export function MilestoneCelebration({
       </div>
 
       <button
+        ref={continueButtonRef}
         type="button"
         onClick={onContinue}
         className={
           'inline-flex min-h-12 items-center justify-center rounded-full ' +
-          'bg-teal-600 px-8 text-sm font-semibold text-white shadow-sm ' +
-          'transition hover:bg-teal-700 focus-visible:outline-none ' +
+          'bg-teal-700 px-8 text-sm font-semibold text-white shadow-sm ' +
+          'transition hover:bg-teal-800 focus-visible:outline-none ' +
           'focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2'
         }
       >

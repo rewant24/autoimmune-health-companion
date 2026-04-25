@@ -22,9 +22,14 @@ export function detectMilestone(
   streakDaysAfterSave: number,
   isFirstEver: boolean,
 ): MilestoneKind | null {
-  if (isFirstEver) return 'day-1'
+  // Defensive guards run BEFORE the isFirstEver short-circuit so a
+  // garbage `streakDaysAfterSave` (NaN, ±Infinity, 0, negative) doesn't
+  // get masked by the first-ever path. Callers that pass `isFirstEver:
+  // true` should always pair it with `streakDaysAfterSave: 1`; if they
+  // don't, refusing to celebrate is safer than celebrating on bad data.
   if (!Number.isFinite(streakDaysAfterSave)) return null
   if (streakDaysAfterSave <= 0) return null
+  if (isFirstEver) return 'day-1'
   if (!MILESTONE_THRESHOLDS.has(streakDaysAfterSave)) return null
   return `day-${streakDaysAfterSave}` as MilestoneKind
 }

@@ -215,22 +215,34 @@ export default function CheckinPage({
     userId,
     todayIso,
   })
+  // FALLBACK is for first-paint only (orb screen renders an opener
+  // string immediately). Save-time effects MUST gate on
+  // `continuityResolved` — the fallback's `isFirstEverCheckin: true`
+  // would otherwise trigger a Day-1 milestone for every save while the
+  // query is still in flight.
+  const continuityResolved = continuityQuery !== undefined
   const continuityState: ContinuityState = continuityQuery ?? FALLBACK_CONTINUITY
 
   // Same-day re-entry detection (chunk 2.F). When non-null, an open
   // check-in already exists for today — opener variant becomes
   // `re-entry-same-day` (driven by continuity.lastCheckinDaysAgo === 0)
   // and `onSave` builds an `appendedTo` payload via `buildAppendPayload`
-  // instead of a fresh row.
+  // instead of a fresh row. We track the resolved/loading distinction
+  // explicitly: a save before the query resolves would race into a
+  // fresh-row write that the server would then reject as
+  // `checkin.duplicate`.
   const todayCheckinQuery = useQuery(api.checkIns.getTodayCheckin, {
     userId,
     date: todayIso,
   })
+  const todayCheckinResolved = todayCheckinQuery !== undefined
   const existingTodayRow: CheckinRow | null = todayCheckinQuery ?? null
 
   // Day-1 mode: `Stage2` shows all 5 controls + we wrap it in
   // `<Day1Tutorial>` to render the tap-to-edit ribbon below it.
-  const isDay1 = continuityState.isFirstEverCheckin
+  // Gated on `continuityResolved` so the FALLBACK's true value doesn't
+  // briefly force Day-1 mode for repeat users mid-load.
+  const isDay1 = continuityResolved && continuityState.isFirstEverCheckin
 
   // `prefers-reduced-motion` snapshot — read once on the client. SSR
   // returns false; MilestoneCelebration accepts this as a prop so the
@@ -251,6 +263,21 @@ export default function CheckinPage({
     () => selectCloser(continuityState),
     [continuityState],
   )
+  // Post-save closer — reflects state AFTER this save. Only differs
+  // from `closerSelection` when the +1 lands on a milestone threshold
+  // (streak in {7,30,90,180,365}). Used by the milestone overlay and
+  // the /check-in/saved redirect so a day-7 save shows "Seven days.
+  // That's real." instead of the pre-save neutral default.
+  const postSaveCloser = useMemo(
+    () =>
+      selectCloser({
+        ...continuityState,
+        streakDays: continuityState.streakDays + 1,
+        // First-ever check-in is no longer "first-ever" once it saves.
+        isFirstEverCheckin: false,
+      }),
+    [continuityState],
+  )
 
   const createCheckin = useMutation(api.checkIns.createCheckin)
 
@@ -264,6 +291,14 @@ export default function CheckinPage({
     const snapshot = confirmingRef.current
     if (!snapshot) {
       throw new Error('No confirming snapshot — cannot save.')
+    }
+    // Block until `getTodayCheckin` resolves — without this gate, a save
+    // fired during the loading window writes a fresh row that the server
+    // then rejects with `checkin.duplicate` because today's row already
+    // exists. The state machine surfaces this as a save-failure, which
+    // is exactly the wrong UX for a same-day re-entry.
+    if (!todayCheckinResolved) {
+      throw new Error('Today-row query still loading — retry pending.')
     }
     const clientRequestId = newRequestId()
     const durationMs = snapshot.transcript.durationMs ?? 0
@@ -380,8 +415,13 @@ export default function CheckinPage({
   //    user's first-ever check-in), dispatch `MILESTONE_DETECTED` so the
   //    state machine moves to `celebrating` and the page renders the
   //    Whoop-style ring overlay. Otherwise, route straight to /saved.
+  //
+  //    Gated on `continuityResolved` — the FALLBACK has
+  //    `isFirstEverCheckin: true`, which would otherwise fire a Day-1
+  //    celebration on every save during the query's loading window.
   useEffect(() => {
     if (state.kind !== 'saved') return
+    if (!continuityResolved) return
     const milestone = detectMilestone(
       continuityState.streakDays + 1,
       continuityState.isFirstEverCheckin,
@@ -390,12 +430,13 @@ export default function CheckinPage({
       dispatch({ type: 'MILESTONE_DETECTED', milestone })
       return
     }
-    const url = `/check-in/saved?closer=${encodeURIComponent(closerSelection.text)}`
+    const url = `/check-in/saved?closer=${encodeURIComponent(postSaveCloser.text)}`
     router.push(url)
   }, [
     state.kind,
     router,
-    closerSelection.text,
+    postSaveCloser.text,
+    continuityResolved,
     continuityState.streakDays,
     continuityState.isFirstEverCheckin,
     dispatch,
@@ -461,10 +502,10 @@ export default function CheckinPage({
       <ScreenShell>
         <MilestoneCelebration
           kind={state.milestone}
-          closerText={closerSelection.text}
+          closerText={postSaveCloser.text}
           prefersReducedMotion={prefersReducedMotion}
           onContinue={() => {
-            const url = `/check-in/saved?closer=${encodeURIComponent(closerSelection.text)}`
+            const url = `/check-in/saved?closer=${encodeURIComponent(postSaveCloser.text)}`
             router.push(url)
           }}
         />
