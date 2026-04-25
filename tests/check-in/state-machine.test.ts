@@ -495,3 +495,96 @@ describe('reducer: milestone transitions (Wave 2 readiness)', () => {
     expect(next).toEqual({ kind: 'celebrating', milestone: 'day-7' })
   })
 })
+
+describe('reducer: voice C1 dialog states (pre-flight no-ops)', () => {
+  // Per ADR-026 + voice-cycle-1-plan §State-machine extension protocol:
+  // pre-flight ships the union shapes + no-op transitions. Wave 2 wires
+  // the actual transitions per the protocol. These tests assert (a) the
+  // unions compile (the file imports the new state shapes) and (b)
+  // every new state ignores BAIL_TO_TAPS without crashing — Wave 2
+  // tests will replace these with real transition assertions.
+  const baseTranscript: Transcript = { text: 'hello', durationMs: 1000 }
+
+  it('speaking-opener + BAIL_TO_TAPS → state unchanged (pre-flight no-op)', () => {
+    const s: State = {
+      kind: 'speaking-opener',
+      text: 'Welcome back.',
+      variantKey: 'first-ever',
+    }
+    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual(s)
+  })
+
+  it('speaking-question + BAIL_TO_TAPS → state unchanged (pre-flight no-op)', () => {
+    const s: State = {
+      kind: 'speaking-question',
+      metric: 'pain',
+      text: 'How is your pain today?',
+      metrics: {},
+      missing: ['pain', 'mood'],
+      declined: [],
+      transcript: baseTranscript,
+    }
+    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual(s)
+  })
+
+  it('listening-answer + BAIL_TO_TAPS → state unchanged (pre-flight no-op)', () => {
+    const s: State = {
+      kind: 'listening-answer',
+      metric: 'pain',
+      partial: 'about a four',
+      metrics: {},
+      missing: ['pain'],
+      declined: [],
+      transcript: baseTranscript,
+    }
+    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual(s)
+  })
+
+  it('extracting-answer + BAIL_TO_TAPS → state unchanged (pre-flight no-op)', () => {
+    const s: State = {
+      kind: 'extracting-answer',
+      metric: 'pain',
+      answerTranscript: { text: 'about a four', durationMs: 2000 },
+      metrics: {},
+      missing: ['pain'],
+      declined: [],
+      transcript: baseTranscript,
+    }
+    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual(s)
+  })
+
+  it('speaking-closer + BAIL_TO_TAPS → state unchanged (pre-flight no-op)', () => {
+    const s: State = {
+      kind: 'speaking-closer',
+      text: 'See you tomorrow.',
+      metrics: {
+        pain: 4,
+        mood: 'okay',
+        adherenceTaken: true,
+        flare: 'no',
+        energy: 6,
+      },
+      declined: [],
+      stage: 'open',
+      transcript: baseTranscript,
+    }
+    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual(s)
+  })
+
+  it('union compiles: every new event type is assignable to Event', () => {
+    // Type-level assertion — if any new event type is missing from the
+    // Event union, this file fails tsc. The runtime assertion is just
+    // a sentinel.
+    const events: Array<Parameters<typeof reducer>[1]> = [
+      { type: 'OPENER_PLAYED' },
+      { type: 'OPENER_FAILED' },
+      { type: 'ASK_QUESTION', metric: 'pain', text: 'How is your pain?' },
+      { type: 'QUESTION_PLAYED' },
+      { type: 'ANSWER_TRANSCRIBED', transcript: baseTranscript },
+      { type: 'ANSWER_EXTRACTED', metrics: { pain: 4 }, declined: false },
+      { type: 'BAIL_TO_TAPS' },
+      { type: 'CLOSER_PLAYED' },
+    ]
+    expect(events).toHaveLength(8)
+  })
+})
