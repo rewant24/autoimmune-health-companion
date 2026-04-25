@@ -65,13 +65,18 @@ export function readProfile(): Profile | null {
   return parsed as Profile
 }
 
+let warnedQuota = false
+
 /**
  * Merges `patch` over the persisted profile (or a fresh shape if none exists),
  * stamps `updatedAtMs`, and stamps `createdAtMs` once on first write. Returns
  * the resulting Profile.
  *
- * Build-B will likely add quota-exceeded handling here. Pre-flight starter
- * lets writes throw, which surfaces issues early in tests.
+ * Build-B extension: quota-exceeded errors are caught and logged once, the
+ * in-memory next shape is still returned so callers can keep going (the user
+ * can retry; a non-blocking surfacing is the caller's responsibility). Other
+ * unexpected storage errors are also swallowed once-warned — the contract
+ * stays "writes never throw" so route handlers stay simple.
  */
 export function writeProfile(patch: Partial<Profile>): Profile {
   const now = Date.now()
@@ -97,20 +102,76 @@ export function writeProfile(patch: Partial<Profile>): Profile {
     updatedAtMs: now,
   }
   if (isBrowser) {
-    window.localStorage.setItem(PROFILE_KEY, JSON.stringify(next))
+    try {
+      window.localStorage.setItem(PROFILE_KEY, JSON.stringify(next))
+    } catch (err) {
+      if (!warnedQuota) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[profile] failed to persist to ${PROFILE_KEY}; in-memory shape returned`,
+          err,
+        )
+        warnedQuota = true
+      }
+    }
   }
   return next
 }
 
-/** Test/dev helper. Build-B may keep as-is. */
+/** Test/dev helper. */
 export function clearProfile(): void {
   if (isBrowser) {
-    window.localStorage.removeItem(PROFILE_KEY)
+    try {
+      window.localStorage.removeItem(PROFILE_KEY)
+    } catch {
+      // best-effort
+    }
   }
   warnedCorrupt = false
+  warnedQuota = false
 }
 
 /** Marks the profile as onboarded. Called from the /welcome screen on mount. */
 export function markOnboarded(): Profile {
   return writeProfile({ onboarded: true })
+}
+
+/**
+ * Setup B step ordering. Pure helper (no signature in the locked seam) used by
+ * the /setup/* direct-link guards: a step page calls
+ * `firstMissingSetupStep(readProfile())` and redirects there if the user
+ * skipped ahead. Keeping it in storage.ts so the four Setup pages don't each
+ * re-derive ordering.
+ */
+export type SetupStep = 'name' | 'dob' | 'email' | 'condition'
+
+export const SETUP_STEP_ORDER: readonly SetupStep[] = [
+  'name',
+  'dob',
+  'email',
+  'condition',
+] as const
+
+/**
+ * Returns the first incomplete Setup B step given a profile (or null if it's
+ * missing entirely — caller treats that as "start at name").
+ *
+ * Returns null when every required field is filled.
+ */
+export function firstMissingSetupStep(
+  profile: Profile | null,
+): SetupStep | null {
+  if (profile === null) return 'name'
+  if (profile.name === null || profile.name.trim().length === 0) return 'name'
+  if (profile.dobIso === null) return 'dob'
+  if (profile.email === null || profile.email.trim().length === 0) return 'email'
+  if (profile.condition === null) return 'condition'
+  if (
+    profile.condition === 'other' &&
+    (profile.conditionOther === null ||
+      profile.conditionOther.trim().length === 0)
+  ) {
+    return 'condition'
+  }
+  return null
 }
