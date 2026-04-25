@@ -122,18 +122,23 @@ export function markOnboarded(): Profile
 
 The shape is **versioned via `v: 1`**; future migrations bump `v` and add a migrator. Corrupted JSON → `readProfile()` returns `null` (logs once); `writeProfile` overwrites with a fresh shape.
 
+**Ownership refinement (2026-04-26 pre-flight):** the orchestrator stamps **both** `lib/profile/types.ts` (canonical — Build-B may not modify) **and** a thin starter `lib/profile/storage.ts` exporting all four functions in pre-flight, so Build-A/B/C can import a working seam from day one without ordering dependencies. Build-B continues to *own* `storage.ts` — it may extend the implementation (richer error handling, telemetry, etc.) but the exported function signatures plus `PROFILE_KEY` re-export are locked. Build-B also owns the deeper storage tests (round-trips per Setup-screen flow, quota-exceeded handling, etc.); the orchestrator ships `tests/profile/contract.test.ts` as the seam guard, and Build-B's tests must keep those passing.
+
 ---
 
 ## Task 0: Pre-flight (orchestrator only)
 
-**Why:** Confirm baseline green. No code changes — this cycle has no schema migration, no shared state machine to extend, no env vars to add.
+**Why:** Confirm baseline green and stamp the locked profile seam so all three Wave-1 agents start against the same shape.
 
 ### Steps
 
-- [ ] **0.1** — Confirm `main` already includes the Saha rebrand merge (`b79f494` per memory). If not, wait for that to land before branching.
-- [ ] **0.2** — Branch from `main` at `f01-c2/shipped` (post-rebrand): `git checkout -b feat/onboarding-shell main`. Verify clean tree.
-- [ ] **0.3** — Run `npm run test:run`, `npx tsc --noEmit`, `npm run build`. Confirm baseline green (expected: 441/441 vitest per memory snapshot).
-- [ ] **0.4** — Commit this plan file. Tag `onboarding-shell/plan-saved`. Append phase entry to `docs/build-log.md`.
+- [x] **0.1** — Confirm `main` includes the Saha rebrand merge (`b79f494`) and the SSR hardening fix (`6977284`).
+- [x] **0.2** — Branch `feat/onboarding-shell-build` off `main` (post-rebrand, post-SSR-fix).
+- [x] **0.3** — Run `npm run test:run`, `npx tsc --noEmit`, `npm run build`. Baseline confirmed green: 441/441 vitest.
+- [x] **0.4** — Cherry-pick the plan commit (`45ee765`) onto the build branch so the plan lives alongside the code.
+- [x] **0.5** — Stamp the locked seam: `lib/profile/types.ts` (canonical) + `lib/profile/storage.ts` (Build-B owns + extends; signatures locked) + `tests/profile/contract.test.ts` (seam guard).
+- [ ] **0.6** — Re-run `npm run test:run`, `npx tsc --noEmit`, `npm run build`. Contract tests pass on top of baseline (expected: 441 + 12 = 453 / 453).
+- [ ] **0.7** — Commit + tag `onboarding-shell/pre-flight-done`. Append phase entry to `docs/build-log.md`. Push branch + tag.
 
 ---
 
