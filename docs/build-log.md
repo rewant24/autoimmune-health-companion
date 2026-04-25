@@ -613,6 +613,31 @@ State-machine unit tests grew by 19 cases (47/47 total) covering: scripted/hybri
 
 ---
 
+## 2026-04-25 · Session 12 — Voice C1 plan saved, Onboarding plan parked
+
+**Outcome.** Voice cycle pulled forward (originally Cycle 4/5 in the 6-cycle plan) with conversational scope locked: Saha speaks opener (Sarvam TTS), listens to freeform reply (Sarvam STT), follow-up questions for missing metrics, "Switch to taps" bail-out always visible. Plan written to `docs/features/voice-cycle-1-plan.md` and tagged on `feat/voice-sarvam`.
+
+**Branch hygiene.**
+- `feat/voice-sarvam` fast-forwarded past the rebrand merge (`b79f494`) so voice work starts from the post-rebrand main. Plan committed at `73d6204`, tagged `voice-c1/plan-saved`.
+- Sweep applied to the plan: `ADR-025` → `ADR-026` (ADR-025 is now the Saumya→Saha rebrand); two memory-path typos `rewantprakash_1` → `rewantprakash-1` corrected.
+- Onboarding Shell cycle plan (`docs/features/00-onboarding-shell-cycle-plan.md`, 383 lines) was drafted alongside the voice plan but covers a separate cycle. Moved to its own branch `feat/onboarding-shell-plan` (commit `318cac2`) so each cycle's plan lives where its work will happen. The branch is parked — sequencing per locked 6-cycle plan still puts Onboarding ahead of voice; revisit which cycle ships next when voice C1 wraps.
+
+**Locked decisions for voice C1 (this session).**
+- **Provider:** Sarvam AI for both STT and TTS (not OpenAI Realtime). Web Speech retained as dev/test fallback.
+- **Conversational shape:** Multi-turn — extract from freeform reply, then per-metric follow-up questions for whatever was missed. Re-ask once on no-answer, then mark `declined`.
+- **Bail-out:** B3 — single "Switch to taps" affordance on every voice screen, forward-only (cannot return to voice from Stage 2 in cycle 1). Partial metrics preserved on bail.
+- **Sequencing:** Path 1 — voice off post-C2 main. (C2 was already shipped before this session began; rebrand merged after; voice branch starts from the rebrand-merged main.)
+- **ADR plan:** ADR-026 will supersede ADR-018 on the Sarvam-deferral. ADR-018 stays in the record as point-in-time rationale.
+
+**Open follow-ups.**
+- Pre-flight Task 0 (steps 0.1–0.13 in the plan): write ADR-026, install `sarvamai`, scaffold env vars, extend `lib/voice/types.ts` + `lib/voice/provider.ts` + state machine, run STT and TTS audio-format spikes, smoke baseline.
+- Update `~/.claude/projects/-Users-rewantprakash-1/memory/project_sakhi_voice_sarvam.md` to reflect the conversational scope expansion (currently records STT-only architecture).
+- Onboarding branch is parked — when revisiting, rebase/fast-forward onto whatever main is at that point and confirm the locked Saha "endurance + together" voice still flows through the locked copy lines on Screens 2–5.
+
+**Next.** Run pre-flight Task 0 on `feat/voice-sarvam`. Do not dispatch Wave 1 until pre-flight is green and Rewant signals.
+
+---
+
 ## 2026-04-26 — Session 13: Onboarding Shell pre-flight (Task 0)
 
 **Branch.** `feat/onboarding-shell-build` cut from `main` at `6977284` (post-rebrand, post-SSR-hardening). Plan commit (`45ee765`) cherry-picked across from `feat/onboarding-shell-plan` so the cycle plan lives alongside the code.
