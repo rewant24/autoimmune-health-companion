@@ -208,18 +208,35 @@ export default function CheckinPage({
   )
 
   const router = useRouter()
-  const userId = useMemo(getOrCreateTestUserId, [])
-  const todayIso = useMemo(todayIsoDate, [])
+  // SSR-safe identity + date.
+  //
+  // `getOrCreateTestUserId` reads `localStorage`; `todayIsoDate` reads
+  // the device clock. Both can return different values on the server
+  // (where `localStorage` is undefined and the clock is the deploy
+  // host's clock) than on the client. Calling them inside `useMemo`
+  // ran them during the SSR pre-render AND during the client's first
+  // render, producing divergent HTML and a React #418 hydration
+  // mismatch — visible in production once Convex queries started
+  // throwing on top of it. Defer both to a post-mount `useEffect`,
+  // and skip the dependent Convex queries until we have the real
+  // values. First render on server and on client now both see
+  // `null` → identical HTML → no mismatch.
+  const [userId, setUserId] = useState<string | null>(null)
+  const [todayIso, setTodayIso] = useState<string | null>(null)
+  useEffect(() => {
+    setUserId(getOrCreateTestUserId())
+    setTodayIso(todayIsoDate())
+  }, [])
 
-  const continuityQuery = useQuery(api.continuity.getContinuityState, {
-    userId,
-    todayIso,
-  })
+  const continuityQuery = useQuery(
+    api.continuity.getContinuityState,
+    userId !== null && todayIso !== null ? { userId, todayIso } : 'skip',
+  )
   // FALLBACK is for first-paint only (orb screen renders an opener
   // string immediately). Save-time effects MUST gate on
   // `continuityResolved` — the fallback's `isFirstEverCheckin: true`
   // would otherwise trigger a Day-1 milestone for every save while the
-  // query is still in flight.
+  // query is still in flight (or while it's skipped pre-mount).
   const continuityResolved = continuityQuery !== undefined
   const continuityState: ContinuityState = continuityQuery ?? FALLBACK_CONTINUITY
 
@@ -230,11 +247,12 @@ export default function CheckinPage({
   // instead of a fresh row. We track the resolved/loading distinction
   // explicitly: a save before the query resolves would race into a
   // fresh-row write that the server would then reject as
-  // `checkin.duplicate`.
-  const todayCheckinQuery = useQuery(api.checkIns.getTodayCheckin, {
-    userId,
-    date: todayIso,
-  })
+  // `checkin.duplicate`. Skipped until `userId`/`todayIso` are set
+  // post-mount, same as the continuity query above.
+  const todayCheckinQuery = useQuery(
+    api.checkIns.getTodayCheckin,
+    userId !== null && todayIso !== null ? { userId, date: todayIso } : 'skip',
+  )
   const todayCheckinResolved = todayCheckinQuery !== undefined
   const existingTodayRow: CheckinRow | null = todayCheckinQuery ?? null
 
@@ -244,13 +262,18 @@ export default function CheckinPage({
   // briefly force Day-1 mode for repeat users mid-load.
   const isDay1 = continuityResolved && continuityState.isFirstEverCheckin
 
-  // `prefers-reduced-motion` snapshot — read once on the client. SSR
-  // returns false; MilestoneCelebration accepts this as a prop so the
-  // component itself stays SSR-deterministic.
-  const prefersReducedMotion = useMemo(() => {
-    if (typeof window === 'undefined') return false
-    if (typeof window.matchMedia !== 'function') return false
-    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  // `prefers-reduced-motion` snapshot — deferred to post-mount for the
+  // same reason as `userId`/`todayIso` above. SSR + first client render
+  // see `false`; useEffect upgrades to the user's actual setting on the
+  // second render. Only consumed by `<MilestoneCelebration>` (post-save
+  // overlay), so the second-render swap is invisible to the initial
+  // orb screen.
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    setPrefersReducedMotion(
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    )
   }, [])
 
   // Recompute opener + closer whenever continuity changes. Pure functions —
@@ -299,6 +322,15 @@ export default function CheckinPage({
     // is exactly the wrong UX for a same-day re-entry.
     if (!todayCheckinResolved) {
       throw new Error('Today-row query still loading — retry pending.')
+    }
+    // `userId` and `todayIso` are populated in the post-mount effect.
+    // A user can only reach `onSave` after tapping the orb, listening,
+    // and confirming — all of which require a mounted page — so these
+    // are guaranteed non-null in practice. The check is for TS and
+    // belt-and-braces against a future code path that calls onSave
+    // earlier.
+    if (userId === null || todayIso === null) {
+      throw new Error('Page not yet mounted — userId/todayIso missing.')
     }
     const clientRequestId = newRequestId()
     const durationMs = snapshot.transcript.durationMs ?? 0
@@ -369,8 +401,12 @@ export default function CheckinPage({
 
   // 3. Kick extraction when the machine enters `processing`. ADR-005:
   //    coverage().missing.length === 0 → ConfirmSummary; else → Stage 2.
+  //    Gated on `userId`/`todayIso` being populated (post-mount); the
+  //    state machine can't reach `processing` without orb interaction,
+  //    which requires a mounted page, so this is belt-and-braces.
   useEffect(() => {
     if (state.kind !== 'processing') return
+    if (userId === null || todayIso === null) return
     const transcriptText = state.transcript.text
     let cancelled = false
     dispatch({ type: 'EXTRACTION_START' })
