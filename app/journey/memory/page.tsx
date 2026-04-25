@@ -1,19 +1,27 @@
 'use client'
 
 /**
- * /journey/memory — the canonical Memory tab (Feature 02, Chunk 2.B).
+ * /journey/memory — the canonical Memory tab (Feature 02 Cycle 1).
  *
- * F02 C1, US-2.B.1. Reads `?filter=` from the URL and hands it to
- * <MemoryTab> as the initial filter; the tab keeps the URL in sync on
- * change. Convex wiring lands at integration time (chunk 2.A's
- * `listEventsByRange`); for C1 we render with an empty events array so
- * the layout, scrubber, and filter tabs are exercised end-to-end.
+ * Wires:
+ *   - `?filter=` URL param → MemoryTab's initial filter (US-2.B.3)
+ *   - userId from localStorage (same key as F01's thin /memory page until
+ *     F01 C2 lands real auth per ADR-019)
+ *   - `listEventsByRange` Convex query (chunk 2.A) → MemoryTab's `events`
+ *
+ * Range: today minus 90 days to today plus 7 days. Wide enough to cover
+ * any reasonable WeekScrubber position in C1; reverse-chron-scroll past
+ * 90 days lands in C2.
  */
 
-import { Suspense } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { useQuery } from 'convex/react'
+import { api } from '@/convex/_generated/api'
 import type { MemoryFilter } from '@/components/memory/_types'
 import { MemoryTab } from '@/components/memory/MemoryTab'
+
+const TEST_USER_KEY = 'saumya.testUser.v1'
 
 const FILTER_VALUES: ReadonlySet<MemoryFilter> = new Set([
   'all',
@@ -30,18 +38,61 @@ function parseFilter(raw: string | null): MemoryFilter {
   return 'all'
 }
 
+/** YYYY-MM-DD in IST for an offset (in days) from today. */
+function istDateOffset(daysOffset: number): string {
+  const now = new Date()
+  now.setUTCDate(now.getUTCDate() + daysOffset)
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now)
+}
+
 /**
- * Inner component that reads `?filter=` — kept under a Suspense boundary
- * because Next 16 requires `useSearchParams` consumers to be suspended
- * during static generation (otherwise the page CSR-bails the whole route).
+ * Inner component — must be under <Suspense> because Next 16 requires
+ * `useSearchParams` consumers to be suspended during static generation.
  */
 function JourneyMemoryInner(): React.JSX.Element {
   const searchParams = useSearchParams()
   const initialFilter = parseFilter(searchParams?.get('filter') ?? null)
 
-  // C1: events come from props as an empty list. Integration step swaps
-  // this for `useQuery(api.memory.listEventsByRange, …)`.
-  return <MemoryTab events={[]} initialFilter={initialFilter} />
+  // userId comes from localStorage until F01 C2 lands auth (ADR-019).
+  // Same key + same provisioning as the F01-era /memory page.
+  const [userId, setUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const existing = window.localStorage.getItem(TEST_USER_KEY)
+    if (existing) {
+      setUserId(existing)
+      return
+    }
+    const fresh =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `u_${Math.random().toString(36).slice(2)}_${Date.now()}`
+    window.localStorage.setItem(TEST_USER_KEY, fresh)
+    setUserId(fresh)
+  }, [])
+
+  // Stable date range — recomputed on first render only. Re-mounts pick a
+  // fresh window if the user reloads, which is fine for C1.
+  const range = useMemo(
+    () => ({ fromDate: istDateOffset(-90), toDate: istDateOffset(7) }),
+    [],
+  )
+
+  const result = useQuery(
+    api.checkIns.listEventsByRange,
+    userId
+      ? { userId, fromDate: range.fromDate, toDate: range.toDate }
+      : 'skip',
+  )
+
+  const events = result?.events ?? []
+
+  return <MemoryTab events={events} initialFilter={initialFilter} />
 }
 
 export default function JourneyMemoryPage(): React.JSX.Element {

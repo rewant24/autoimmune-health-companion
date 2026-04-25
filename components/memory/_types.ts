@@ -1,24 +1,10 @@
-// TODO(integration): replace this whole file with `export type { MemoryEvent, MemoryFilter } from '@/lib/memory/event-types'`
-//
-// Local stub used by Chunk 2.B components while Chunk 2.A is in flight.
-// Keep the shape minimal — just what the layout / scrubber / filter tabs
-// need to render. The integration step will swap this for a re-export
-// (or delete it entirely and rewrite imports).
-export type TaskState = 'pending' | 'done' | 'missed'
-
-export type MemoryEvent = {
-  type: 'check-in' | 'flare' | 'intake' | 'visit'
-  eventId: string
-  date: string // YYYY-MM-DD IST
-  time: string // HH:MM IST
-  title: string
-  meta: string
-  taskState: TaskState
-}
-
-export type MemoryFilter =
-  | 'all'
-  | 'check-ins'
-  | 'intake-events'
-  | 'flare-ups'
-  | 'visits'
+/**
+ * Components/memory shared types.
+ *
+ * Originally a local stub built by chunk 2.B while chunk 2.A was in flight;
+ * integration step swapped it for a re-export from the canonical
+ * `@/lib/memory/event-types`. Kept as a re-export module so existing
+ * imports across components/tests don't churn.
+ */
+export type { TaskState, MemoryEvent, Mood } from '@/lib/memory/event-types'
+export type { MemoryFilter } from '@/lib/memory/filters'

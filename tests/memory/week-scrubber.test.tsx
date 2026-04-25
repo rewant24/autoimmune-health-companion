@@ -24,6 +24,9 @@ const SUNDAY = '2026-04-19'
 const SATURDAY = '2026-04-25'
 
 function makeEvent(overrides: Partial<MemoryEvent> = {}): MemoryEvent {
+  // The cast to MemoryEvent is intentional — the discriminated union
+  // requires `payload` per variant, but for scrubber rendering only the
+  // surface fields are read. The fixture stays minimal.
   return {
     type: 'check-in',
     eventId: 'e1',
@@ -33,7 +36,7 @@ function makeEvent(overrides: Partial<MemoryEvent> = {}): MemoryEvent {
     meta: 'Pain 3',
     taskState: 'done',
     ...overrides,
-  }
+  } as MemoryEvent
 }
 
 describe('<WeekScrubber />', () => {

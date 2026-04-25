@@ -19,11 +19,13 @@
  *     reflected back into the URL via `router.replace` on change.
  */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import type { MemoryEvent, MemoryFilter } from './_types'
+import { applyFilter } from '@/lib/memory/filters'
 import { WeekScrubber } from './WeekScrubber'
 import { FilterTabs } from './FilterTabs'
+import { DayView } from './DayView'
 
 export interface MemoryTabProps {
   events: MemoryEvent[]
@@ -125,16 +127,54 @@ export function MemoryTab({
       <FilterTabs value={filter} onChange={handleFilterChange} />
 
       {/*
-        Day-list area — chunk 2.C composes <DayView> in here at
-        integration. Until then, just an empty container so the layout
-        height is stable.
+        Day-list area — renders <DayView> for the currently selected day.
+        Filtered events are derived from the global events prop. Reverse-
+        chronological scroll across previous days is a C2 enhancement; C1
+        ships single-day rendering for the selected scrubber day.
       */}
-      <div
-        data-testid="day-list-area"
-        data-selected-date={selectedDate}
-        data-filter={filter}
-        className="flex flex-1 flex-col gap-4"
+      <DayListArea
+        selectedDate={selectedDate}
+        events={events}
+        filter={filter}
       />
     </main>
+  )
+}
+
+/**
+ * Day-list area — single-day DayView for C1.
+ *
+ * Filters `events` to the selected date, then applies the active filter,
+ * then hands the result to <DayView>. Wrapped as its own component so the
+ * test selector `day-list-area` data-testid keeps a stable hook for the
+ * smoke test, and so the C2 reverse-chron-scroll work has a clear seam.
+ */
+function DayListArea({
+  selectedDate,
+  events,
+  filter,
+}: {
+  selectedDate: string
+  events: MemoryEvent[]
+  filter: MemoryFilter
+}): React.JSX.Element {
+  const dayEvents = useMemo(
+    () =>
+      applyFilter(
+        events.filter((e) => e.date === selectedDate),
+        filter,
+      ),
+    [events, selectedDate, filter],
+  )
+
+  return (
+    <div
+      data-testid="day-list-area"
+      data-selected-date={selectedDate}
+      data-filter={filter}
+      className="flex flex-1 flex-col gap-4"
+    >
+      <DayView date={selectedDate} events={dayEvents} />
+    </div>
   )
 }

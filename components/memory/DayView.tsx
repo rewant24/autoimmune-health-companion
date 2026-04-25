@@ -35,7 +35,8 @@ function formatDayHeader(date: string): string {
   if (date === todayIST()) return 'Today'
   const [y, m, d] = date.split('-').map(Number)
   const dt = new Date(Date.UTC(y, m - 1, d))
-  return new Intl.DateTimeFormat('en-US', {
+  // en-GB orders day before month: "Tue, 21 Apr" (matches scoping spec).
+  return new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Kolkata',
     weekday: 'short',
     day: 'numeric',
