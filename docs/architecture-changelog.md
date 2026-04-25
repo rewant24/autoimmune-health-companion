@@ -27,6 +27,29 @@
 
 ---
 
+## 2026-04-26 — Voice C1 pre-flight: Sarvam streaming STT + TTS + multi-turn dialog (ADR-026 supersedes ADR-018)
+
+**Scope.** Pre-flight Task 0 of the voice C1 cycle (`docs/features/voice-cycle-1-plan.md`). Lays the seam for four parallel build chunks (V.A STT route, V.B STT adapter, V.C TTS route + adapter, V.D follow-up engine) without merging any wave-1 implementation yet. Branch: `feat/voice-sarvam`. Tagged `voice-c1/pre-flight-done`.
+
+- **Decision flip.** ADR-018 deferred Sarvam to post-MVP because three blockers were unresolved: streaming endpoint URL, key handling, server-side proxy path. All three now resolved (`sarvamai` JS SDK + long-lived `api-subscription-key` server-only + Vercel HTTP-streaming proxy). Adds **ADR-026** marking Sarvam as the production voice provider for both STT and TTS, with multi-turn conversational dialog and a single "Switch to taps" bail-out (B3).
+- **Sarvam audio-format spikes (run 2026-04-26 against the production key).**
+  - **STT streaming codec is PCM/WAV only** — confirmed authoritatively by the SDK's own `SpeechToTextStreamingInputAudioCodec` enum (`wav`, `pcm_s16le`, `pcm_l16`, `pcm_raw`). WebM/Opus is **not** accepted at the protocol level. V.B will ship a WebAudio 16kHz s16le resampler in `lib/voice/sarvam-recorder.ts`. Wire-level smoke (silent 500ms WAV via `socket.transcribe(...)`) confirmed clean handshake at 320 ms with code-1000 close.
+  - **TTS REST returns base64-encoded WAV** (`{ request_id, audios: [base64String] }`, default 24 kHz, RIFF header confirmed across 6 voices). Streaming endpoint is `bulbul:v2`-only and unlocks no quality we don't already get from REST + the same v2 voices. V.C will ship a Blob-URL playback path — no `MediaSource`, no WebAudio decode.
+  - **Voice picked:** `anushka` on `bulbul:v2`. Fastest in-class (1099 ms full response on the opener line), v2's documented default for `en-IN` female, well-tuned. v3 voices were 200–600 ms slower with no audible payoff for short opener copy.
+- **Seam extensions (production code, no transitions yet).**
+  - `lib/voice/types.ts`: `VoiceProviderName` widened to `'web-speech' | 'openai-realtime' | 'sarvam'`; new `TtsProvider` interface + `TtsProviderName = 'web-speech' | 'sarvam'` + `TtsSpeakOptions`.
+  - `lib/voice/provider.ts`: `resolveVoiceProviderName` accepts `'sarvam'`; new `resolveTtsProviderName` + `getTtsProvider`. Both factories throw `NotImplementedError` for `sarvam` until V.B/V.C land.
+  - `lib/voice/web-speech-tts-adapter.ts`: split out from the legacy `tts-adapter.ts`, which is now a re-export shim so existing call sites keep working.
+  - `lib/checkin/state-machine.ts`: 5 new union members (`speaking-opener`, `speaking-question`, `listening-answer`, `extracting-answer`, `speaking-closer`) and 8 new events (`OPENER_PLAYED`, `OPENER_FAILED`, `ASK_QUESTION`, `QUESTION_PLAYED`, `ANSWER_TRANSCRIBED`, `ANSWER_EXTRACTED`, `BAIL_TO_TAPS`, `CLOSER_PLAYED`) — no-op reducer cases only, Wave 2 wires real transitions per the protocol in the cycle plan.
+- **Test coverage.** Vitest 455/455, tsc clean, `next build` clean. Includes new no-op reducer tests for each of the 5 new state cases + `BAIL_TO_TAPS` invariance + an `Event`-union compile-check for the 8 new event types, plus `resolveTtsProviderName`/`getTtsProvider` factory tests + `NotImplementedError` assertions for both `sarvam` paths.
+- **Env scaffolding.** `.env.local.example` now lists `SARVAM_API_KEY`, `VOICE_PROVIDER`, `VOICE_TTS_PROVIDER` (default `web-speech`), and optional `SARVAM_TTS_SPEAKER` / `SARVAM_TTS_MODEL` overrides for A/B-testing the TTS voice without redeploying. Real key is in `.env.local` (gitignored). Spike audio fixtures live under `docs/research/spike-out/` (gitignored).
+
+**Why now.** Pre-flight tagging ahead of the parked-onboarding cycle so the voice branch is in a known-good resume point: the seam is ready, format decisions are real (not guessed), and Wave 1 can dispatch with concrete adapter targets. Onboarding still ships first per the locked 6-cycle plan; voice C1 resumes from `voice-c1/pre-flight-done` once onboarding is in.
+
+**Related.** Adds ADR-026. Supersedes ADR-018.
+
+---
+
 ## 2026-04-25 — Product rename: Saumya → Saha (full sweep)
 
 **Scope.** Second pre-launch rename in twelve hours. ADR-024 (Sakhi → Saumya) is now superseded by ADR-025 (Saumya → Saha). No public users; no data migration needed.
