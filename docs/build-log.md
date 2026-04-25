@@ -610,3 +610,29 @@ State-machine unit tests grew by 19 cases (47/47 total) covering: scripted/hybri
 - Memory write-through: `MEMORY.md` Autoimmune section heading → *(Saha, formerly Saumya)*; update `autoimmune_companion.md` if it references Saumya by name; record any new lesson surfaced by this rebrand (e.g., the host-conditional proxy pattern).
 
 **Next.** Tag the Wave 2 integration commit, then dispatch reviewers.
+
+---
+
+## 2026-04-26 — Session 13: Onboarding Shell pre-flight (Task 0)
+
+**Branch.** `feat/onboarding-shell-build` cut from `main` at `6977284` (post-rebrand, post-SSR-hardening). Plan commit (`45ee765`) cherry-picked across from `feat/onboarding-shell-plan` so the cycle plan lives alongside the code.
+
+**Context flip.** Voice C1 was the active branch (`feat/voice-sarvam`) per Session 12 — Rewant's Path 1 call to ship voice ahead of onboarding. That call reverted this session: onboarding ships next per the locked 6-cycle plan, voice resumes after. Voice WIP (Sarvam pre-flight Task 0 — types, state-machine extension, web-speech adapter split-out, ADR-026, sarvam-format-spike outcomes) committed and pushed to `origin/feat/voice-sarvam` as commits `d9cd2ba` + `46b1959` so it's recoverable.
+
+**Pre-flight stamps.**
+- `lib/profile/types.ts` — canonical contract: `Profile` interface (v: 1, name, dobIso, email, condition, conditionOther, onboarded, createdAtMs, updatedAtMs), `Condition` union (10 + other), `PROFILE_KEY = 'saha.profile.v1'`, `PROFILE_VERSION = 1 as const`. **Build-B may NOT modify this file.**
+- `lib/profile/storage.ts` — thin starter: `readProfile` (v-guard + malformed-JSON null + log-once warn), `writeProfile` (partial-patch merge, sticky `createdAtMs`, re-stamps `v` + `updatedAtMs` after spread), `clearProfile`, `markOnboarded`. **Build-B owns this file** and may extend; signatures + the `PROFILE_KEY` re-export are locked.
+- `tests/profile/contract.test.ts` — 11 seam-guard tests (PROFILE_KEY value, PROFILE_VERSION, Condition exhaustiveness, Profile shape compile-check, round-trip, sticky createdAtMs, malformed JSON → null, wrong-version → null, markOnboarded, clearProfile).
+- `docs/features/00-onboarding-shell-cycle-plan.md` — Task 0 checklist updated to reflect the actual pre-flight steps; ownership refinement recorded so Build-B doesn't accidentally rewrite `types.ts`.
+
+**Verification.**
+- `npm run test:run` → 452/452 (441 baseline + 11 contract tests).
+- `npx tsc --noEmit` → clean.
+- `npm run build` → clean.
+- One TS strict-mode catch during work: my first `writeProfile` had duplicate `v` + `updatedAtMs` keys in a single object literal (the "spread then re-stamp" pattern). Refactored to two literals (`defaults` then `next` = `{ ...defaults, ...prior, ...patch, v, updatedAtMs }`) — same end result, clean compile.
+
+**Surprises.**
+- Voice WIP carried over an uncommitted `docs/architecture-changelog.md` write-up (substantive — voice C1 pre-flight summary) that I'd missed staging in the WIP commit. Caught it on the build branch via `git status`. Stashed under `voice-changelog-misplaced` for transfer back to the voice branch separately so it ships with that cycle's changelog entry, not this one.
+- Tooling reset CWD between Bash calls a few times mid-pre-flight; first attempt at writing the seam files silently lost them when the working tree changed branches. Retried on a confirmed-correct branch, committed immediately rather than batching, and verified post-commit. Lesson for future pre-flights with parallel branches in play: **commit early, don't accumulate untracked files across `git checkout`s.**
+
+**Next.** Tag `onboarding-shell/pre-flight-done`, push branch + tag. Then Wave 1 dispatch — three parallel build subagents (A onboarding screens, B setup + storage, C welcome + home + nav) in a single multi-tool-call message, per the cycle plan §Task 1.
