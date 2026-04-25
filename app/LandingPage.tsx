@@ -3,6 +3,7 @@ import { WaitlistForm } from "./WaitlistForm";
 import { WaitlistCount } from "./WaitlistCount";
 import { CheckInGrid } from "./CheckInGrid";
 import { VoiceTranscript } from "./VoiceTranscript";
+import { GetStartedCTA } from "@/components/landing/GetStartedCTA";
 
 const conditions = [
   "Lupus",
@@ -183,6 +184,14 @@ export function LandingPage() {
                 dose change, every flare, every off day, plotted so you can
                 finally see what&apos;s actually helping.
               </p>
+            </div>
+
+            {/* Onboarding-shell cycle: primary hero CTA. Pre-hydration label
+                = "Get started" → /onboarding/1; post-hydration when the
+                profile is onboarded, label flips to "Open your home page"
+                → /home. Waitlist form below stays intact. */}
+            <div className="mt-8">
+              <GetStartedCTA />
             </div>
           </div>
 
