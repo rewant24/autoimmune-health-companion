@@ -10,7 +10,10 @@
  * `eventFromCheckin` is the only event-producer in F02 C1; F04 / F05 will
  * add `eventFromIntake` / `eventFromVisit` later — additive, no churn here.
  */
-import type { CheckinRow } from "@/convex/checkIns";
+// Relative import (not `@/convex/checkIns`) so Convex's tsconfig — which
+// has no `paths` alias — can typecheck this file when it's transitively
+// imported by `convex/checkIns.ts`.
+import type { CheckinRow } from "../../convex/checkIns";
 
 export type TaskState = "pending" | "done" | "missed";
 export type Mood = "heavy" | "flat" | "okay" | "bright" | "great";
@@ -27,10 +30,12 @@ type BaseEventFields = {
 export type CheckInEvent = BaseEventFields & {
   type: "check-in";
   payload: {
-    pain: number;
-    mood: Mood;
-    adherenceTaken: boolean;
-    energy: number;
+    // Cycle 2: metrics are optional — undefined = declined or not captured.
+    // The detail sheet (F02 C2 chunk 2.D) renders "—" for absent values.
+    pain?: number;
+    mood?: Mood;
+    adherenceTaken?: boolean;
+    energy?: number;
     transcript: string;
     checkinId: string;
   };
@@ -78,11 +83,18 @@ function formatTimeIST(createdAt: number): string {
 /**
  * Convert one check-in row into 1 or 2 MemoryEvents:
  *  - always: a 'check-in' event (taskState='done').
- *  - if `flare === true`: also a 'flare' event at the same time
- *    (taskState='missed' — red strikethrough in the task-state vocabulary).
+ *  - if `flare === 'yes'` or `'ongoing'`: also a 'flare' event at the same
+ *    time (taskState='missed' — red strikethrough in the task-state vocabulary).
+ *
+ * Cycle 2: pain/mood may be undefined (declined or not captured). The
+ * meta string falls back to "—" for missing values so existing list rows
+ * still render. Flare migrated from boolean → tri-state — only 'no' (or
+ * undefined) suppresses the flare event.
  */
 export function eventFromCheckin(row: CheckinRow): MemoryEvent[] {
   const time = formatTimeIST(row.createdAt);
+  const painText = row.pain !== undefined ? String(row.pain) : "—";
+  const moodText = row.mood !== undefined ? MOOD_LABELS[row.mood] : "—";
   const events: MemoryEvent[] = [
     {
       type: "check-in",
@@ -90,7 +102,7 @@ export function eventFromCheckin(row: CheckinRow): MemoryEvent[] {
       date: row.date,
       time,
       title: "Daily check-in",
-      meta: `Pain ${row.pain} · ${MOOD_LABELS[row.mood]}`,
+      meta: `Pain ${painText} · ${moodText}`,
       taskState: "done",
       payload: {
         pain: row.pain,
@@ -103,7 +115,7 @@ export function eventFromCheckin(row: CheckinRow): MemoryEvent[] {
     },
   ];
 
-  if (row.flare === true) {
+  if (row.flare === "yes" || row.flare === "ongoing") {
     events.push({
       type: "flare",
       eventId: `flare:${row._id}`,

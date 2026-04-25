@@ -9,6 +9,24 @@
 
 ---
 
+## 2026-04-25 — F01 C2 pre-flight: schema migration + state-machine extension
+
+**Scope.** Cycle 2 pre-flight Task 0 changes that subagents read as a stable contract. Tagged `f01-c2/pre-flight-done` once smoke-tested.
+
+- **Convex schema (`convex/schema.ts`).** All five metrics (`pain`, `mood`, `adherenceTaken`, `flare`, `energy`) now `v.optional` so a row can exist with partial coverage (declined or not extracted). `flare` widened from boolean to tri-state `"no" | "yes" | "ongoing"` per ADR-021 + Cycle 2 scoping. Added `declined: v.optional(v.array(metricLiteral))` and `appendedTo: v.optional(v.id("checkIns"))` for the same-day re-entry path. New `extractAttempts` table indexed by `(userId, date)` enforces ADR-020 cost guard (5 attempts/user/day).
+- **Convex handler (`convex/checkIns.ts`).** Validators updated to match optional-metric shape; range checks now gated on `value !== undefined`. `CheckinRow` and `CreateCheckinArgs` exported types track the new schema so `lib/memory/event-types.ts` and tests stay type-safe.
+- **State machine (`lib/checkin/state-machine.ts`).** Union extended additively: new states `extracting`, `stage-2`, `discarding`, `celebrating`; `confirming` and `saved` gain optional fields preserving C1-shipped transitions. New events `EXTRACTION_DONE`, `STAGE_2_CONTINUE`, `METRIC_UPDATED`, `METRIC_DECLINED`, `DISCARD_REQUEST/CONFIRM/CANCEL`, `MILESTONE_DETECTED`. Reducer no-ops the new states; subagents (lanes 2.B/2.C/2.D/2.F) implement transition logic for their chunk's events only. `toOrbState` collapses all transient states to `'processing'`.
+- **Shared types (`lib/checkin/types.ts`).** New file — single source of truth for `Metric`, `Mood`, `FlareState`, `StageEnum`, `CheckinMetrics`, `ContinuityState`, `OpenerVariantKey`, `MilestoneKind`. Pure types so Convex's typecheck doesn't pull view code into the server bundle.
+- **Memory event mapper (`lib/memory/event-types.ts`).** Updated for optional metrics and tri-state flare (`flare === "yes" || flare === "ongoing"` triggers the second event). Switched import to relative path because `convex/tsconfig.json` has no `@/*` alias.
+- **Dependencies.** Added `ai`, `@ai-sdk/openai`, `zod` (lane 2.B's extraction route depends on them). `.env.local.example` created with `AI_GATEWAY_API_KEY` placeholder (server-only).
+- **Convex dev wipe.** One stale check-in row from F01 C1 testing was deleted (`flare: false` no longer satisfies the new validator). Per Cycle 2 plan — no real users to migrate.
+
+**Gate.** `tsc --noEmit` clean; 152/152 vitest still green; baseline preserved before Wave 1 dispatch.
+
+**Related ADRs.** ADR-005 (skip-Stage-2 routing now structurally expressible), ADR-020 (extraction route deps installed), ADR-021 (stage enum types ready), ADR-022 (save-later v1 contract referenced by lane 2.C). No ADR superseded.
+
+---
+
 ## 2026-04-25 — Product rename: Saumya → Saumya (full sweep)
 
 **Scope.** Pre-launch brand rename. ADR-024 records the decision, rationale, and the one-time exception to the ADR-immutability rule.

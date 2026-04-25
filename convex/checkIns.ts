@@ -20,19 +20,43 @@ const stageValidator = v.union(
   v.literal("hybrid"),
 );
 
+// Tri-state flare validator (Cycle 2 — replaces boolean per scoping).
+const flareValidator = v.union(
+  v.literal("no"),
+  v.literal("yes"),
+  v.literal("ongoing"),
+);
+
+// Declined metrics array (Cycle 2 — distinct from "not captured").
+const metricLiteralValidator = v.union(
+  v.literal("pain"),
+  v.literal("mood"),
+  v.literal("adherenceTaken"),
+  v.literal("flare"),
+  v.literal("energy"),
+);
+
 // Structural row type used by the extracted handlers so they can be
 // exercised with a mock ctx in tests without depending on `Doc<"checkIns">`
 // from the Convex generated types.
+//
+// Cycle 2 update (2026-04-25):
+// - All five metrics now optional (undefined = declined or not captured).
+//   Code MUST treat undefined and "in declined[]" together as "skipped".
+// - `flare` migrated from boolean → 'no'|'yes'|'ongoing'.
+// - Added `declined: Metric[]` and `appendedTo: id('checkIns')`.
 export type CheckinRow = {
   _id: string;
   userId: string;
   date: string;
   createdAt: number;
-  pain: number;
-  mood: "heavy" | "flat" | "okay" | "bright" | "great";
-  adherenceTaken: boolean;
-  flare: boolean;
-  energy: number;
+  pain?: number;
+  mood?: "heavy" | "flat" | "okay" | "bright" | "great";
+  adherenceTaken?: boolean;
+  flare?: "no" | "yes" | "ongoing";
+  energy?: number;
+  declined?: Array<"pain" | "mood" | "adherenceTaken" | "flare" | "energy">;
+  appendedTo?: string;
   transcript: string;
   stage: "open" | "scripted" | "hybrid";
   durationMs: number;
@@ -45,11 +69,13 @@ export type CheckinRow = {
 export type CreateCheckinArgs = {
   userId: string;
   date: string;
-  pain: number;
-  mood: CheckinRow["mood"];
-  adherenceTaken: boolean;
-  flare: boolean;
-  energy: number;
+  pain?: number;
+  mood?: CheckinRow["mood"];
+  adherenceTaken?: boolean;
+  flare?: CheckinRow["flare"];
+  energy?: number;
+  declined?: CheckinRow["declined"];
+  appendedTo?: string;
   transcript: string;
   stage: CheckinRow["stage"];
   durationMs: number;
@@ -99,22 +125,34 @@ export async function createCheckinHandler(
   args: CreateCheckinArgs,
   now: () => number = Date.now,
 ): Promise<{ id: string; date: string }> {
-  if (!Number.isFinite(args.pain) || args.pain < 1 || args.pain > 10) {
-    throw new ConvexError({
-      code: "checkin.invalid_range",
-      message: "Invalid range for pain/energy",
-    });
+  // Range validation runs only when the metric was captured. `undefined`
+  // means the metric was either declined (then it's also in `declined[]`)
+  // or never captured — both are valid.
+  if (args.pain !== undefined) {
+    if (!Number.isFinite(args.pain) || args.pain < 1 || args.pain > 10) {
+      throw new ConvexError({
+        code: "checkin.invalid_range",
+        message: "Invalid range for pain/energy",
+      });
+    }
   }
-  if (!Number.isFinite(args.energy) || args.energy < 1 || args.energy > 10) {
-    throw new ConvexError({
-      code: "checkin.invalid_range",
-      message: "Invalid range for pain/energy",
-    });
+  if (args.energy !== undefined) {
+    if (!Number.isFinite(args.energy) || args.energy < 1 || args.energy > 10) {
+      throw new ConvexError({
+        code: "checkin.invalid_range",
+        message: "Invalid range for pain/energy",
+      });
+    }
   }
 
   // We fetch the first row matching (userId, date) via the index and
   // skip soft-deleted rows in code — simpler than composing Convex's
   // `.filter()` predicate and easier to mock in tests.
+  // NOTE: same-day re-entry (Cycle 2 chunk 2.F) is permitted via the
+  // `appendedTo` field — the new row references the original. This
+  // handler still rejects a second create on the same (userId, date)
+  // for non-append calls; the chunk-2.F save path uses a different
+  // mutation (`appendCheckin`) wired in that chunk.
   const candidates = await ctx.db
     .query("checkIns")
     .withIndex("by_user_date", (q) =>
@@ -142,6 +180,8 @@ export async function createCheckinHandler(
     adherenceTaken: args.adherenceTaken,
     flare: args.flare,
     energy: args.energy,
+    declined: args.declined,
+    appendedTo: args.appendedTo,
     transcript: args.transcript,
     stage: args.stage,
     durationMs: args.durationMs,
@@ -217,11 +257,16 @@ export const createCheckin = mutation({
   args: {
     userId: v.string(),
     date: v.string(),
-    pain: v.number(),
-    mood: moodValidator,
-    adherenceTaken: v.boolean(),
-    flare: v.boolean(),
-    energy: v.number(),
+    // All five metrics optional — undefined = declined or not captured.
+    // Pair with `declined[]` to distinguish "skipped" from "not captured".
+    pain: v.optional(v.number()),
+    mood: v.optional(moodValidator),
+    adherenceTaken: v.optional(v.boolean()),
+    flare: v.optional(flareValidator),
+    energy: v.optional(v.number()),
+    declined: v.optional(v.array(metricLiteralValidator)),
+    // Same-day re-entry block reference (Cycle 2 chunk 2.F).
+    appendedTo: v.optional(v.id("checkIns")),
     transcript: v.string(),
     stage: stageValidator,
     durationMs: v.number(),

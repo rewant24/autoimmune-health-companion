@@ -425,3 +425,35 @@ Final tally:
 - Item 6 (founder photo) — awaiting image asset.
 - F02 C1 dispatch (still gated on Rewant signoff per Session 6: `02-memory.md` rewrite, soft-delete-with-undo refinement, four inherited scoping items, smoke-test of `/check-in`).
 - Push Session 9 commit to `origin/main` once Rewant says go.
+
+---
+
+## 2026-04-25 — Session 10: F01 C2 pre-flight (Task 0)
+
+**Trigger.** Plan locked at `~/.claude/plans/playful-kindling-thimble.md` (5-cycle sequence: F01 C2 → F02 auth → F02 C2 → voice+save-later → pricing). Q1–Q4 resolved this session: Convex Auth · tappable-list Stage-2 recap · device-local-time date boundary (narrow scope to re-entry path only, Memory IST helpers stay till Cycle 3) · spoken closer TTS.
+
+**Branch.** `feat/f01-cycle-2` (off `main` at `23b37a1`). Pre-flight is the orchestrator-only Task 0 from the existing Cycle 2 plan at `docs/features/01-daily-checkin-cycle-2-plan.md` — no parallel agents dispatched yet.
+
+**Implemented (single sequential pass).**
+
+- **Schema migration (`convex/schema.ts`).** All five metrics now `v.optional`. `flare` widened to tri-state (`"no" | "yes" | "ongoing"`). Added `declined` array + `appendedTo` id (re-entry path) + `extractAttempts` table indexed by `(userId, date)` for ADR-020 cost guards. One stale dev row (`flare: false`) cleared via `npx convex import --replace` to satisfy the new validator.
+- **Convex handler (`convex/checkIns.ts`).** Validators updated; range checks gated on `value !== undefined`; exported `CheckinRow` and `CreateCheckinArgs` types track the new shape.
+- **Shared types (`lib/checkin/types.ts`).** New file — `Metric`, `Mood`, `FlareState`, `StageEnum`, `CheckinMetrics`, `ContinuityState`, `OpenerVariantKey`, `MilestoneKind`. Single source of truth for Wave-1/2 subagents.
+- **State machine (`lib/checkin/state-machine.ts`).** Union extended additively: states `extracting`, `stage-2`, `discarding`, `celebrating` added; `confirming` and `saved` gain optional fields. New events `EXTRACTION_DONE`, `STAGE_2_CONTINUE`, `METRIC_UPDATED`, `METRIC_DECLINED`, `DISCARD_REQUEST/CONFIRM/CANCEL`, `MILESTONE_DETECTED`. Reducer no-ops the new states with a comment naming the lane that owns each transition. `toOrbState` collapses transient states to `'processing'`.
+- **Memory event mapper (`lib/memory/event-types.ts`).** Updated for optional metrics (`mood` undefined → `"—"` in meta) and tri-state flare (`flare === "yes" || flare === "ongoing"` triggers the second event). Switched import to relative `../../convex/checkIns` because Convex's `tsconfig.json` has no `@/*` alias.
+- **Tests.** Mechanical updates for the boolean → tri-state flare in `tests/check-in/convex-checkins.test.ts`, `tests/memory/event-types.test.ts`, `tests/memory/list-events-query.test.ts`. App callsite `app/check-in/page.tsx:98` flipped from `flare: false` → `flare: 'no'`.
+- **Dependencies.** `npm install ai @ai-sdk/openai zod` (lane 2.B's extraction route). `.env.local.example` created with `AI_GATEWAY_API_KEY` placeholder + the existing Convex env vars.
+- **Architecture changelog.** New entry at top of `docs/architecture-changelog.md` capturing the schema + state-machine extension; references ADR-005, ADR-020, ADR-021, ADR-022.
+
+**Verified.**
+- `npx tsc --noEmit` — clean.
+- `npm run test:run` — **152/152** across 14 files (no regression vs F02 C1 baseline).
+- `npm run build` — compiled in 19.4s; 8 static pages generated; no warnings.
+
+**Wave-1 dispatch contract (read-only for build agents).**
+- Schema, validators, `CheckinRow` type → frozen.
+- `lib/checkin/types.ts` → frozen single source for shared vocabulary.
+- State-machine union + no-op reducer cases → frozen; lanes implement transition logic only inside the case for their chunk's events.
+- `.env.local.example` → frozen; agents add new keys via the same file.
+
+**Next.** Tag `f01-c2/pre-flight-done` on the commit. Wave 1 dispatch — 4 parallel build agents (2.A opener/closer, 2.B extraction, 2.C Stage 2 UI, 2.D confirm/save) per `docs/features/01-daily-checkin-cycle-2-plan.md`.

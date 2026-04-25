@@ -1,24 +1,38 @@
 /**
- * Check-in state machine (Feature 01, Chunk 1.C, US-1.C.1).
+ * Check-in state machine (Feature 01, Chunks 1.C → 1.F).
  *
  * Pure reducer + React hook. Drives the daily check-in screen:
- *   idle → requesting-permission → listening → processing → confirming
- *        → saving → saved | error
+ *   idle → requesting-permission → listening → processing
+ *        → extracting (2.B)
+ *        → stage-2 (2.C, only when missing.length > 0 — ADR-005 skip rule)
+ *        → confirming (2.D)
+ *        → saving → saved → celebrating (2.F, milestone path)
+ *        | error | discarding (2.D)
  *
  * Contract with voice provider (Chunk 1.A) is types-only — we import
  * `VoiceProvider`, `Transcript`, `VoiceError` from `lib/voice/types`. The
- * provider is injected into the hook so tests can pass fakes and Cycle 2
- * can swap adapters without touching this file.
+ * provider is injected into the hook so tests can pass fakes and adapters
+ * can swap without touching this file.
  *
- * Cycle 1 note: `METRICS_READY` is accepted by the reducer but is never
- * dispatched in Cycle 1 runtime — `processing` stays transient until
- * Chunk 1.D wires `extractMetrics`. Tests simulate the event.
+ * Cycle 2 pre-flight extension protocol: orchestrator commits the
+ * `State` and `Event` unions plus no-op transitions for new events.
+ * Subagents (chunks 2.B, 2.C, 2.D, 2.F) implement transition logic for
+ * their chunk's events only — no other lane touches this file. The
+ * `confirming` and `saved` states keep their C1-shipped fields with
+ * the new C2 fields marked optional so existing tests keep passing
+ * during transition; chunk 2.D/2.F tighten them when they wire up.
  *
  * See `docs/features/01-daily-checkin.md` US-1.C.1 for acceptance.
  */
 
 import { useEffect, useReducer, useRef } from 'react'
 import type { Transcript, VoiceError, VoiceProvider } from '@/lib/voice/types'
+import type {
+  CheckinMetrics,
+  Metric,
+  MilestoneKind,
+  StageEnum,
+} from './types'
 
 // ---------------- State + Event shapes ----------------
 
@@ -29,9 +43,41 @@ export type State =
   | { kind: 'requesting-permission' }
   | { kind: 'listening'; partial: string }
   | { kind: 'processing'; transcript: Transcript }
-  | { kind: 'confirming'; transcript: Transcript }
+  // 2.B — between PROVIDER_STOPPED and EXTRACTION_DONE while the AI
+  // Gateway extracts metrics from the transcript. Distinct from
+  // `processing` so the orb can render a different label if needed.
+  | { kind: 'extracting'; transcript: Transcript }
+  // 2.C — Stage 2 prompts the user to fill in missing metrics. `metrics`
+  // accumulates user-entered values; `missing` is the remaining list;
+  // `declined` is the metrics the user explicitly skipped.
+  | {
+      kind: 'stage-2'
+      transcript: Transcript
+      metrics: Partial<CheckinMetrics>
+      missing: Metric[]
+      declined: Metric[]
+    }
+  // 2.D — final review before save. The new fields (metrics/declined/stage)
+  // are optional during pre-flight so the C1 reducer's existing
+  // `processing → confirming` transition still type-checks; chunk 2.D
+  // tightens the legacy METRICS_READY transition to populate them.
+  | {
+      kind: 'confirming'
+      transcript: Transcript
+      metrics?: CheckinMetrics
+      declined?: Metric[]
+      stage?: StageEnum
+    }
+  // 2.D — modal-overlay state when the user requests discard.
+  | { kind: 'discarding'; from: 'confirming' | 'stage-2' }
   | { kind: 'saving' }
-  | { kind: 'saved' }
+  // 2.F — `milestone` carries the celebration kind (or null when the
+  // save isn't a milestone day). Optional for the same C1-compatibility
+  // reason as `confirming`; chunk 2.F tightens.
+  | { kind: 'saved'; milestone?: MilestoneKind | null }
+  // 2.F — milestone celebration overlay; entered from `saved` when
+  // `saved.milestone !== null`.
+  | { kind: 'celebrating'; milestone: MilestoneKind }
   | { kind: 'error'; error: VoiceError | SaveFailedError }
 
 export type Event =
@@ -41,10 +87,30 @@ export type Event =
   | { type: 'PARTIAL'; text: string }
   | { type: 'PROVIDER_STOPPED'; transcript: Transcript }
   | { type: 'VOICE_ERROR'; error: VoiceError }
+  // C1 legacy event — kept so existing tests still pass. Chunk 2.B
+  // re-points the production path at EXTRACTION_DONE.
   | { type: 'METRICS_READY' }
+  // 2.B — fires when the AI Gateway returns. `missing.length === 0`
+  // is the ADR-005 skip-Stage-2 signal (chunk 2.B owns the routing).
+  | {
+      type: 'EXTRACTION_DONE'
+      metrics: Partial<CheckinMetrics>
+      missing: Metric[]
+    }
+  // 2.C — Stage 2 user actions.
+  | { type: 'METRIC_UPDATED'; metric: Metric; value: unknown }
+  | { type: 'METRIC_DECLINED'; metric: Metric }
+  | { type: 'STAGE_2_CONTINUE' }
   | { type: 'CONFIRM' }
+  // 2.D — discard flow (request → confirm/cancel).
+  | { type: 'DISCARD_REQUEST' }
+  | { type: 'DISCARD_CONFIRM' }
+  | { type: 'DISCARD_CANCEL' }
   | { type: 'SAVE_OK' }
   | { type: 'SAVE_ERROR'; message?: string }
+  // 2.F — milestone celebration trigger; dispatched after SAVE_OK when
+  // the user hits a day-1/7/30/90/180/365 marker.
+  | { type: 'MILESTONE_DETECTED'; milestone: MilestoneKind }
   | { type: 'RESET' }
 
 export const initialState: State = { kind: 'idle' }
@@ -106,8 +172,26 @@ export function reducer(state: State, event: Event): State {
       }
       return state
     }
+    case 'extracting': {
+      // 2.B owns transitions out of `extracting` (EXTRACTION_DONE → either
+      // `stage-2` when missing.length > 0, or `confirming` per ADR-005 skip
+      // rule). Pre-flight commits the state; lane 2.B implements the routing.
+      return state
+    }
+    case 'stage-2': {
+      // 2.C owns transitions: METRIC_UPDATED, METRIC_DECLINED, and
+      // STAGE_2_CONTINUE (→ confirming). DISCARD_REQUEST → discarding.
+      // Pre-flight commits the state; lane 2.C implements the logic.
+      return state
+    }
     case 'confirming': {
       if (event.type === 'CONFIRM') return { kind: 'saving' }
+      // 2.D owns DISCARD_REQUEST → discarding. Pre-flight no-op.
+      return state
+    }
+    case 'discarding': {
+      // 2.D owns DISCARD_CONFIRM (→ idle via RESET semantics) and
+      // DISCARD_CANCEL (→ back to state.from). Pre-flight no-op.
       return state
     }
     case 'saving': {
@@ -121,6 +205,11 @@ export function reducer(state: State, event: Event): State {
       return state
     }
     case 'saved': {
+      // 2.F owns MILESTONE_DETECTED → celebrating. Pre-flight no-op.
+      return state
+    }
+    case 'celebrating': {
+      // 2.F owns the celebration dismiss path. Pre-flight no-op.
       return state
     }
     case 'error': {
@@ -147,9 +236,13 @@ export function toOrbState(state: State): OrbVisualState {
       return 'listening'
     case 'requesting-permission':
     case 'processing':
+    case 'extracting':
+    case 'stage-2':
     case 'confirming':
+    case 'discarding':
     case 'saving':
     case 'saved':
+    case 'celebrating':
       return 'processing'
     case 'error':
       return 'error'

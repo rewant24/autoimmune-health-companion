@@ -95,7 +95,7 @@ export default function CheckinPage({
       pain: 5,
       mood: 'okay',
       adherenceTaken: false,
-      flare: false,
+      flare: 'no',
       energy: 5,
       transcript: transcript.text,
       stage: 'open',

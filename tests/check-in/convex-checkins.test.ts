@@ -81,7 +81,7 @@ const baseArgs = (overrides: Partial<CreateCheckinArgs> = {}): CreateCheckinArgs
   pain: 5,
   mood: 'okay',
   adherenceTaken: true,
-  flare: false,
+  flare: 'no',
   energy: 6,
   transcript: 'Today was alright, took meds, bit of knee pain.',
   stage: 'open',
