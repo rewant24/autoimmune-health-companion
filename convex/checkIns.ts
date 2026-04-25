@@ -1,5 +1,9 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import {
+  eventFromCheckin,
+  type MemoryEvent,
+} from "../lib/memory/event-types";
 
 // Mood enum (scoping-verbatim: heavy | flat | okay | bright | great).
 const moodValidator = v.union(
@@ -253,5 +257,61 @@ export const getCheckin = query({
   args: { id: v.string() },
   handler: async (ctx, args) => {
     return getCheckinHandler(ctx as unknown as QueryHandlerCtx, args);
+  },
+});
+
+// ---- F02 Memory: listEventsByRange ----
+//
+// Returns mixed MemoryEvents in [fromDate, toDate] reverse-chronological by
+// (date desc, time desc). F02 C1 reads only `checkIns`; F04 (intake) and
+// F05 (visits) will extend the merge. No tier clamp (no free tier per
+// locked decision 2026-04-25). Soft-deleted rows are excluded — same
+// policy as listCheckinsHandler — so behaviour is consistent if/when
+// soft-delete is reintroduced (current ADR is hard-delete).
+
+export type ListEventsByRangeArgs = {
+  userId: string;
+  fromDate: string;
+  toDate: string;
+};
+
+export async function listEventsByRangeHandler(
+  ctx: QueryHandlerCtx,
+  args: ListEventsByRangeArgs,
+): Promise<{ events: MemoryEvent[] }> {
+  const rows = await ctx.db
+    .query("checkIns")
+    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .collect();
+
+  const inRange = rows.filter(
+    (row) =>
+      row.deletedAt === undefined &&
+      row.date >= args.fromDate &&
+      row.date <= args.toDate,
+  );
+
+  const events: MemoryEvent[] = [];
+  for (const row of inRange) {
+    events.push(...eventFromCheckin(row));
+  }
+
+  events.sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+    if (a.time !== b.time) return a.time < b.time ? 1 : -1;
+    return 0;
+  });
+
+  return { events };
+}
+
+export const listEventsByRange = query({
+  args: {
+    userId: v.string(),
+    fromDate: v.string(),
+    toDate: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return listEventsByRangeHandler(ctx as unknown as QueryHandlerCtx, args);
   },
 });

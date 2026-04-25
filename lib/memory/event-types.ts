@@ -1,0 +1,120 @@
+/**
+ * Memory event types — discriminated union covering all Memory tab event
+ * variants for F02 C1 (check-in, flare) and future feature chunks
+ * (intake from F04, visit from F05).
+ *
+ * The shape is deliberately uniform across variants so the day list UI
+ * can render every event with the same row component (time · title ·
+ * meta · taskState icon) and only branch on `type` for the detail sheet.
+ *
+ * `eventFromCheckin` is the only event-producer in F02 C1; F04 / F05 will
+ * add `eventFromIntake` / `eventFromVisit` later — additive, no churn here.
+ */
+import type { CheckinRow } from "@/convex/checkIns";
+
+export type TaskState = "pending" | "done" | "missed";
+export type Mood = "heavy" | "flat" | "okay" | "bright" | "great";
+
+type BaseEventFields = {
+  eventId: string;
+  date: string;
+  time: string;
+  title: string;
+  meta: string;
+  taskState: TaskState;
+};
+
+export type CheckInEvent = BaseEventFields & {
+  type: "check-in";
+  payload: {
+    pain: number;
+    mood: Mood;
+    adherenceTaken: boolean;
+    energy: number;
+    transcript: string;
+    checkinId: string;
+  };
+};
+
+export type FlareEvent = BaseEventFields & {
+  type: "flare";
+  payload: { checkinId: string };
+};
+
+export type IntakeEvent = BaseEventFields & {
+  type: "intake";
+  payload: Record<string, never>;
+};
+
+export type VisitEvent = BaseEventFields & {
+  type: "visit";
+  payload: Record<string, never>;
+};
+
+export type MemoryEvent = CheckInEvent | FlareEvent | IntakeEvent | VisitEvent;
+
+const MOOD_LABELS: Record<Mood, string> = {
+  heavy: "Heavy",
+  flat: "Flat",
+  okay: "Okay",
+  bright: "Bright",
+  great: "Great",
+};
+
+/**
+ * Format a UTC ms timestamp as HH:MM in IST (Asia/Kolkata).
+ * IST is UTC+5:30 with no DST — a fixed offset is correct year-round and
+ * avoids Intl.DateTimeFormat surprises across runtimes.
+ */
+function formatTimeIST(createdAt: number): string {
+  const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+  const istMs = createdAt + IST_OFFSET_MS;
+  const d = new Date(istMs);
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+/**
+ * Convert one check-in row into 1 or 2 MemoryEvents:
+ *  - always: a 'check-in' event (taskState='done').
+ *  - if `flare === true`: also a 'flare' event at the same time
+ *    (taskState='missed' — red strikethrough in the task-state vocabulary).
+ */
+export function eventFromCheckin(row: CheckinRow): MemoryEvent[] {
+  const time = formatTimeIST(row.createdAt);
+  const events: MemoryEvent[] = [
+    {
+      type: "check-in",
+      eventId: `checkin:${row._id}`,
+      date: row.date,
+      time,
+      title: "Daily check-in",
+      meta: `Pain ${row.pain} · ${MOOD_LABELS[row.mood]}`,
+      taskState: "done",
+      payload: {
+        pain: row.pain,
+        mood: row.mood,
+        adherenceTaken: row.adherenceTaken,
+        energy: row.energy,
+        transcript: row.transcript,
+        checkinId: row._id,
+      },
+    },
+  ];
+
+  if (row.flare === true) {
+    events.push({
+      type: "flare",
+      eventId: `flare:${row._id}`,
+      date: row.date,
+      time,
+      title: "Flare-up logged",
+      meta: "",
+      taskState: "missed",
+      payload: { checkinId: row._id },
+    });
+  }
+
+  return events;
+}

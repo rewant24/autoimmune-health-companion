@@ -21,7 +21,7 @@ Memory is the **browse-past-check-ins surface inside the Journey pillar** (ADR-0
 
 ## Scope in / out
 
-- **In (MVP):** Memory tab inside Journey, week-at-a-time scrubber, filter tabs (5 categories), reverse-chronological day list, mixed-event grouping per day, task-state visual vocabulary, tap-to-detail sheet, edit-in-place within 48h, soft-delete with confirm + 5s undo toast, keyword search (client-side debounce against transcript text), empty-state template ("Your memory starts today."), paywall banner at 30-day boundary for free tier.
+- **In (MVP):** Memory tab inside Journey, week-at-a-time scrubber, filter tabs (5 categories), reverse-chronological day list, mixed-event grouping per day, task-state visual vocabulary, tap-to-detail sheet, edit-in-place within 48h, hard delete with confirm (per scoping line 696), keyword search (client-side debounce against transcript text), empty-state template ("Your memory starts today.").
 - **Out (backlog):**
   - Full edit on past-window check-ins (post-48h) — backlog §22 (full audit history + redact-from-report).
   - Search index (Convex full-text) — backlog §23. Client-side filter for MVP (dataset small per scoping line 695).
@@ -35,7 +35,6 @@ Memory is the **browse-past-check-ins surface inside the Journey pillar** (ADR-0
   - `checkIns` table (F01, shipped) — primary event source for MVP.
   - `medicationIntakes` (F04, future) — populates "Intake events" filter and "Medication intake" day-section.
   - `doctorVisits`, `bloodWorkTests` (F05, future) — populates "Visits" filter and "Other events" day-section.
-  - User tier (F02 introduces the user record + auth per ADR-019; tier read for paywall clamp).
 - **Blocks:**
   - F06 Doctor Report (aggregates check-ins + events).
   - F08 Journey (Memory is one of Journey's five surfaces; F08 wraps with the Journey landing screen).
@@ -55,10 +54,9 @@ components/memory/EventGroup.tsx             // Section header inside a day
 components/memory/CheckinDetail.tsx          // Full structured capture in detail sheet
 components/memory/SearchBar.tsx              // Toggleable from header
 components/memory/EmptyState.tsx             // "Your memory starts today." template
-components/memory/PaywallBanner.tsx          // 30-day boundary banner for free tier
 lib/memory/event-types.ts                    // Discriminated-union event type
 lib/memory/filters.ts                        // Pure filter predicates
-convex/checkIns.ts                           // Extend — listEventsByRange, updateCheckin, softDeleteCheckin
+convex/checkIns.ts                           // Extend — listEventsByRange, updateCheckin, deleteCheckin
 tests/memory/*.test.ts(x)
 ```
 
@@ -108,12 +106,12 @@ tests/memory/*.test.ts(x)
 
 ### Cycle 2 — Detail sheet, edit/delete, search, empty/paywall states
 
-#### Chunk 2.D — Detail sheet + edit-in-place (48h) + soft-delete with undo
+#### Chunk 2.D — Detail sheet + edit-in-place (48h) + hard delete
 - **Owner:** build-agent-A
 - **Files owned:**
   - `app/journey/memory/[date]/page.tsx`
   - `components/memory/CheckinDetail.tsx`
-  - `convex/checkIns.ts` (extend — `updateCheckin`, `softDeleteCheckin`)
+  - `convex/checkIns.ts` (extend — `updateCheckin`, `deleteCheckin`)
   - `tests/memory/checkin-detail.test.tsx`
   - `tests/memory/edit-delete.test.ts`
 - **Status:** scoped
@@ -129,15 +127,14 @@ tests/memory/*.test.ts(x)
 - **Stories:** US-2.E.1
 - **Do-not-touch:** all other files
 
-#### Chunk 2.F — Empty state + paywall banner + integration test
+#### Chunk 2.F — Empty state + integration test
 - **Owner:** build-agent-C
 - **Files owned:**
   - `components/memory/EmptyState.tsx`
-  - `components/memory/PaywallBanner.tsx`
   - `tests/memory/empty-state.test.tsx`
   - `tests/memory/integration.test.tsx`
 - **Status:** scoped
-- **Stories:** US-2.F.1, US-2.F.2, US-2.F.3
+- **Stories:** US-2.F.1, US-2.F.2
 - **Do-not-touch:** prior chunks' source files beyond composition
 
 ---
@@ -155,11 +152,11 @@ tests/memory/*.test.ts(x)
 
 ### US-2.A.2 — `listEventsByRange` server query
 - **As** Memory **I want** a single query that returns mixed events in a date range **so that** the UI doesn't need to merge sources.
-- **Functional requirement:** `listEventsByRange({ fromDate, toDate, filters?, tier }): { events: MemoryEvent[], clampedByTier: bool }`. F02 C1 reads only `checkIns` (soft-deleted excluded); future F04 / F05 calls extend the merge. Free tier: `fromDate` clamped to `today - 30d`. Paid tier: no clamp. Returns events sorted reverse-chronological by `(date, time)`.
+- **Functional requirement:** `listEventsByRange({ fromDate, toDate, filters? }): { events: MemoryEvent[] }`. F02 C1 reads only `checkIns`; future F04 / F05 calls extend the merge. No tier clamp — every user has full history (no free tier). Returns events sorted reverse-chronological by `(date, time)`.
 - **Acceptance:**
-  - **UX:** clamp not visible as an error — UI shows paywall banner when `clampedByTier` true.
+  - **UX:** n/a.
   - **UI:** n/a in this chunk.
-  - **Backend / data:** uses existing `by_user_date` index; `userId` continues from client arg until F02 introduces auth (ADR-019). Tier read from user record (introduced in this feature; hardcoded to `'free'` until tier model lands).
+  - **Backend / data:** uses existing `by_user_date` index; `userId` continues as client-passed arg until F01 C2 lands auth (ADR-019).
   - **UX copy:** none.
 
 ### US-2.A.3 — Filter predicate layer
@@ -182,7 +179,7 @@ tests/memory/*.test.ts(x)
 
 ### US-2.B.2 — Week-at-a-time scrubber
 - **As** Sonakshi **I want** a horizontal calendar strip showing one week at a time **so that** I can swipe to navigate weeks without scrolling endlessly.
-- **Functional requirement:** `<WeekScrubber>` renders a row of 7 cells (S / M / T / W / T / F / S) with the date number on each. Selected day highlighted in the accent color (teal). Swipe left → next week. Swipe right → previous week. Today's day cell carries a today-indicator. Each cell shows a small dot if a check-in exists for that day, and a flare marker if `flare=true`. Free tier: scrubber clamps to weeks within last 30 days; paid tier: full history navigable.
+- **Functional requirement:** `<WeekScrubber>` renders a row of 7 cells (S / M / T / W / T / F / S) with the date number on each. Selected day highlighted in the accent color (teal). Swipe left → next week. Swipe right → previous week. Today's day cell carries a today-indicator. Each cell shows a small dot if a check-in exists for that day, and a flare marker if `flare=true`. Full history navigable (no tier clamp).
 - **Acceptance:**
   - **UX:** snap to week boundaries on swipe. Tap a day cell → updates selected day (parent state). Haptic tick on selection if supported.
   - **UI:** cell ~14% width × 56pt tall. Today-indicator visually distinct from selection. Month label above strip: "April 2026" — sticky, updates as Sonakshi swipes weeks.
@@ -243,14 +240,14 @@ tests/memory/*.test.ts(x)
   - **Backend / data:** server checks window; returns typed error.
   - **UX copy:** lock text: "Locked — you can edit check-ins within 48 hours." Save button: "Save changes".
 
-### US-2.D.3 — Soft-delete with confirm + 5s undo toast
+### US-2.D.3 — Hard delete with confirm
 - **As** Sonakshi **I want** to delete a day I don't want to remember **so that** my Memory reflects only what I want.
-- **Functional requirement:** `softDeleteCheckin(id)` sets `deletedAt`. Queries already exclude soft-deleted (shipped F01). Two-tap confirm: tap Delete → modal → confirm. After confirm, undo toast for 5s — tap to restore (clears `deletedAt`). After 5s, deletion is user-facing irreversible (row stays in DB for compliance + future restore mechanism). **This is a refinement on scoping line 696's "delete is irreversible and requires confirm"** — soft-delete + 5s undo gives a grace window without changing the irreversibility promise after that window. ADR hook noted in review.
+- **Functional requirement:** `deleteCheckin(id)` mutation removes the row outright (per scoping line 696: "delete is irreversible and requires confirm"). Two-tap confirm: tap Delete → modal → confirm. No undo, no soft-delete, no restore path.
 - **Acceptance:**
-  - **UX:** modal full-screen on mobile; destructive button visually distinct. Toast accessible (ARIA live region + visible 5s).
+  - **UX:** modal full-screen on mobile; destructive button visually distinct. After confirm, the row disappears from the list and the user navigates back to the day view.
   - **UI:** modal: heading + body + primary destructive + secondary cancel.
-  - **Backend / data:** row retained in DB; queries filter `deletedAt === undefined`. Restore mutation `restoreCheckin(id)` wired only for the toast path; no UI surface for restoring after toast expires.
-  - **UX copy:** modal heading: "Delete this check-in?" body: "It'll be removed from Memory and your Doctor Report." primary: "Delete". secondary: "Keep it". Toast: "Check-in deleted. Undo".
+  - **Backend / data:** row deleted from `checkIns` table. Mutation rejects if `userId` mismatch.
+  - **UX copy:** modal heading: "Delete this check-in?" body: "This can't be undone. It'll be removed from Memory and your Doctor Report." primary: "Delete". secondary: "Keep it".
 
 ### US-2.E.1 — Keyword search across transcripts
 - **As** Sonakshi **I want** to search "stiffness" and see every day I mentioned it **so that** I can find a moment without scrolling.
@@ -270,18 +267,9 @@ tests/memory/*.test.ts(x)
   - **Backend / data:** driven by `events.length === 0 && !clampedByTier`.
   - **UX copy:** title: "Your memory starts today." body: "Tap the orb and tell me how today's feeling — your check-ins live here." primary: "Start today's check-in".
 
-### US-2.F.2 — Paywall banner (free tier, >30d)
-- **As** Sonakshi **I want** to know when older check-ins are hidden **so that** I can decide to upgrade.
-- **Functional requirement:** When `clampedByTier === true` from `listEventsByRange`, `<PaywallBanner>` renders at the *end* of the day list (not blocking scroll). Tap → pricing page (route stub for MVP — actual pricing page is post-MVP).
-- **Acceptance:**
-  - **UX:** banner sits at list end; doesn't intercept scroll.
-  - **UI:** subtle, single primary CTA.
-  - **Backend / data:** reads tier + clamp flag from query payload.
-  - **UX copy:** "You're seeing the last 30 days. Saumya Companion keeps your full history. — See plans".
-
-### US-2.F.3 — Integration test — full Memory flow
+### US-2.F.2 — Integration test — full Memory flow
 - **As** the team **I want** one end-to-end test of Memory **so that** regressions are caught.
-- **Functional requirement:** Seed 45 check-ins across 60 days (mix: 10 with `flare=true`); sign in as free user; assert only 30 days of events visible; assert paywall banner renders at list end; switch filter to "Flare-ups"; assert only flare events render; tap a check-in → detail sheet renders; edit metrics within 48h → save → assert update reflected in list; soft-delete → confirm → assert row hidden; trigger undo within 5s → assert row restored.
+- **Functional requirement:** Seed 45 check-ins across 60 days (mix: 10 with `flare=true`); assert all 60 days of events visible (no tier clamp); switch filter to "Flare-ups"; assert only flare events render; tap a check-in → detail sheet renders; edit metrics within 48h → save → assert update reflected in list; delete a check-in → confirm → assert row removed from list and from DB.
 - **Acceptance:**
   - **UX:** n/a.
   - **UI:** n/a.
