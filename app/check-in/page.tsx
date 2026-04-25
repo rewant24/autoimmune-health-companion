@@ -309,6 +309,15 @@ export default function CheckinPage({
   const confirmingRef = useRef<ConfirmingSnapshot | null>(null)
   // Cache the last save payload so "Keep this for later" can re-enqueue it.
   const lastPayloadRef = useRef<SaveLaterPayload | null>(null)
+  // Token for the in-flight LLM extraction call. Incremented when a new
+  // `processing` entry kicks extraction; the async resolver checks the
+  // token against the latest before dispatching, so a superseded run is
+  // ignored. This replaces the older `let cancelled = false` pattern,
+  // which was set to `true` by the effect's own cleanup as soon as
+  // `EXTRACTION_START` flipped state from `processing → extracting`,
+  // suppressing the eventual `EXTRACTION_DONE` / `EXTRACTION_FAILED`
+  // dispatch and stranding the orb on the thinking spinner.
+  const extractionRunIdRef = useRef(0)
 
   const onSave = async (): Promise<void> => {
     const snapshot = confirmingRef.current
@@ -408,7 +417,14 @@ export default function CheckinPage({
     if (state.kind !== 'processing') return
     if (userId === null || todayIso === null) return
     const transcriptText = state.transcript.text
-    let cancelled = false
+    // Increment-and-capture: the resolver checks `runId` against the
+    // current ref before dispatching, so any *newer* extraction (or a
+    // RESET to idle that bumps the counter) supersedes this run. We
+    // deliberately do NOT cancel via cleanup, because dispatching
+    // EXTRACTION_START flips state→extracting which re-runs this very
+    // effect and used to clobber the in-flight call.
+    extractionRunIdRef.current += 1
+    const runId = extractionRunIdRef.current
     dispatch({ type: 'EXTRACTION_START' })
     void (async () => {
       try {
@@ -417,7 +433,7 @@ export default function CheckinPage({
           userId,
           date: todayIso,
         })
-        if (cancelled) return
+        if (runId !== extractionRunIdRef.current) return
         const cov = coverage(metrics)
         const stage: StageEnum =
           cov.missing.length === 0
@@ -432,7 +448,7 @@ export default function CheckinPage({
           stage,
         })
       } catch (err) {
-        if (cancelled) return
+        if (runId !== extractionRunIdRef.current) return
         // ExtractDailyCapError + ExtractFailedError both fall through to
         // a fully-scripted Stage 2 — user can still complete the check-in.
         if (err instanceof ExtractDailyCapError) {
@@ -441,9 +457,6 @@ export default function CheckinPage({
         dispatch({ type: 'EXTRACTION_FAILED' })
       }
     })()
-    return () => {
-      cancelled = true
-    }
   }, [state, dispatch, userId, todayIso])
 
   // 4. On save success: detect milestone first (chunk 2.F). When the
