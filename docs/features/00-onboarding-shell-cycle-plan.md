@@ -138,7 +138,7 @@ The shape is **versioned via `v: 1`**; future migrations bump `v` and add a migr
 - [x] **0.4** — Cherry-pick the plan commit (`45ee765`) onto the build branch so the plan lives alongside the code.
 - [x] **0.5** — Stamp the locked seam: `lib/profile/types.ts` (canonical) + `lib/profile/storage.ts` (Build-B owns + extends; signatures locked) + `tests/profile/contract.test.ts` (seam guard).
 - [x] **0.6** — Re-run `npm run test:run`, `npx tsc --noEmit`, `npm run build`. Contract tests pass on top of baseline (actual: 441 + 11 = 452 / 452 vitest; tsc clean; next build clean — 8 prerendered routes + 1 dynamic API).
-- [ ] **0.7** — Commit + tag `onboarding-shell/pre-flight-done`. Append phase entry to `docs/build-log.md`. Push branch + tag.
+- [x] **0.7** — Commit + tag `onboarding-shell/pre-flight-done`. Append phase entry to `docs/build-log.md`. Push branch + tag. *(Tag `67dfbff` on commit `9ca89ff`; pushed to origin.)*
 
 ---
 
