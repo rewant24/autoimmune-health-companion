@@ -393,20 +393,31 @@ export default function CheckinPage({
 
   // 2. Cache confirming snapshot so we can render ConfirmSummary across
   //    saving / error transitions.
-  useEffect(() => {
-    if (state.kind === 'confirming' && state.metrics) {
-      confirmingRef.current = {
-        metrics: state.metrics,
-        declined: state.declined ?? [],
-        stage: state.stage ?? 'open',
-        transcript: state.transcript,
-      }
+  //
+  //    Snapshot the ref synchronously DURING render when we're in
+  //    `confirming` — a useEffect-only mirror runs after commit, so the
+  //    first render of `confirming` would otherwise see `ref.current ===
+  //    null`, fail the conditional render guard below, and fall through
+  //    to the bottom orb branch (with no header, since header is gated
+  //    on `idle`). The user sees just a teal orb — exactly the "green
+  //    circle" symptom reported. Writing a ref during render is safe
+  //    when it's idempotent (same state → same ref), which it is here.
+  if (state.kind === 'confirming' && state.metrics) {
+    confirmingRef.current = {
+      metrics: state.metrics,
+      declined: state.declined ?? [],
+      stage: state.stage ?? 'open',
+      transcript: state.transcript,
     }
+  }
+  // Effect mirror handles the `idle` → clear path. Splitting out keeps
+  // the render-time write narrow (only cache, never clear).
+  useEffect(() => {
     if (state.kind === 'idle') {
       confirmingRef.current = null
       lastPayloadRef.current = null
     }
-  }, [state])
+  }, [state.kind])
 
   // 3. Kick extraction when the machine enters `processing`. ADR-005:
   //    coverage().missing.length === 0 → ConfirmSummary; else → Stage 2.

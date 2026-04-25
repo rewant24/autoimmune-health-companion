@@ -1,10 +1,12 @@
 /**
  * /check-in/saved route tests (US-1.F.4).
  *
- * Per ADR-023:
+ * Per ADR-023 (with unified-app-shell update 2026-04-26):
  *   - Stable terminal route after save.
- *   - "View memory" CTA hidden when NEXT_PUBLIC_F02_C1_SHIPPED !== 'true'.
- *   - Auto-dismiss to `/` after 2000ms; visible ≥1.5s minimum.
+ *   - "View memory" CTA rendered unconditionally (env-var gate removed
+ *     post F02 C1 ship).
+ *   - Auto-dismiss to `/journey/memory` after 2000ms (was `/` pre-unify);
+ *     visible ≥1.5s minimum.
  *
  * The page reads the `closer` query string and renders it next to the
  * settled-orb visual. We render <SavedView> directly (the page wraps it
@@ -32,8 +34,6 @@ describe('<SavedView /> (/check-in/saved)', () => {
 
   afterEach(() => {
     vi.useRealTimers()
-    delete (process.env as Record<string, string | undefined>)
-      .NEXT_PUBLIC_F02_C1_SHIPPED
   })
 
   it('renders the closer text passed via prop', () => {
@@ -62,36 +62,20 @@ describe('<SavedView /> (/check-in/saved)', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('hides the View memory CTA when NEXT_PUBLIC_F02_C1_SHIPPED is unset', () => {
+  it('renders the View memory CTA pointing at /journey/memory', () => {
     render(<SavedView closer="Saved." queued={false} />)
-    expect(
-      screen.queryByRole('link', { name: /view memory/i }),
-    ).not.toBeInTheDocument()
+    const link = screen.getByRole('link', { name: /view memory/i })
+    expect(link).toBeInTheDocument()
+    expect(link.getAttribute('href')).toBe('/journey/memory')
   })
 
-  it('hides the View memory CTA when NEXT_PUBLIC_F02_C1_SHIPPED !== "true"', () => {
-    process.env.NEXT_PUBLIC_F02_C1_SHIPPED = 'false'
-    render(<SavedView closer="Saved." queued={false} />)
-    expect(
-      screen.queryByRole('link', { name: /view memory/i }),
-    ).not.toBeInTheDocument()
-  })
-
-  it('shows the View memory CTA when NEXT_PUBLIC_F02_C1_SHIPPED === "true"', () => {
-    process.env.NEXT_PUBLIC_F02_C1_SHIPPED = 'true'
-    render(<SavedView closer="Saved." queued={false} />)
-    expect(
-      screen.getByRole('link', { name: /view memory/i }),
-    ).toBeInTheDocument()
-  })
-
-  it('auto-dismisses to "/" after 2000ms', () => {
+  it('auto-dismisses to "/journey/memory" after 2000ms', () => {
     render(<SavedView closer="Saved." queued={false} />)
     expect(pushSpy).not.toHaveBeenCalled()
     act(() => {
       vi.advanceTimersByTime(2000)
     })
-    expect(pushSpy).toHaveBeenCalledWith('/')
+    expect(pushSpy).toHaveBeenCalledWith('/journey/memory')
   })
 
   it('does not auto-dismiss before 1500ms (minimum visible)', () => {
