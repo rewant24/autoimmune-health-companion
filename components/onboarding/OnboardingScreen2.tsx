@@ -1,12 +1,15 @@
 'use client'
 
 /**
- * Onboarding Screen 2 — Doctor-visit framing (locked headline from scoping).
+ * Onboarding Screen 2 — Doctor-visit framing.
  *
- * Story: Onboarding.US-2 — Locked headline from scoping § Onboarding Screen 2.
- * Reviewer note: headline was authored under prior "Saumya / gentle"
- * framing. Reviewer-1 must flag for Rewant to confirm under Saha
- * "endurance + together" voice or supply a rewrite via TODO(rewant-copy).
+ * Story: Onboarding.US-2.
+ *
+ * Headline note: the original scoping line ("A digital friend for the
+ * day-to-day…") was authored under the prior Saumya/gentle framing. R1
+ * supplied a Saha-voice rewrite during the cycle fix-pass; approved by
+ * Rewant. The new line keeps the same job (memory-burden → data) but in
+ * the "endurance + together" register.
  *
  * CTA "Next" → `/onboarding/3`.
  *
@@ -20,10 +23,9 @@ import { SCREEN_2_BODY_PLACEHOLDER } from '@/lib/copy/onboarding-placeholders'
 
 const TOTAL_STEPS = 5
 
-// Locked from scoping § Onboarding Screen 2.
-// Reviewer-1: confirm voice under Saha "endurance + together" or supply rewrite.
+// R1 Saha-voice rewrite (approved by Rewant in fix-pass).
 const SCREEN_2_HEADLINE =
-  'A digital friend for the day-to-day of living with a chronic condition — so you walk into every doctor visit with data, not memory.'
+  'Living with autoimmune asks a lot of memory. Saha holds the record — so you walk into every doctor visit with data, not guesses.'
 
 export function OnboardingScreen2(): React.JSX.Element {
   const router = useRouter()

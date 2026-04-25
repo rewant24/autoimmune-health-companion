@@ -38,7 +38,7 @@ export default function SetupNamePage(): React.JSX.Element {
     <SetupShell
       step={1}
       heading="What should Saha call you?"
-      subhead="One name. We'll keep it simple."
+      subhead="First name is fine."
       disabled={!valid}
       onNext={next}
     >
