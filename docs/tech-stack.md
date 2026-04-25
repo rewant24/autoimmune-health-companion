@@ -32,7 +32,7 @@ graph TD
     end
 
     subgraph Auth["Auth"]
-        GH[GitHub OAuth<br/>weekender]
+        GH[GitHub OAuth<br/>MVP]
         EP[Email + phone<br/>post-launch]
     end
 
@@ -73,7 +73,7 @@ Current state as of 2026-04-25. Versions confirmed in `docs/build-log.md` 2026-0
 | OpenAI Realtime | TBD | Future primary voice | Major = ADR | — | Stubbed in F01 C1; flag `VOICE_PROVIDER` |
 | Vapi | TBD | Alternative voice | As-needed | — | Abstraction in `lib/voice/provider.ts` |
 | LLM for metric extraction | TBD (Claude Haiku / GPT-4o-mini) | Structured extraction | Major = ADR | — | Prompt-tested, 20+ fixtures |
-| GitHub OAuth | TBD (NextAuth or Clerk) | Weekender auth | Patch only pre-launch | — | Email + phone added post-launch |
+| GitHub OAuth | TBD (NextAuth or Clerk) | MVP auth | Patch only pre-launch | — | Email + phone added post-launch |
 | Razorpay SDK | TBD | IN payments | Minor quarterly | — | UPI primary |
 | Stripe SDK | TBD | Intl payments | Minor quarterly | — | — |
 | PDF generator | TBD (react-pdf / pdf-lib) | Doctor Report | Minor as-needed | — | Hybrid summary + appendix |

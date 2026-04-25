@@ -1,10 +1,10 @@
 # Autoimmune Health Companion — Build Log
 
-> Running chronicle of the build process. Following the [AI Weekender Builder Handbook](https://growthx.club/docs/ai-weekender-builder-handbook).
+> Running chronicle of the build process. Methodology: [Project Process Playbook](~/.claude/projects/-Users-rewantprakash-1/memory/reference_project_process.md) — scoping + POC, parallel build subagents, parallel review subagents, post-ship learnings. (Adopted 2026-04-24, replacing the earlier process reference.)
 
 ---
 
-## Handbook principles we are following
+## Methodology principles we are following
 
 - **You write the scoping doc. Not the AI.** Plain English. About one specific user.
 - **Walk the user step-by-step.** First screen → first click → first submit → where data goes → what they see back → return visit → edge cases.
@@ -21,12 +21,12 @@
 
 **Decisions made:**
 - Project confirmed as a new standalone build at `/Volumes/Coding Projects + Docker/autoimmune-health-companion/`.
-- Adopted AI Weekender Builder Handbook as the true methodology guide.
+- Adopted a structured build methodology (later locked on 2026-04-24 as the Project Process Playbook).
 - Order of work locked: **scoping doc first, scaffold second.** Reason: scope decides the data model, data model decides the Convex schema — scaffolding first would mean rewriting the schema.
 
 **Files created this session:**
 - `CLAUDE.md` — already existed (project overview, problem statement, MVP feature list, stack TBD)
-- `scoping.md` — empty skeleton with the handbook's own prompts as section headers. Rewant fills in, Claude transcribes.
+- `scoping.md` — empty skeleton with section-header prompts. Rewant fills in, Claude transcribes.
 - `build-log.md` — this file.
 
 **Open questions (to be answered during scoping):**
@@ -34,7 +34,7 @@
 - What's the first screen?
 - What's the daily check-in actually made of?
 - What does "correlation view" mean concretely?
-- What do we explicitly NOT build this weekend?
+- What do we explicitly NOT build in MVP scope?
 
 **Next step:** Rewant walks through the user step-by-step. Claude asks one focused question at a time. No first passes, no shortcuts.
 
@@ -61,7 +61,7 @@ Key principles synthesized into the scoping doc (§ Conversation design principl
 
 ## 2026-04-23 — Session 2: Day 2 waitlist shipped
 
-**Deliverable:** waitlist live on Vercel, handbook Day 2 spec met (email → Convex).
+**Deliverable:** waitlist live on Vercel — first MVP milestone (email → Convex).
 
 **Stack locked in this push:**
 - Next.js 16.2.4 (App Router, Turbopack) + Tailwind 4
@@ -82,12 +82,12 @@ Key principles synthesized into the scoping doc (§ Conversation design principl
 - Smoke-tested: first insert accepted, second returns `alreadyOnList: true`
 
 **Route taken vs plan:**
-- Initial plan was Google Form iframe placeholder — rejected. Rewant's direction: handbook is source of truth, no placeholders. Swapped to native Convex-backed form before first deploy.
-- Missed 11am IST deadline while realigning. Shipped ~12:40 IST.
+- Initial plan was Google Form iframe placeholder — rejected. Rewant's direction: scoping doc is source of truth, no placeholders. Swapped to native Convex-backed form before first deploy.
+- Missed 11am IST self-imposed gate while realigning. Shipped ~12:40 IST.
 
 **Open items (next session):**
 - **GitHub ↔ Vercel auto-deploy:** Vercel CLI couldn't connect the repo automatically (app install step missing). One-time dashboard action — install the Vercel GitHub App on `rewant24`, then future pushes auto-deploy without manual `vercel --prod`.
-- Handbook Day 2 bonus: LinkedIn launch post ("I've launched X" format) with live link.
+- LinkedIn launch post ("I've launched X" format) with live link.
 - Resume scoping: doctor report flow, edge cases, out-of-scope section.
 
 ---
