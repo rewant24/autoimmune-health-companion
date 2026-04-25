@@ -637,13 +637,15 @@ export function LandingPage() {
             <div className="flex flex-col gap-3">
               <p className="type-label">Product</p>
               {/*
-                Single "Open the app" entry — the unified app shell mounts
-                BottomNav on /check-in and /journey/memory, so separate
-                footer links per surface are redundant. The hero
-                <GetStartedCTA /> remains the primary entry; this footer
-                link is the secondary fast-path.
+                Single "Open the app" entry — points at the onboarding
+                entry so first-time visitors who scroll to the footer
+                without using the hero CTA still land in the same flow.
+                Already-onboarded users will tap through quickly (5
+                screens, no required input). The hero <GetStartedCTA />
+                remains the smart-routing primary entry that skips to
+                /home for returning users.
               */}
-              <Link href="/check-in" className="text-[14px] hover:underline" style={{ color: "var(--ink)" }}>
+              <Link href="/onboarding/1" className="text-[14px] hover:underline" style={{ color: "var(--ink)" }}>
                 Open the app
               </Link>
               <a href="#waitlist" className="text-[14px] hover:underline" style={{ color: "var(--ink)" }}>
