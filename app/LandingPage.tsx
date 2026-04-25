@@ -9,7 +9,7 @@ const conditions = [
   "Lupus",
   "Rheumatoid arthritis",
   "Hashimoto's",
-  "MS",
+  "Multiple sclerosis",
   "Crohn's",
   "Psoriasis",
   "Sjögren's",
