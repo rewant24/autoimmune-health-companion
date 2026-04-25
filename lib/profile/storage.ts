@@ -153,8 +153,8 @@ export const SETUP_STEP_ORDER: readonly SetupStep[] = [
 ] as const
 
 /**
- * Returns the first incomplete Setup B step given a profile (or null if it's
- * missing entirely — caller treats that as "start at name").
+ * Returns the first incomplete Setup B step given a profile (or "name" if
+ * it's missing entirely — caller treats that as "start at name").
  *
  * Returns null when every required field is filled.
  */
@@ -174,4 +174,26 @@ export function firstMissingSetupStep(
     return 'condition'
   }
   return null
+}
+
+/**
+ * Direct-link guard helper for Setup B step pages.
+ *
+ * Given the current step and a profile, returns the redirect target if a
+ * strictly-prior step is unfilled, or null when the user is allowed to stay
+ * on the current step (either it's their first time on it, or they've come
+ * back to edit).
+ *
+ * Caller usage in a page useEffect:
+ *   const target = redirectTargetForSetup('email', readProfile())
+ *   if (target) router.replace(`/setup/${target}`)
+ */
+export function redirectTargetForSetup(
+  current: SetupStep,
+  profile: Profile | null,
+): SetupStep | null {
+  const missing = firstMissingSetupStep(profile)
+  if (missing === null) return null
+  const order = { name: 0, dob: 1, email: 2, condition: 3 } as const
+  return order[missing] < order[current] ? missing : null
 }
