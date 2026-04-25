@@ -7,8 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const pushSpy = vi.fn()
 const replaceSpy = vi.fn()
+// Stabilize the mocked router across renders. See condition-step.test.tsx
+// for the rationale.
+const mockRouter = { push: pushSpy, replace: replaceSpy }
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: pushSpy, replace: replaceSpy }),
+  useRouter: () => mockRouter,
 }))
 
 import SetupEmailPage from '@/app/setup/email/page'

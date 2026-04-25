@@ -7,8 +7,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const pushSpy = vi.fn()
 const replaceSpy = vi.fn()
+// Stabilize the mocked router across renders. Returning a fresh object on
+// every `useRouter()` call would invalidate the page's `useEffect` dep on
+// every render and (when the effect calls `setValue` with an object) loop
+// forever.
+const mockRouter = { push: pushSpy, replace: replaceSpy }
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: pushSpy, replace: replaceSpy }),
+  useRouter: () => mockRouter,
 }))
 
 import SetupConditionPage from '@/app/setup/condition/page'
