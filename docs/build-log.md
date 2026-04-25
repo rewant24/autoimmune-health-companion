@@ -384,3 +384,44 @@ Final tally:
 - Items 2–8 from the scan above (sub-headline, nav CTA, privacy placement, WaitlistCount copy, founder photo, mobile order, section dedup).
 - F02 C1 dispatch (still gated on Rewant signoff per Session 6).
 - Push `e1e91a3` + a new commit covering Session 8 launch-page polish.
+
+---
+
+## 2026-04-25 — Session 9: Launch-page polish (UX scan items 2, 3, 4, 5, 7, 8)
+
+**Trigger.** Rewant: focus this tab only on the launch-page polish backlog and execute it.
+
+**Scope decided up front.** Items 2, 3, 4, 5, 7, 8 from Session 8's scan. Item 6 (founder photo) deferred — needs a photo asset from Rewant.
+
+**Implemented.**
+
+- **Item 3 — single nav CTA (`app/page.tsx`).** Dropped `Try demo →` from the top nav; kept `Join waitlist →` as the lone CTA next to the wordmark. Removed the `flex items-center gap-5` container since there's only one child now. Demo link still lives in the footer's Product column, so it remains discoverable for anyone who wants it.
+
+- **Item 2 — Krug-style sub-headline + trimmed body (`app/page.tsx`).** Added a one-line sub-headline directly under the H1: *"A health companion for life with an autoimmune condition."* — uses `type-body-lg` with full `--ink` color so it reads as a deck, not muted body. Replaced the seven-thing body paragraph (*"Daily check-ins, medications, doctor visits, blood work, patterns over time, a community of people who get it — and a doctor-ready report when it counts."*) with a tighter line about the daily loop: *"Sixty seconds a day. Saumya remembers your symptoms, medications, and visits — so when the room rushes, you walk in prepared."* The pill above (*"Voice-first · for autoimmune"*) and the new sub-headline now share the Krug duty without restating each other; the body paragraph carries the loop story.
+
+- **Item 7 — VoiceTranscript visible earlier on mobile (`app/page.tsx`).** Restructured the hero section from two grid cells (text-left, transcript-right) into three: hero copy (badge + H1 + sub + body) at `md:row-start-1 md:col-span-7`, VoiceTranscript at `md:row-start-1 md:row-span-2 md:col-span-5` keeping the existing `md:sticky md:top-10`, and form + conditions at `md:row-start-2 md:col-span-7`. On desktop (md+), explicit row placement keeps the transcript on the right spanning both rows. On mobile (single column, no `md:row-start` applied), DOM order takes over: copy → transcript → form. Differentiator now appears before the conversion ask on small screens. Tweaked the section's gap to `gap-10 md:gap-x-12 md:gap-y-14` so the mobile rhythm tightens slightly.
+
+- **Item 8 — cut "The daily loop" section (`app/page.tsx`).** Removed the 01/02/03 numbered list (*"Speak for sixty seconds / See what your body is telling you / Walk in prepared"*). It duplicated the three-bucket grid above it — bucket 03 ("Show up prepared") and loop step 03 ("Walk in prepared") were verbatim restatements; the buckets carry richer info (9 sub-items) and the same three-jobs hierarchy. Net: ~50 lines deleted, page reads tighter, less scroll between buckets and the founder/why block.
+
+- **Item 4 — privacy moves before final CTA (`app/page.tsx`).** Swapped section order so the privacy stance (`<section>` with the three claims: no tracking pixels / transcripts never train AI / delete in one tap) renders **before** the bottom waitlist gradient card, not after it. Privacy is a precondition for handing over an email, not a postscript. Comment on the privacy section updated from *"replaces generic trust strip"* → *"precondition to the second ask, not a postscript"*. Comment on the waitlist CTA updated from *"three things competing reduced to one"* → *"sits after privacy so the answer precedes the ask"*.
+
+- **Item 5 — specific count from #1 (`app/WaitlistCount.tsx`).** Replaced the `count < 25` evergreen branch with three explicit cases: `0` keeps *"Be among the first to try Saumya."* (real fallback when there's nothing to show), `1` says *"1 person on the list."*, `2+` says *"N people on the list."* (singular/plural handled, dropped the `already` filler since the count alone implies it). Cialdini specificity from the very first signup; no more reading-as-empty until 25 people show up.
+
+**Not implemented (flagged for Rewant).**
+- **Item 6 — founder photo.** The "R" letter avatar in the founder note remains. Needs a real image at `public/founder.jpg` (or similar) before swap. Will add `next/image` import + replace the styled `<div>R</div>` with `<Image src="/founder.jpg" .../>` keeping current sage-deep ring as a fallback frame.
+
+**Verified.**
+- `npx tsc --noEmit` — clean.
+- `npx vitest run` — **88/88 pass** across 6 files. (No tests touch the launch page directly; the safety net is mostly typecheck + Next build for this kind of polish.)
+- `npx next build` — compiled successfully in 11.4s, all 7 static pages generated, no warnings.
+
+**Diff scope.**
+- `app/page.tsx`: ~83 insertions, ~130 deletions (net -47 lines, mostly from cutting the daily loop). Five distinct edits: nav, hero copy, hero structure, daily-loop removal, privacy/CTA swap.
+- `app/WaitlistCount.tsx`: 6-line change to the count text logic.
+
+**Working tree at session end.** Two files modified, both committed in this session. Session 8's launch-page polish (`58e0051`) and the Session 7 rebrand (`e1e91a3`) are already on `origin/main`, so this commit lands cleanly on top.
+
+**Open follow-ups (carried into next session).**
+- Item 6 (founder photo) — awaiting image asset.
+- F02 C1 dispatch (still gated on Rewant signoff per Session 6: `02-memory.md` rewrite, soft-delete-with-undo refinement, four inherited scoping items, smoke-test of `/check-in`).
+- Push Session 9 commit to `origin/main` once Rewant says go.

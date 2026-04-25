@@ -98,13 +98,7 @@ export default function Home() {
               Saumya
             </span>
           </div>
-          <div className="flex items-center gap-5">
-            <Link
-              href="/check-in"
-              className="type-label transition-colors hover:text-ink"
-            >
-              Try demo →
-            </Link>
+          <div className="flex items-center">
             <a
               href="#waitlist"
               className="type-label transition-colors hover:text-ink"
@@ -114,10 +108,11 @@ export default function Home() {
           </div>
         </nav>
 
-        {/* HERO — inline email, transcript on the right */}
-        <section className="grid grid-cols-1 items-start gap-14 md:grid-cols-12 md:gap-12">
+        {/* HERO — inline email, transcript on the right (between text and form on mobile) */}
+        <section className="grid grid-cols-1 items-start gap-10 md:grid-cols-12 md:gap-x-12 md:gap-y-14">
+          {/* Hero copy — top-left on desktop, first on mobile */}
           <div
-            className="md:col-span-7 animate-fade-up"
+            className="md:col-span-7 md:row-start-1 animate-fade-up"
             style={{ animationDelay: "0.1s" }}
           >
             <span
@@ -143,17 +138,37 @@ export default function Home() {
             </h1>
 
             <p
-              className="type-body-lg mt-7 max-w-lg"
-              style={{ color: "var(--ink-muted)" }}
+              className="type-body-lg mt-6 max-w-lg"
+              style={{ color: "var(--ink)" }}
             >
-              A voice-first health companion for people living with autoimmune
-              conditions. Daily check-ins, medications, doctor visits, blood
-              work, patterns over time, a community of people who get it — and
-              a doctor-ready report when it counts.
+              A health companion for life with an autoimmune condition.
             </p>
 
+            <p
+              className="type-body mt-4 max-w-lg"
+              style={{ color: "var(--ink-muted)" }}
+            >
+              Sixty seconds a day. Saumya remembers your symptoms,
+              medications, and visits — so when the room rushes, you walk in
+              prepared.
+            </p>
+          </div>
+
+          {/* Hero visual — VOICE transcript (the differentiator). Spans both rows on desktop, sits between copy and form on mobile. */}
+          <div
+            className="md:col-span-5 md:row-start-1 md:row-span-2 animate-fade-up md:sticky md:top-10"
+            style={{ animationDelay: "0.25s" }}
+          >
+            <VoiceTranscript />
+          </div>
+
+          {/* Form + conditions — bottom-left on desktop, last on mobile (after transcript) */}
+          <div
+            className="md:col-span-7 md:row-start-2 animate-fade-up"
+            style={{ animationDelay: "0.2s" }}
+          >
             {/* Inline email — primary conversion path */}
-            <div className="mt-8 max-w-lg">
+            <div className="max-w-lg">
               <WaitlistForm />
               <div className="mt-3">
                 <WaitlistCount variant="warm" />
@@ -188,14 +203,6 @@ export default function Home() {
                 </span>
               </div>
             </div>
-          </div>
-
-          {/* Hero visual — VOICE transcript (the differentiator) */}
-          <div
-            className="md:col-span-5 animate-fade-up md:sticky md:top-10"
-            style={{ animationDelay: "0.25s" }}
-          >
-            <VoiceTranscript />
           </div>
         </section>
 
@@ -321,62 +328,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* How it works — daily loop */}
-        <section className="grid grid-cols-1 gap-10 md:grid-cols-12">
-          <div className="md:col-span-4">
-            <p className="type-label">The daily loop</p>
-            <h2 className="type-display-md mt-3">
-              Three steps,
-              <br />
-              one quiet rhythm.
-            </h2>
-          </div>
-
-          <div className="md:col-span-8">
-            <ol className="flex flex-col">
-              {[
-                {
-                  n: "01",
-                  t: "Speak for sixty seconds",
-                  d: "Pain, stiffness, mood, energy. No forms. No jargon. Just your voice — anywhere, anytime.",
-                },
-                {
-                  n: "02",
-                  t: "See what your body is telling you",
-                  d: "Medication, symptoms, sleep, flareups — plotted together. Patterns you'd never spot alone.",
-                },
-                {
-                  n: "03",
-                  t: "Walk in prepared",
-                  d: "Every 30 days, a one-tap report your doctor will actually read. Better questions. Better visits.",
-                },
-              ].map((step, i, arr) => (
-                <li
-                  key={step.n}
-                  className="grid grid-cols-[auto_1fr] gap-x-8 gap-y-3 py-8 md:grid-cols-[auto_1fr_2fr]"
-                  style={{
-                    borderTop: i === 0 ? `1px solid var(--rule)` : "none",
-                    borderBottom: `1px solid var(--rule)`,
-                  }}
-                >
-                  <span
-                    className="type-label"
-                    style={{ color: "var(--sage-deep)" }}
-                  >
-                    {step.n}
-                  </span>
-                  <h3 className="type-heading">{step.t}</h3>
-                  <p
-                    className="type-body col-span-2 max-w-md md:col-span-1"
-                  >
-                    {step.d}
-                  </p>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </section>
-
         {/* Founder note + Why Saumya — combined trust block */}
         <section className="grid grid-cols-1 gap-10 md:grid-cols-12">
           <div className="md:col-span-4">
@@ -470,7 +421,54 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Final waitlist CTA — tighter than before, three things competing reduced to one */}
+        {/* Specific privacy stance — precondition to the second ask, not a postscript */}
+        <section className="grid grid-cols-1 gap-10 md:grid-cols-12">
+          <div className="md:col-span-4">
+            <p className="type-label">A specific promise</p>
+            <h2 className="type-display-md mt-3">
+              We mean it
+              <br />
+              about your privacy.
+            </h2>
+            <p
+              className="type-body mt-5 max-w-md"
+              style={{ color: "var(--ink-muted)" }}
+            >
+              Most health apps say &ldquo;we care about privacy&rdquo; and run
+              ad pixels behind the page. Here&apos;s exactly where Saumya
+              stands.
+            </p>
+          </div>
+
+          <div className="md:col-span-8">
+            <ul
+              className="flex flex-col"
+              style={{ borderTop: `1px solid var(--rule)` }}
+            >
+              {privacyClaims.map((claim) => (
+                <li
+                  key={claim.t}
+                  className="grid grid-cols-1 gap-3 py-7 md:grid-cols-[1fr_2fr] md:gap-12"
+                  style={{ borderBottom: `1px solid var(--rule)` }}
+                >
+                  <h3
+                    className="type-heading"
+                    style={{ fontSize: "1.25rem" }}
+                  >
+                    {claim.t}
+                  </h3>
+                  <p className="type-body">{claim.d}</p>
+                </li>
+              ))}
+            </ul>
+            <p className="type-label mt-5">
+              Saumya is in active development · not medical advice · talk to
+              your doctor about health decisions
+            </p>
+          </div>
+        </section>
+
+        {/* Final waitlist CTA — sits after privacy so the answer precedes the ask */}
         <section
           id="waitlist"
           className="relative overflow-hidden rounded-[28px] border p-8 sm:p-14"
@@ -540,53 +538,6 @@ export default function Home() {
                 </div>
               </div>
             </div>
-          </div>
-        </section>
-
-        {/* Specific privacy stance — replaces generic trust strip */}
-        <section className="grid grid-cols-1 gap-10 md:grid-cols-12">
-          <div className="md:col-span-4">
-            <p className="type-label">A specific promise</p>
-            <h2 className="type-display-md mt-3">
-              We mean it
-              <br />
-              about your privacy.
-            </h2>
-            <p
-              className="type-body mt-5 max-w-md"
-              style={{ color: "var(--ink-muted)" }}
-            >
-              Most health apps say &ldquo;we care about privacy&rdquo; and run
-              ad pixels behind the page. Here&apos;s exactly where Saumya
-              stands.
-            </p>
-          </div>
-
-          <div className="md:col-span-8">
-            <ul
-              className="flex flex-col"
-              style={{ borderTop: `1px solid var(--rule)` }}
-            >
-              {privacyClaims.map((claim) => (
-                <li
-                  key={claim.t}
-                  className="grid grid-cols-1 gap-3 py-7 md:grid-cols-[1fr_2fr] md:gap-12"
-                  style={{ borderBottom: `1px solid var(--rule)` }}
-                >
-                  <h3
-                    className="type-heading"
-                    style={{ fontSize: "1.25rem" }}
-                  >
-                    {claim.t}
-                  </h3>
-                  <p className="type-body">{claim.d}</p>
-                </li>
-              ))}
-            </ul>
-            <p className="type-label mt-5">
-              Saumya is in active development · not medical advice · talk to
-              your doctor about health decisions
-            </p>
           </div>
         </section>
 
