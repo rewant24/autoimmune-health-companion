@@ -18,11 +18,14 @@
 - **Post-MVP shape:** Let Sonakshi edit any past check-in field (correct a wrong pain value, remove a mistaken flare flag). Edits are tracked as deltas against the original; both values visible in audit history. Full edit + selective redact-per-report ships together.
 - **Architectural hook:** Data model keeps Memory entries immutable-with-overwrites; the report is always a view, not a stored artifact. Redact can be layered on without migration.
 
-## 3. Blood work results (not schedule)
+## 3. Blood work results — full ingestion (PDF / image / OCR)
 
-- **Why out of MVP:** Parsing lab reports (PDF / image / structured CSV) is non-trivial; rendering multi-analyte results on the doctor report is UI work that exceeds MVP scope.
-- **Post-MVP shape:** Let Sonakshi attach a PDF / image / structured values to any captured blood-test event. Results render as a timeline layer on the Patterns view. Longer-term: OCR the report and auto-populate CRP / ESR / WBC etc.
-- **Architectural hook:** Blood work is already a first-class event type (per § Doctor-visit capture in scoping.md); the event model leaves a `result` slot open.
+→ **Manual structured-entry slice moved INTO MVP on 2026-04-25.** MVP now captures CRP / ESR / WBC / Hb + free-form other markers as structured values per blood-test event, plotted on Patterns and surfaced in the Doctor Report. See § Lab-result tracking — MVP slice in `scoping.md`.
+
+- **What's still post-MVP:** PDF / image attachment of the lab report itself, OCR of result PDFs, structured CSV / HL7 import, multi-analyte panels beyond the MVP marker set, and reference-range visualization (green-yellow-red bands).
+- **Why still out of MVP:** PDF / image parsing is non-trivial; OCR accuracy on Indian-lab-format reports needs validation before we ship it as a clinical artifact.
+- **Post-MVP shape:** Let Sonakshi attach a PDF / image to any captured blood-test event; OCR auto-populates the structured marker fields she's already using; reference-range bands render around her values per marker.
+- **Architectural hook:** The structured marker fields land in MVP, so attachment + OCR + extra markers slot in additively without schema migration. Reference ranges can be added per-marker as a separate ranges table.
 
 ## 4. Push notifications for insights
 

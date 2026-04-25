@@ -843,15 +843,15 @@ The report is the communication artifact Saumya produces for Sonakshi's doctor v
 
    These nuances are addressed both **visually (in the chart)** and **in text (a narrative summary)**. The point is cause-effect legibility: a doctor looking at this should see whether a dose change preceded or followed a flare, and by how much.
 
-3. **Qualitative context — what she felt and experienced** beyond the measured metrics. Additional data points captured from her check-ins that don't reduce to a number (things she said, emotions she described, environmental/life context she brought up). This surfaces in the report alongside the metric view.
+3. **Talking Points for Your Visit — what she felt and experienced** beyond the measured metrics. Additional data points captured from her check-ins that don't reduce to a number (things she said, emotions she described, environmental/life context she brought up). This is framed as **the patient's prep deck for the consult, not a narrative for the doctor to read** — short, scannable points she can run through in the waiting room.
 
-**The combined effect.** Taken together, the chart + flare-up correlation + qualitative context create a **comparative data point** that lets the doctor understand:
+**The combined effect.** Taken together, the chart + flare-up correlation + the patient's talking points create a **comparative data point** that lets the doctor understand:
 - Her dosage changes over the period
 - Her flare-ups and their timing
 - Her emotional and physical well-being data points
 - All mapped against her Memory entries at large, presented in summary fashion
 
-So the doctor is not getting a raw dump — they are getting a readable summary where metrics, events, and qualitative state are plotted together.
+So the doctor is not getting a raw dump — they are getting a readable summary where metrics and events are plotted together, with the patient's own talking points sitting alongside as her prep cue (not as a narrative for the doctor to read in full).
 
 #### Report trigger — when the report exists
 
@@ -943,7 +943,7 @@ All three content blocks from the in-app report render at full fidelity:
 
 1. **Dynamic chart → static snapshot.** The chart is rendered for the chosen time window as a high-resolution static image. All layers active in the in-app view (well-being, physical, emotional, mental, dosage intake, dosage changes, flare-ups, doctor visits) render on the snapshot.
 2. **Flare-up ↔ medication-change correlation — visual + text.** A static visual (timeline with correlation annotations) paired with the narrative text explaining when each flare-up occurred, how many days after a dosage change it began, and how long it took to subside.
-3. **Qualitative context — narrative section.** What Sonakshi felt and experienced beyond the measured metrics. Drawn from her check-in conversations.
+3. **Talking Points for Your Visit — short bulleted prep deck.** What Sonakshi felt and experienced beyond the measured metrics, drawn from her check-in conversations. Rendered as a **scannable bullet list** (not prose paragraphs) — designed for her to glance through before walking in, and for the doctor to quickly see what she wants to raise verbally. The doctor-readable substance is in the cover, headline metrics, and the chart appendix above; this section signals what she plans to *say*.
 
 **Annotations** (from § Edit-before-share rule) render **inline with the affected time range** in the appendix — as callouts next to the relevant week on the chart, and as inline italics in the narrative text where they apply. They are visually distinguishable from Saumya-generated content (colour / typography) so the doctor can tell what came from the data vs. what came from Sonakshi's own note.
 
@@ -978,7 +978,7 @@ Doctor visits — and adjacent clinical events — are captured through **two pa
 **Secondary path: a "+" icon inside the Journey pillar for manual add.** Not every event gets mentioned in a check-in. A "+" (plus) icon lives inside the Journey pillar and opens a short menu of event types she can add directly:
 
 - **Appointment / doctor visit** (past or upcoming)
-- **Blood work / lab test schedule** (past appointment, upcoming appointment; result attachment may come later)
+- **Blood work / lab test** — date + test type **+ structured result fields** for a fixed marker set (see § Lab-result tracking — MVP slice below). Past or upcoming.
 - **Other clinical events** — the list is deliberately extensible so we can add more types as scoping surfaces them (e.g. scans, procedures, therapy sessions, specialist referrals)
 
 Each type gets a minimal form — date, and whatever structured fields are most useful for that type (doctor name for visits, test type for blood work, etc.). The form is **stepwise** (one field per step, thumb-reachable) rather than a single long form — easier to complete on the go and matches how a voice-first app should feel even when typing is involved.
@@ -992,7 +992,7 @@ Why: re-typing the same doctor name every time is friction, and free-text entry 
 - The "+" fallback handles the cases she doesn't bring up in conversation — upcoming appointments she booked yesterday, a blood test she doesn't feel like talking about, a specialist referral she needs to remember.
 - Placing the "+" inside Journey (not in a separate module) keeps the pillar's identity intact: **Journey is where events live — past, present, and upcoming.**
 
-**Architectural consequence — blood work tests become first-class events too.** Sonakshi's reality includes blood tests every 2 weeks (per § Who is the user?). Treating them as a distinct event type (not just a flavor of "doctor visit") lets the chart show them as their own timeline layer, which matters clinically — blood markers often change before symptoms do, and aligning blood-test dates to flare-ups or dosage changes is part of the pattern story. For MVP: capture the *schedule* of blood tests (date + test type). Capturing and rendering actual results is post-MVP.
+**Architectural consequence — blood work tests are first-class events with structured results.** Sonakshi's reality includes blood tests every 2 weeks (per § Who is the user?). Treating them as a distinct event type (not just a flavor of "doctor visit") lets the chart show them as their own timeline layer, which matters clinically — blood markers often change before symptoms do, and aligning blood-test dates to flare-ups or dosage changes is part of the pattern story. **Lab-trend tracking is a primary doctor ask in autoimmune monitoring** — clinicians currently reconstruct CRP / ESR / WBC trends manually from prior reports. So MVP captures both the *schedule* AND a structured *result set* for each blood test. PDF parsing, image OCR, and free-form lab-report attachment remain post-MVP (see post-mvp-backlog #3).
 
 #### Edit / cancel of captured events (in MVP)
 
@@ -1018,6 +1018,28 @@ Captured events (appointments, blood tests, other clinical events) are **editabl
 - Edits show the current value only. If a date moved from 23 Apr to 30 Apr, the report shows 30 Apr (no *"was 23 Apr"* trace). Audit history is post-MVP.
 
 **Architectural note.** The event model needs a `status` field (scheduled / completed / cancelled / no-show / rescheduled) and a `linkedEventId` for the reschedule case. Both are additive to the first-class event schema; no migration risk.
+
+#### Lab-result tracking — MVP slice
+
+**What lands in MVP.** Each blood-test event captures a fixed-set of structured marker values, entered manually. The marker set for MVP is deliberately small and standard:
+
+- **CRP** (C-reactive protein, mg/L) — inflammation marker; canonical autoimmune/arthritis signal
+- **ESR** (erythrocyte sedimentation rate, mm/hr) — second inflammation marker; common companion to CRP
+- **WBC** (white blood cell count, ×10⁹/L) — broad immune-activity signal
+- **Hb** (hemoglobin, g/dL) — anemia signal, relevant for many autoimmune conditions and for methotrexate / biologic monitoring
+- **One free-form "other markers" text field** — for anything else the doctor flags (LFT, KFT, anti-CCP, RF, etc.) without bloating the MVP UI
+
+Each value is **optional** per blood-test event — the user enters whatever the report contained, leaves the rest blank. Units are pre-filled and locked (we are not asking her to pick units).
+
+**Where it surfaces.**
+
+1. **In the blood-test event form.** Adding the test (via opportunistic capture confirm card OR the Journey "+" menu) opens a stepwise form: date → test type → results (each marker as one quick step). Results step is skippable in full — she can save the schedule alone if results haven't come back yet, and edit-add results later via § Edit / cancel of captured events.
+2. **As a timeline layer on Journey → Patterns.** A new toggle-able layer alongside dose-change markers and flare blocks. Each test renders as a single point per marker on its own y-axis-aligned mini-chart (or a stacked overlay — exact rendering decision deferred to build).
+3. **In the Doctor Report.** Lab trends appear in two places: (a) the **headline-metrics strip** on the cover summary surfaces the most recent value of each tracked marker plus a 90-day direction arrow (↑↓→); (b) the **appendix** renders each marker's full timeline across the report window, aligned to dose-change markers and flare periods so the doctor can read CRP-vs-medication and ESR-vs-flare correlations at a glance.
+
+**What stays post-MVP.** PDF/image attachment of the lab report itself, OCR of result PDFs, parsing of structured CSV/HL7 imports, multi-analyte panels beyond the MVP set, and reference-range visualization (the green-yellow-red bands). All of these remain in `post-mvp-backlog.md` #3 — only the *manual structured-entry slice* moves into MVP.
+
+**Why this slice and not the full thing.** The clinical use case the MVP needs to cover is single-marker trend over time — *is CRP rising or falling on this medication across months?* Solving that needs structured numeric values plotted against dose changes; it does NOT need PDF parsing, OCR, or 30+ markers. The 4-marker-plus-freeform set covers ~80% of the autoimmune-monitoring case for ~5% of the build cost.
 
 #### "Prepare for Visit" flow (checklists + annotations + open questions for the doctor)
 
@@ -1141,16 +1163,28 @@ Theme 4 analytics, projections, and causal-inference live inside Journey only as
 
 ## Out of scope
 
-<!-- To be filled in as MVP scope gets tighter. Early candidates from Themes we are de-prioritizing:
+These are out of scope for the **product as a whole** — not just MVP. They define what Saumya is *not*, regardless of release.
+
+### Product-level locks
+
+- **Diagnosis.** Saumya does not name, suggest, or rule out medical conditions. The app surfaces context and correlation; conclusions are a clinician's job. This is a non-clinician health-app principle, not a per-release call.
+- **Test recommendations.** Saumya does not suggest blood tests, scans, specialists, or any other clinical action. The space gets vast and ambiguous the moment the app crosses that line, and an AI companion is the wrong actor to sit in the recommendation seat.
+
+These are enforced in three places: (1) the system prompt for the voice AI, (2) the insight-card copy rules in § Feedback loop (no causation, only co-occurrence), and (3) the closer/nudge bank (witness, don't prescribe — already locked). All three need explicit "never diagnose / never recommend tests" phrasing during build.
+
+### MVP-level deferrals
+
+These are deferred from MVP but architecturally allowed. Each is detailed in `post-mvp-backlog.md`:
+
 - Full cohort/peer comparison analytics
-- ~~Community / networking features~~ — **moved INTO MVP as 5th module** (see § Community module)
 - Doctor-facing portal
 - Support-system shared view (read-only)
 - Triggers map (food/allergen correlation engine)
 - Education for peers/family
 - Advanced pattern recognition + causal inference
 - Projections model
--->
+
+~~Community / networking features~~ — **moved INTO MVP as 5th module** (see § Community module).
 
 
 ---

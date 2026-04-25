@@ -184,6 +184,68 @@ Likely **out of MVP** but belong in `post-mvp-backlog.md` with architectural hoo
 
 ---
 
+## 11. Founder follow-up — Sonakshi on the overall app approach (2026-04-25)
+
+**Source:** message from Sonakshi to Rewant in response to a "what do you think of where the app is going" prompt. Verbatim below — preserve as the patient's voice on positioning.
+
+> "I'll ask Nikhil about the doctor viewpoint. From what I know it helps them to have lab report tracking over the months — so quantitative analysis right in front of them is beneficial — like knowing if CRP is increasing/decreasing over a period of a year with the new medication is something they'd definitely want — they usually manually go through previous reports to check for me.
+>
+> However, my experience has been that for qualitative stuff, they prefer hearing what the patient has to say rather than read a report on it. But that's a prob because patients don't remember everything they want to discuss, so this gives talking points to the patient so they can be better equipped during consultation.
+>
+> The app is ideally providing me with context and correlation, without drawing conclusions (that is the doctor's job).
+>
+> I may be allergic to chola / I feel better when I am avoiding fried food is amaze information to have for quality of life, but is not medically relevant enough to discuss with the doctor in a 20 minute consult. And when quality of life is severely depleted, day to day data about how I'm feeling vs what I'm doing to feel it matters a lot.
+>
+> So correlations are vital for quality of life even if medically irrelevant for doctor. My advice would be to not go into the space of diagnosing/recommending tests because it can get very vast and murky.
+>
+> The day to day is the hardest aspect and the app right now makes that a little easier and that's fantastic. I don't need more medical advice. I need more positive reinforcement through seeing a picture of what works for me but I don't have the tools to make that picture on my own yet."
+
+### 11.1 Four takeaways
+
+**A. Doctor viewpoint — quantitative > qualitative (pending Nikhil confirmation).** Doctors want **lab-trend tracking over months/years** (e.g. CRP across a year on a new medication). They currently flip through prior reports manually. Qualitative narrative they prefer to *hear from the patient*, not read.
+
+**B. The app's role for qualitative is talking points, not narrative.** Patients forget what to bring up in a 20-minute consult. The app's qualitative output is the **patient's prep deck** — not a report the doctor reads cover-to-cover.
+
+**C. Hard positioning lock — context and correlation, NOT conclusions.** Stay out of diagnosing and recommending tests ("vast and murky" — the doctor's job). Patient-side correlations are valid even when medically irrelevant ("I may be allergic to chola"; "I feel better avoiding fried food") — those are quality-of-life wins, not clinical signals.
+
+**D. Validation of the day-to-day premise.** "The app right now makes [day-to-day] a little easier and that's fantastic. I don't need more medical advice. I need more positive reinforcement through seeing a picture of what works for me but I don't have the tools to make that picture on my own yet." → Confirms the low-friction journaling + correlation-surfacing direction. The product's job is **giving Sonakshi her own picture**, not advising her.
+
+### 11.2 Coverage map against current scoping
+
+| Takeaway | Current scoping state | Gap |
+|---|---|---|
+| **A. Lab-trend tracking is the doctor's #1 quantitative ask** | Blood-test *schedule* is a first-class event in MVP (§ Doctor-visit capture); blood-test *results* are explicitly **post-MVP** (post-mvp-backlog #3 — "Blood work results (not schedule)") | **Significant.** Sonakshi's feedback elevates lab-result tracking from "nice-to-have post-MVP" to "the most clinically valuable thing the app can give a doctor." Worth Rewant deciding: pull a thin lab-result slice into MVP (manual entry of CRP/ESR/WBC + a single timeline overlay), or hold it post-MVP and instead position MVP doctor-share around adherence + flare-vs-dose. |
+| **B. Qualitative output = patient's talking points, not doctor's narrative** | Doctor Report is currently positioned as a doctor-readable artifact (PDF + cover summary + appendix — § Doctor report flow). Talking-points framing is *implicit* in the report's existence but not stated as the qualitative section's purpose | **Reframe, not rebuild.** The Doctor Report's qualitative section should be explicitly labelled "Talking points for your visit" (Sonakshi-facing), with the doctor-readable summary leaning quantitative. Small copy + structure shift, no architectural change. |
+| **C. No diagnosis, no test recommendations — context + correlation only** | Strongly aligned in spirit: "Never claim causation. Only co-occurrence" (§ Feedback loop), "Witness, don't prescribe" (§ The closer), confidence rules on insight cards. But there is no top-level **product positioning principle** that says *"Saumya does not diagnose or recommend tests."* | **Add as an explicit positioning lock.** The empty `## Out of scope` section (line 1142) is the natural home: lock "diagnosis" and "test recommendations" as out-of-scope for the product as a whole, not just MVP. Also worth a one-liner in § Brand direction or § Conversation design principles. |
+| **D. "Picture of what works for me" is the north-star user need** | Captured in § Theme 4 (visualizations + patterns) and § Feedback loop (graduated visual-to-verbal). Aligned in substance | **Adopt as a quotable north star.** Sonakshi's exact phrase — *"a picture of what works for me but I don't have the tools to make that picture on my own yet"* — is the cleanest one-line product mission yet. Candidate for landing-page copy, founder quote replacement, or onboarding. |
+
+### 11.3 Specific edits Rewant could make to `scoping.md`
+
+1. **§ Out of scope (line 1142, currently empty):** add two locked items —
+   - *"**Diagnosis** — Saumya does not name, suggest, or rule out medical conditions. The app surfaces context and correlation; conclusions are the doctor's job."*
+   - *"**Test recommendations** — Saumya does not suggest blood tests, scans, specialists, or any other clinical action. Vast and murky territory; not the product's role."*
+   - Source attribution: Sonakshi feedback, 2026-04-25.
+
+2. **§ MVP focus themes / Theme 1 (Communication):** add a clarifying line — *"Doctors prefer hearing qualitative content from the patient directly. The qualitative output of this app is therefore framed as the **patient's talking points** for the consult — not a narrative for the doctor to read. The doctor-readable surface is the quantitative one (adherence, dose-change timeline, flare ↔ dose correlation, lab trends if available)."*
+
+3. **§ Doctor report flow:** rename the qualitative section heading inside the report to *"Talking points for your visit"* (patient-facing), and keep the quantitative cover/summary as the doctor-readable layer.
+
+4. **Lab-result tracking — Rewant's call.** Either:
+   - **(a) Pull a thin slice into MVP:** manual entry of 3–5 standard markers (CRP, ESR, WBC, optionally LFT/KFT) per blood-test event + a single timeline overlay on Patterns. No PDF parsing, no OCR. Roughly 1 chunk of build work. Strongest doctor-value-add per Sonakshi.
+   - **(b) Hold post-MVP** as currently scoped — accept that MVP doctor-share leans on adherence + dysfunction trend + flare/dose correlation, with lab trends arriving in v1.x.
+   Either way, log the decision against post-mvp-backlog #3.
+
+5. **§ Landing-page copy locks (line 29):** consider a candidate alternate ROI anchor sourced from Sonakshi's own words —
+   *"You shouldn't have to be your own pattern detective. Saumya gives you a picture of what works for you."*
+   (Rewant's call vs. the current "logbook" anchor. Sonakshi-sourced quotes are stronger than founder-voiced ones for the social-proof slot.)
+
+### 11.4 What this feedback does NOT settle
+
+- Doctor side is still N=0 from the doctor's mouth. Sonakshi will ask Nikhil. Treat takeaway A as a hypothesis from the patient's vantage point until Nikhil corroborates.
+- "Pull lab results into MVP yes/no" is a scope decision Rewant must make — the research only says it's clinically valuable, not that it's MVP-mandatory.
+
+---
+
 ## Related files
 - `miro-export/` — source PDFs (6 board exports)
 - `seed-entries.md` — 18 fictional daily entries derived from this research, for prototyping
