@@ -16,7 +16,7 @@ const baseRow = (overrides: Partial<CheckinRow> = {}): CheckinRow => ({
   pain: 5,
   mood: "okay",
   adherenceTaken: true,
-  flare: false,
+  flare: "no",
   energy: 6,
   transcript: "today was alright",
   stage: "open",
@@ -27,14 +27,14 @@ const baseRow = (overrides: Partial<CheckinRow> = {}): CheckinRow => ({
 });
 
 describe("eventFromCheckin", () => {
-  it("flare=false produces exactly one check-in event", () => {
+  it("flare='no' produces exactly one check-in event", () => {
     const events = eventFromCheckin(baseRow());
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe("check-in");
   });
 
   it("flare=true produces a check-in event followed by a flare event", () => {
-    const events = eventFromCheckin(baseRow({ flare: true }));
+    const events = eventFromCheckin(baseRow({ flare: "yes" }));
     expect(events).toHaveLength(2);
     expect(events.map((e) => e.type)).toEqual(["check-in", "flare"]);
   });
@@ -56,7 +56,7 @@ describe("eventFromCheckin", () => {
   });
 
   it("flare event has title 'Flare-up logged', empty meta, taskState 'missed'", () => {
-    const [, flare] = eventFromCheckin(baseRow({ flare: true }));
+    const [, flare] = eventFromCheckin(baseRow({ flare: "yes" }));
     expect(flare.type).toBe("flare");
     expect(flare.title).toBe("Flare-up logged");
     expect(flare.meta).toBe("");
@@ -65,7 +65,7 @@ describe("eventFromCheckin", () => {
 
   it("eventId is 'checkin:{_id}' for check-in and 'flare:{_id}' for flare", () => {
     const [checkin, flare] = eventFromCheckin(
-      baseRow({ _id: "abc123", flare: true }),
+      baseRow({ _id: "abc123", flare: "yes" }),
     );
     expect(checkin.eventId).toBe("checkin:abc123");
     expect(flare?.eventId).toBe("flare:abc123");
@@ -87,7 +87,7 @@ describe("eventFromCheckin", () => {
   });
 
   it("flare event shares the same date and time as its check-in", () => {
-    const [checkin, flare] = eventFromCheckin(baseRow({ flare: true }));
+    const [checkin, flare] = eventFromCheckin(baseRow({ flare: "yes" }));
     expect(flare.date).toBe(checkin.date);
     expect(flare.time).toBe(checkin.time);
   });

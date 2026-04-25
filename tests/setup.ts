@@ -14,3 +14,20 @@ vi.mock('convex/react', () => ({
   ConvexProvider: ({ children }: { children: unknown }) => children,
   ConvexReactClient: class {},
 }))
+
+// `useRouter()` from next/navigation throws "invariant expected app router
+// to be mounted" when invoked outside the App Router runtime. Page-level
+// tests don't exercise navigation — they only need the hook to return
+// something callable so render doesn't bail.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn(),
+    refresh: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+}))

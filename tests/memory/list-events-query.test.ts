@@ -62,7 +62,7 @@ const seed = (overrides: Partial<CheckinRow> = {}): CheckinRow => ({
   pain: 5,
   mood: "okay",
   adherenceTaken: true,
-  flare: false,
+  flare: "no",
   energy: 6,
   transcript: "alright",
   stage: "open",
@@ -137,7 +137,7 @@ describe("listEventsByRangeHandler", () => {
   it("flare row produces 2 events at the same time", async () => {
     const { ctx, rows } = makeCtx();
     rows.push(
-      seed({ _id: "flarey", flare: true, date: "2026-04-25" }),
+      seed({ _id: "flarey", flare: "yes", date: "2026-04-25" }),
     );
     const result = await listEventsByRangeHandler(ctx as unknown as Ctx, {
       userId: "user_A",

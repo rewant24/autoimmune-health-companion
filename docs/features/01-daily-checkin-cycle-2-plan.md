@@ -132,9 +132,9 @@ Pre-flight commits the union + the corresponding event additions + the no-op tra
 
 ### Steps
 
-- [ ] **0.1** — Verify clean tree on `feat/f01-cycle-2` branched from `main` at `f01-c1/shipped`. Run `npm run test:run`, `npx tsc --noEmit`, `npm run build` — confirm baseline green.
+- [x] **0.1** — Verify clean tree on `feat/f01-cycle-2` branched from `main` at `f01-c1/shipped`. Run `npm run test:run`, `npx tsc --noEmit`, `npm run build` — confirm baseline green. *(Done Session 10.)*
 
-- [ ] **0.2** — Migrate Convex schema. Apply this diff to `convex/schema.ts`:
+- [x] **0.2** — Migrate Convex schema. Apply this diff to `convex/schema.ts`. *(Done Session 10.)*
 
   ```typescript
   // BEFORE
@@ -174,11 +174,11 @@ Pre-flight commits the union + the corresponding event additions + the no-op tra
   }).index('by_user_date', ['userId', 'date']),
   ```
 
-- [ ] **0.3** — Push schema locally: `npx convex dev --once`. Confirm no errors. Do NOT push to deploy yet (per playbook — local-only until ship task).
+- [x] **0.3** — Push schema locally: `npx convex dev --once`. Confirm no errors. Do NOT push to deploy yet (per playbook — local-only until ship task). *(Done Session 10. One stale dev row with `flare: false` cleared via `npx convex import --replace` to satisfy the new validator.)*
 
-- [ ] **0.4** — Update `convex/checkIns.ts` `createCheckin` validator to match the new schema (optional metrics + `declined` array + `appendedTo`). Range validation in handler stays for non-null values; null values bypass range checks. **Idempotency on `clientRequestId` must be preserved.**
+- [x] **0.4** — Update `convex/checkIns.ts` `createCheckin` validator to match the new schema (optional metrics + `declined` array + `appendedTo`). Range validation in handler stays for non-null values; null values bypass range checks. **Idempotency on `clientRequestId` must be preserved.** *(Done Session 10.)*
 
-- [ ] **0.5** — Create `lib/checkin/types.ts`:
+- [x] **0.5** — Create `lib/checkin/types.ts`. *(Done Session 10.)*
 
   ```typescript
   export type Metric = 'pain' | 'mood' | 'adherenceTaken' | 'flare' | 'energy'
@@ -228,13 +228,13 @@ Pre-flight commits the union + the corresponding event additions + the no-op tra
     | 're-entry-same-day'
   ```
 
-- [ ] **0.6** — Extend `lib/checkin/state-machine.ts` `State` + `Event` unions per the protocol above. Add no-op handlers for the new states so the existing tests still pass. **Do not implement transition logic yet** — that's the subagents' job.
+- [x] **0.6** — Extend `lib/checkin/state-machine.ts` `State` + `Event` unions per the protocol above. Add no-op handlers for the new states so the existing tests still pass. **Do not implement transition logic yet** — that's the subagents' job. *(Done Session 10.)*
 
-- [ ] **0.7** — Install AI SDK deps: `npm install ai @ai-sdk/openai zod`. Add `AI_GATEWAY_API_KEY` placeholder to `.env.local.example`. Document in README that `AI_GATEWAY_API_KEY` must be set before running 2.B's tests / dev server.
+- [x] **0.7** — Install AI SDK deps: `npm install ai @ai-sdk/openai zod`. Add `AI_GATEWAY_API_KEY` placeholder to `.env.local.example`. *(Done Session 10. `.gitignore` updated to exempt `.env*.example`.)*
 
-- [ ] **0.8** — Smoke test: `npm run test:run` (existing tests must still pass), `npx tsc --noEmit`, `npm run build`. All green.
+- [x] **0.8** — Smoke test: `npm run test:run` (existing tests must still pass), `npx tsc --noEmit`, `npm run build`. **All green: 152/152 vitest, tsc clean, next build clean (8 static pages).**
 
-- [ ] **0.9** — Append entry to `docs/architecture-changelog.md`:
+- [x] **0.9** — Append entry to `docs/architecture-changelog.md`. *(Done Session 10.)*
 
   ```markdown
   ## 2026-MM-DD — F01 C2 pre-flight schema migration
@@ -246,7 +246,7 @@ Pre-flight commits the union + the corresponding event additions + the no-op tra
   - New table `extractAttempts` for ADR-020 cost-guard counters.
   ```
 
-- [ ] **0.10** — Commit: `chore(check-in): F01 C2 pre-flight — schema migration + state-machine union + AI SDK deps`. Tag `f01-c2/pre-flight-done`. Append phase entry to `docs/build-log.md`.
+- [x] **0.10** — Commit `e8459f7` on `feat/f01-cycle-2`. Tag `f01-c2/pre-flight-done` set. Build-log Session 10 entry appended. **Not pushed yet — awaiting Rewant signal.**
 
 ---
 

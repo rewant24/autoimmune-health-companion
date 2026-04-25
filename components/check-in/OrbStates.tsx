@@ -14,7 +14,7 @@
  * and the feature's locked decisions.
  */
 
-export type OrbVisualState = 'idle' | 'listening' | 'processing' | 'error'
+export type OrbVisualState = 'idle' | 'listening' | 'processing' | 'error' | 'saved'
 
 export interface OrbVisualDefinition {
   className: string
@@ -63,6 +63,12 @@ export const ORB_STATES: Record<OrbVisualState, OrbVisualDefinition> = {
       'motion-safe:animate-[orb-pulse_2.4s_ease-in-out_infinite]',
     ariaLabel: 'Something went wrong — tap to retry',
   },
+  saved: {
+    className:
+      `${BASE} bg-teal-500 text-white shadow-[0_0_80px_-10px_rgba(20,184,166,0.65)] ` +
+      'motion-safe:animate-[orb-settle_1.6s_ease-out_1]',
+    ariaLabel: 'Saved',
+  },
 }
 
 /**
@@ -85,6 +91,10 @@ export const ORB_KEYFRAMES = `
 @keyframes orb-swirl {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
+}
+@keyframes orb-settle {
+  0%   { transform: scale(1.08); opacity: 0.85; box-shadow: 0 0 120px -10px rgba(20,184,166,0.85); }
+  100% { transform: scale(1);    opacity: 1;    box-shadow: 0 0 80px  -10px rgba(20,184,166,0.65); }
 }
 @media (prefers-reduced-motion: reduce) {
   .orb-animated { animation: none !important; transform: none !important; }

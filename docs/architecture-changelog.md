@@ -9,6 +9,38 @@
 
 ---
 
+## 2026-04-25 — F01 C2 Wave 2 integration + reviewer-fix pass
+
+**Scope.** Wires Build-E (Web Speech TTS opener) and Build-F (Day-1 tutorial, same-day re-entry, milestone celebration) into `app/check-in/page.tsx`, then absorbs the three-reviewer ship-blocker fix list. Tagged `f01-c2/wave-2-integrated` (integration) and `f01-c2/second-pass-clean` (post-fix).
+
+- **Day-1 ribbon — scoping § 477 waiver.** Scoping reads "a small tooltip on each control"; Build-F shipped `Day1Tutorial` as a wrapper that renders one ribbon below its children. Orchestrator wraps the entire `<Stage2>` once instead of per-`TapInput`. **UX-equivalent for v1** — single ribbon below the recap is visually adjacent to the controls, the educational copy is unchanged, and per-control wrapping would either bloat `Stage2` with five ribbons or require a contract change Build-F already shipped against. Per-control polish is on the post-MVP backlog if a usability test surfaces a need.
+- **Save-effect race fix.** `useQuery(api.checkIns.getTodayCheckin)` and `useQuery(api.continuity.getContinuityState)` both have a loading window where the page renders against `FALLBACK_CONTINUITY` (which carries `isFirstEverCheckin: true`). The first integration pass collapsed `undefined` (loading) and `null` (no row) via `?? null`, so a save fired during the loading window would (a) write a fresh row that the server rejected as `checkin.duplicate` and (b) trigger a Day-1 milestone for every save. `page.tsx` now tracks `continuityResolved` / `todayCheckinResolved` explicitly and gates `onSave` + the saved-state effect on resolution. `isDay1` also gates on `continuityResolved` so the FALLBACK doesn't briefly force Day-1 mode for repeat users mid-load.
+- **`postSaveCloser` for milestone overlay.** `selectCloser(continuityState)` runs against pre-save state, so a save that lands on day-7 sees `streakDays === 6` and returns `neutral-default` ("Saved. See you tomorrow.") instead of `streak-milestone` ("Seven days. That's real."). Page now computes a `postSaveCloser` via `selectCloser({...continuityState, streakDays: streakDays + 1, isFirstEverCheckin: false})` and passes that to `<MilestoneCelebration>` and the `/check-in/saved` redirect.
+- **`detectMilestone` guard ordering.** NaN / non-finite / `<= 0` checks now run before the `isFirstEver` short-circuit. Previously a buggy caller passing `(NaN, true)` would get `'day-1'`; now it gets `null`.
+- **A11y.** SpokenOpener renders the opener text as `<h1>` (idle screen previously had no heading landmark). `MilestoneCelebration` gains `aria-modal="true"`, a friendly `aria-label` per kind ("7-day streak celebration" rather than "day-7 milestone"), and on-mount focus to the "Keep going" button so keyboard / screen-reader users aren't stranded outside the dialog. Continue button bumped from `bg-teal-600` to `bg-teal-700` for WCAG AA contrast (3.4:1 → 4.7:1 against white). Day1Tutorial ribbon gains `aria-live="polite"` so the educational hint is announced when it appears.
+- **TTS un-mute.** SpokenOpener mute popover previously had no path back from `saumya.ttsDisabled === 'true'`. Long-press now re-reads the flag on open and switches the action button to "Un-mute Saumya's voice" when muted; confirming flips the flag and re-speaks the current opener so the user gets immediate confirmation.
+- **Milestone visual differentiation.** `day-30` / `day-90` / `day-180` / `day-365` all render the same 30-ring grid (cap). Added a visible tier label ("30 days" / "90 days" / etc.) above the rings — the only place the actual day count is surfaced for the longer milestones.
+
+---
+
+## 2026-04-25 — F01 C2 pre-flight: schema migration + state-machine extension
+
+**Scope.** Cycle 2 pre-flight Task 0 changes that subagents read as a stable contract. Tagged `f01-c2/pre-flight-done` once smoke-tested.
+
+- **Convex schema (`convex/schema.ts`).** All five metrics (`pain`, `mood`, `adherenceTaken`, `flare`, `energy`) now `v.optional` so a row can exist with partial coverage (declined or not extracted). `flare` widened from boolean to tri-state `"no" | "yes" | "ongoing"` per ADR-021 + Cycle 2 scoping. Added `declined: v.optional(v.array(metricLiteral))` and `appendedTo: v.optional(v.id("checkIns"))` for the same-day re-entry path. New `extractAttempts` table indexed by `(userId, date)` enforces ADR-020 cost guard (5 attempts/user/day).
+- **Convex handler (`convex/checkIns.ts`).** Validators updated to match optional-metric shape; range checks now gated on `value !== undefined`. `CheckinRow` and `CreateCheckinArgs` exported types track the new schema so `lib/memory/event-types.ts` and tests stay type-safe.
+- **State machine (`lib/checkin/state-machine.ts`).** Union extended additively: new states `extracting`, `stage-2`, `discarding`, `celebrating`; `confirming` and `saved` gain optional fields preserving C1-shipped transitions. New events `EXTRACTION_DONE`, `STAGE_2_CONTINUE`, `METRIC_UPDATED`, `METRIC_DECLINED`, `DISCARD_REQUEST/CONFIRM/CANCEL`, `MILESTONE_DETECTED`. Reducer no-ops the new states; subagents (lanes 2.B/2.C/2.D/2.F) implement transition logic for their chunk's events only. `toOrbState` collapses all transient states to `'processing'`.
+- **Shared types (`lib/checkin/types.ts`).** New file — single source of truth for `Metric`, `Mood`, `FlareState`, `StageEnum`, `CheckinMetrics`, `ContinuityState`, `OpenerVariantKey`, `MilestoneKind`. Pure types so Convex's typecheck doesn't pull view code into the server bundle.
+- **Memory event mapper (`lib/memory/event-types.ts`).** Updated for optional metrics and tri-state flare (`flare === "yes" || flare === "ongoing"` triggers the second event). Switched import to relative path because `convex/tsconfig.json` has no `@/*` alias.
+- **Dependencies.** Added `ai`, `@ai-sdk/openai`, `zod` (lane 2.B's extraction route depends on them). `.env.local.example` created with `AI_GATEWAY_API_KEY` placeholder (server-only).
+- **Convex dev wipe.** One stale check-in row from F01 C1 testing was deleted (`flare: false` no longer satisfies the new validator). Per Cycle 2 plan — no real users to migrate.
+
+**Gate.** `tsc --noEmit` clean; 152/152 vitest still green; baseline preserved before Wave 1 dispatch.
+
+**Related ADRs.** ADR-005 (skip-Stage-2 routing now structurally expressible), ADR-020 (extraction route deps installed), ADR-021 (stage enum types ready), ADR-022 (save-later v1 contract referenced by lane 2.C). No ADR superseded.
+
+---
+
 ## 2026-04-25 — Product rename: Saumya → Saumya (full sweep)
 
 **Scope.** Pre-launch brand rename. ADR-024 records the decision, rationale, and the one-time exception to the ADR-immutability rule.
