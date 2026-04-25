@@ -86,7 +86,10 @@ export function MemoryTab({
       className={
         'mx-auto flex min-h-[100svh] w-full max-w-2xl flex-col gap-3 px-4 ' +
         'pt-[max(1rem,env(safe-area-inset-top))] ' +
-        'pb-[max(1rem,env(safe-area-inset-bottom))] ' +
+        // Bottom padding leaves room for the persistent <BottomNav /> mounted
+        // by app/journey/layout.tsx (~4rem tall + safe-area). Without this,
+        // the last event row scrolls under the nav.
+        'pb-[max(6rem,calc(env(safe-area-inset-bottom)+5rem))] ' +
         'overflow-x-hidden'
       }
       style={{ background: 'var(--bg)' }}

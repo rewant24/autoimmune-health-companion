@@ -5,13 +5,15 @@
  *
  * Feature 01, Chunk 2.D, US-1.F.4.
  *
- * Per ADR-023:
+ * Per ADR-023 (with unified-app-shell update 2026-04-26):
  *   - Stable URL the post-save flow always lands on (mobile-share friendly).
  *   - Renders the settled orb (`'saved'` visual variant) + the closer text
  *     passed via `?closer=<URL-encoded>`.
- *   - Auto-dismiss to `/` after 2000ms; visible ≥ 1500ms minimum.
- *   - "View memory" CTA hidden behind `NEXT_PUBLIC_F02_C1_SHIPPED === 'true'`
- *     until F02 C1 ships.
+ *   - Auto-dismiss to `/journey/memory` after 2000ms (was `/` pre-unify);
+ *     closes the contribute → see-it-back loop. Visible ≥ 1500ms minimum.
+ *   - "View memory" CTA rendered unconditionally (was gated behind
+ *     `NEXT_PUBLIC_F02_C1_SHIPPED` pre-F02 C1; F02 C1 has shipped, so the
+ *     gate is removed for one fewer env-var dependency).
  *
  * The page splits into a thin wrapper (reads search params) + a
  * presentational `<SavedView>` so tests can render the view directly with
@@ -38,13 +40,10 @@ export function SavedView({ closer, queued }: SavedViewProps): React.JSX.Element
 
   useEffect(() => {
     const id = window.setTimeout(() => {
-      router.push('/')
+      router.push('/journey/memory')
     }, AUTO_DISMISS_MS)
     return () => window.clearTimeout(id)
   }, [router])
-
-  const showMemoryCta =
-    process.env.NEXT_PUBLIC_F02_C1_SHIPPED === 'true'
 
   const visibleCloser = closer.trim().length > 0 ? closer : DEFAULT_CLOSER
 
@@ -64,19 +63,17 @@ export function SavedView({ closer, queued }: SavedViewProps): React.JSX.Element
             Saved for later — we&apos;ll save it as soon as you&apos;re back online.
           </p>
         ) : null}
-        {showMemoryCta ? (
-          <a
-            href="/journey/memory"
-            className={
-              'mt-2 inline-flex min-h-11 items-center justify-center rounded-full ' +
-              'bg-teal-600 px-6 text-sm font-medium text-white hover:bg-teal-700 ' +
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 ' +
-              'focus-visible:ring-offset-2'
-            }
-          >
-            View memory
-          </a>
-        ) : null}
+        <a
+          href="/journey/memory"
+          className={
+            'mt-2 inline-flex min-h-11 items-center justify-center rounded-full ' +
+            'bg-teal-600 px-6 text-sm font-medium text-white hover:bg-teal-700 ' +
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 ' +
+            'focus-visible:ring-offset-2'
+          }
+        >
+          View memory
+        </a>
       </section>
     </ScreenShell>
   )

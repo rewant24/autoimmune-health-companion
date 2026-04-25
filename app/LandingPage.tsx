@@ -636,11 +636,15 @@ export function LandingPage() {
           <div className="md:col-span-8 grid grid-cols-2 gap-8 sm:grid-cols-3">
             <div className="flex flex-col gap-3">
               <p className="type-label">Product</p>
+              {/*
+                Single "Open the app" entry — the unified app shell mounts
+                BottomNav on /check-in and /journey/memory, so separate
+                footer links per surface are redundant. The hero
+                <GetStartedCTA /> remains the primary entry; this footer
+                link is the secondary fast-path.
+              */}
               <Link href="/check-in" className="text-[14px] hover:underline" style={{ color: "var(--ink)" }}>
-                Try the demo
-              </Link>
-              <Link href="/memory" className="text-[14px] hover:underline" style={{ color: "var(--ink)" }}>
-                Memory
+                Open the app
               </Link>
               <a href="#waitlist" className="text-[14px] hover:underline" style={{ color: "var(--ink)" }}>
                 Join waitlist
