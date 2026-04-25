@@ -40,7 +40,7 @@ const pillars = [
     bucket: "Show up prepared",
     label: "03",
     items: [
-      { t: "Doctor Report", d: "A one-tap PDF your doctor will actually read." },
+      { t: "Doctor Report", d: "Talking points and trends — one PDF your doctor will actually read." },
       { t: "Prepare for visit", d: "Checklist, annotations, questions ready for the room." },
       { t: "Community", d: "Pseudonymous peer channels — you aren't doing this alone." },
     ],
@@ -496,6 +496,30 @@ export function LandingPage() {
             <p className="type-label mt-5">
               Saumya is in active development · not medical advice · talk to
               your doctor about health decisions
+            </p>
+          </div>
+        </section>
+
+        {/* Boundary statement — what Saumya is not. Sits between privacy and the final ask. */}
+        <section className="grid grid-cols-1 gap-10 md:grid-cols-12">
+          <div className="md:col-span-4">
+            <p className="type-label">Where we stop</p>
+            <h2 className="type-display-md mt-3">Not a diagnostic tool.</h2>
+          </div>
+          <div className="md:col-span-8">
+            <p
+              className="type-body"
+              style={{
+                fontSize: "1.0625rem",
+                lineHeight: 1.7,
+                color: "var(--ink-muted)",
+              }}
+            >
+              Saumya doesn&apos;t tell you what&apos;s wrong, doesn&apos;t
+              recommend tests, doesn&apos;t suggest treatment changes.
+              That&apos;s the conversation between you and your doctor — and
+              the one we want to make better. What Saumya does is hold your
+              story so you walk into that conversation with it ready.
             </p>
           </div>
         </section>
