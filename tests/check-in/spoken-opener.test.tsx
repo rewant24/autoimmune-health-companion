@@ -13,7 +13,7 @@
  *     `saumya.ttsDisabled` localStorage flag.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -157,3 +157,95 @@ describe('<SpokenOpener /> replay button', () => {
   })
 })
 
+describe('<SpokenOpener /> mute long-press (TTS.US-1.H.3)', () => {
+  it('long-pressing the speaker icon for 1s opens the mute popover', () => {
+    vi.useFakeTimers()
+    render(<SpokenOpener text="Hello." variantKey="cold-start" />)
+    const button = screen.getByRole('button', { name: 'Replay' })
+
+    act(() => {
+      fireEvent.pointerDown(button)
+    })
+    act(() => {
+      vi.advanceTimersByTime(LONG_PRESS_MS)
+    })
+
+    expect(
+      screen.getByRole('button', { name: "Mute Saumya's voice" }),
+    ).toBeInTheDocument()
+  })
+
+  it('confirming the mute popover sets saumya.ttsDisabled = "true" in localStorage', () => {
+    vi.useFakeTimers()
+    render(<SpokenOpener text="Hello." variantKey="cold-start" />)
+    const button = screen.getByRole('button', { name: 'Replay' })
+
+    act(() => {
+      fireEvent.pointerDown(button)
+    })
+    act(() => {
+      vi.advanceTimersByTime(LONG_PRESS_MS)
+    })
+    act(() => {
+      fireEvent.pointerUp(button)
+    })
+
+    const confirm = screen.getByRole('button', {
+      name: "Mute Saumya's voice",
+    })
+    act(() => {
+      fireEvent.click(confirm)
+    })
+
+    expect(window.localStorage.getItem('saumya.ttsDisabled')).toBe('true')
+  })
+
+  it('the popover closes after confirming mute', () => {
+    vi.useFakeTimers()
+    render(<SpokenOpener text="Hello." variantKey="cold-start" />)
+    const button = screen.getByRole('button', { name: 'Replay' })
+
+    act(() => {
+      fireEvent.pointerDown(button)
+    })
+    act(() => {
+      vi.advanceTimersByTime(LONG_PRESS_MS)
+    })
+    act(() => {
+      fireEvent.pointerUp(button)
+    })
+
+    act(() => {
+      fireEvent.click(
+        screen.getByRole('button', { name: "Mute Saumya's voice" }),
+      )
+    })
+
+    expect(
+      screen.queryByRole('button', { name: "Mute Saumya's voice" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('a short tap (under 1s) does not open the popover', () => {
+    vi.useFakeTimers()
+    render(<SpokenOpener text="Hello." variantKey="cold-start" />)
+    const button = screen.getByRole('button', { name: 'Replay' })
+
+    act(() => {
+      fireEvent.pointerDown(button)
+    })
+    act(() => {
+      vi.advanceTimersByTime(200)
+    })
+    act(() => {
+      fireEvent.pointerUp(button)
+      fireEvent.click(button)
+    })
+
+    expect(
+      screen.queryByRole('button', { name: "Mute Saumya's voice" }),
+    ).not.toBeInTheDocument()
+  })
+})
+
+const LONG_PRESS_MS = 1000
