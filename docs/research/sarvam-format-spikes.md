@@ -5,10 +5,9 @@
 > adapter) and V.C (TTS adapter). Both V.B and V.C read this file at
 > dispatch time.
 
-**Status:** **PENDING** — needs `SARVAM_API_KEY` in local env. Spikes
-cannot run against mocks; the whole point is to discover the real wire
-behaviour. Run on `feat/voice-sarvam` before tagging
-`voice-c1/pre-flight-done`.
+**Status:** **DONE** — ran 2026-04-26 against the production Sarvam key
+on `feat/voice-sarvam`. Outcomes filled in below; sample audio in
+`docs/research/spike-out/` (gitignored, not committed).
 
 **Prerequisite.** Drop the key into `.env.local` (server-only,
 never `NEXT_PUBLIC_*`). Then:
@@ -68,13 +67,27 @@ WebAudio-based 16k-mono PCM/WAV resampler in V.B?
   OfflineAudioContext]. Performance constraint: must run faster than
   realtime on iOS Safari (target = 16x realtime; we have headroom).
 
-**Outcome (fill in after run).**
-- Encoding accepted: `<webm | wav | pcm>`
-- Latency to first partial: `<N ms>`
-- Sample backend response shape (paste one partial JSON):
-  ```json
-  <paste here>
-  ```
+**Outcome (2026-04-26).**
+- Encoding accepted: **wav (PCM 16-bit LE 16kHz mono)**. Confirmed
+  authoritatively by the SDK's own type def
+  `SpeechToTextStreamingInputAudioCodec` which only enumerates
+  `wav`, `pcm_s16le`, `pcm_l16`, `pcm_raw` — **WebM/Opus is not a
+  supported value at the protocol level.**
+- Wire smoke (real call): connection opened in 320 ms; sent a 500 ms
+  silent WAV (`input_audio_codec: 'wav'`, `sample_rate: '16000'`,
+  base64-encoded via `socket.transcribe(...)`); server accepted
+  without error and closed cleanly with code 1000. Zero transcripts
+  on silent audio (expected — VAD didn't trigger).
+- **Decision:** V.B implements the WebAudio resampler path. Capture
+  `MediaStream` into an `AudioContext`, downsample to 16kHz mono PCM
+  s16le, base64-encode chunks, and send via `socket.transcribe({
+  audio, sample_rate: 16000, encoding: 'audio/wav' })`. Open
+  `connect({ input_audio_codec: 'wav', sample_rate: '16000', … })`.
+- Sample backend response shape: not captured (silent input → no
+  partials emitted). When V.B integrates against real speech, expect
+  the message handler to receive `{ type, transcript, is_final, … }`
+  per `SpeechToTextStreamingResponse`. Live capture deferred to V.B's
+  manual smoke step.
 
 ---
 
@@ -117,12 +130,47 @@ custom decoder? Pick a default voice for `en-IN` neutral female.
 - **Raw PCM / non-direct** → V.C decodes via WebAudio
   (`AudioContext.decodeAudioData`) before playback. Slowest but works.
 
-**Outcome (fill in after run).**
-- Endpoint used: `<convert (REST) | textToSpeechStreaming>`
-- Audio format returned: `<mp3 | wav | pcm | base64-mp3 | …>`
-- First-byte latency: `<N ms>`
-- Voice selected: `<name>` (rationale: `<one line>`)
-- Notes: `<anything surprising>`
+**Outcome (2026-04-26).**
+- Endpoint used: **`textToSpeech.convert` (REST)**. The streaming
+  WebSocket endpoint (`textToSpeechStreaming`) is **bulbul:v2 only**
+  per `TextToSpeechStreamingClient.ConnectArgs.model: "bulbul:v2"`,
+  so it doesn't unlock anything we can't already get from REST + the
+  same v2 voices. Skipping streaming for Cycle 1 — REST is simpler
+  and the latency is fine.
+- Audio format returned: **WAV (RIFF header confirmed across all 6
+  samples)**, base64-encoded inside `{ request_id, audios: [string] }`.
+  Default `speech_sample_rate` = 24000 Hz. No decoder needed — browser
+  `<audio>` plays WAV directly via Blob URL.
+- Latency (full response, single chunk; Sarvam server + network from
+  Bombay/Mumbai region):
+  - bulbul:v2 / anushka  → 1099 ms (105 KB)
+  - bulbul:v2 / manisha  → 1015 ms (107 KB)
+  - bulbul:v2 / vidya    →  863 ms (110 KB)
+  - bulbul:v3 / ritu     → 1288 ms (101 KB)
+  - bulbul:v3 / priya    → 1365 ms (112 KB)
+  - bulbul:v3 / neha     → 1688 ms (146 KB)
+- 800 ms first-byte target was aspirational; in practice REST
+  full-response is ≥863 ms even on the fastest voice. For Cycle 1
+  this is acceptable — opener plays once at session start. Future
+  cycles can move to streaming MP3 if the opener feel needs to be
+  snappier.
+- Voice selected: **`anushka` on `bulbul:v2`**. Rationale: it's the
+  documented v2 default, came back in 1.1 s on the first call, and
+  v2 is the model Sarvam has tuned longest for `en-IN` female. v3
+  voices were 200–600 ms slower for no audible payoff in this short
+  opener line. (User can swap by changing `SARVAM_TTS_SPEAKER` /
+  `SARVAM_TTS_MODEL` env vars in V.C; defaults baked in.)
+- **Decision:** V.C `app/api/speak/route.ts` calls
+  `client.textToSpeech.convert({ text, target_language_code:
+  'en-IN', speaker: 'anushka', model: 'bulbul:v2' })`,
+  base64-decodes `data.audios[0]`, returns
+  `Response(buffer, { headers: { 'Content-Type': 'audio/wav' } })`.
+  Client-side adapter creates a Blob URL and assigns to
+  `audio.src`. No `MediaSource`, no WebAudio decode.
+- Notes: TTS request returns full audio in ~1 s; no chunking. If
+  future cycles need streaming, switch to v2 streaming socket
+  (different code path entirely) or move to v3 + REST and accept the
+  +200–600 ms.
 
 ---
 
@@ -131,9 +179,12 @@ custom decoder? Pick a default voice for `en-IN` neutral female.
 Both subagent prompts in `docs/features/voice-cycle-1-plan.md` reference
 this file. Their decision branches land in their respective adapters:
 
-- **V.B** picks resampler vs raw-WebM in `lib/voice/sarvam-recorder.ts`.
-- **V.C** picks blob vs `MediaSource` vs WebAudio decode in
-  `lib/voice/sarvam-tts-adapter.ts`.
+- **V.B** ships the WebAudio 16kHz PCM resampler in
+  `lib/voice/sarvam-recorder.ts` (no raw-WebM passthrough — codec
+  rejected by the streaming endpoint).
+- **V.C** ships the Blob-URL playback path in
+  `lib/voice/sarvam-tts-adapter.ts` (no `MediaSource`, no WebAudio
+  decode — `<audio>` plays the returned WAV directly).
 
 The `app/api/transcribe/route.ts` and `app/api/speak/route.ts` server
 routes pass `Content-Type` and the audio bytes through Sarvam SDK calls;
