@@ -32,8 +32,17 @@ export interface CloserSelection {
   text: string;
 }
 
-export function selectCloser(state: ContinuityState): CloserSelection {
-  const { key } = selectOpener(state);
+/**
+ * Pair the closer with the opener for the same `ContinuityState`. The
+ * `name` argument is forwarded to `selectOpener` so the two engines stay
+ * structurally symmetrical even though closers are name-free in scoping.
+ * Default `null` matches `selectOpener`'s contract.
+ */
+export function selectCloser(
+  state: ContinuityState,
+  name: string | null = null,
+): CloserSelection {
+  const { key } = selectOpener(state, name);
   const text =
     key === "streak-milestone"
       ? streakMilestoneCloser(state.streakDays)
