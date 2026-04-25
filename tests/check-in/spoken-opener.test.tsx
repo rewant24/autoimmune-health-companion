@@ -4,13 +4,13 @@
  * Stories:
  *   TTS.US-1.H.2 — auto-speaks the opener text on mount unless TTS is
  *     unavailable, the user prefers reduced motion, or the
- *     `saumya.ttsDisabled` localStorage flag is set; renders a speaker
+ *     `saha.ttsDisabled` localStorage flag is set; renders a speaker
  *     icon button (replay) that calls `speak(text)` on click; cancels
  *     on unmount; speaker icon is hidden when TTS is unavailable.
  *
  *   TTS.US-1.H.3 — long-pressing the speaker icon for 1s opens a small
- *     "Mute Saumya's voice" popover; confirming sets the
- *     `saumya.ttsDisabled` localStorage flag.
+ *     "Mute Saha's voice" popover; confirming sets the
+ *     `saha.ttsDisabled` localStorage flag.
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -120,8 +120,8 @@ describe('<SpokenOpener /> auto-speak behaviour', () => {
     expect(speakMock).not.toHaveBeenCalled()
   })
 
-  it('does not auto-speak when saumya.ttsDisabled is "true" in localStorage', async () => {
-    window.localStorage.setItem('saumya.ttsDisabled', 'true')
+  it('does not auto-speak when saha.ttsDisabled is "true" in localStorage', async () => {
+    window.localStorage.setItem('saha.ttsDisabled', 'true')
     render(<SpokenOpener text="Welcome back." variantKey="cold-start" />)
     await Promise.resolve()
     expect(speakMock).not.toHaveBeenCalled()
@@ -171,11 +171,11 @@ describe('<SpokenOpener /> mute long-press (TTS.US-1.H.3)', () => {
     })
 
     expect(
-      screen.getByRole('button', { name: "Mute Saumya's voice" }),
+      screen.getByRole('button', { name: "Mute Saha's voice" }),
     ).toBeInTheDocument()
   })
 
-  it('confirming the mute popover sets saumya.ttsDisabled = "true" in localStorage', () => {
+  it('confirming the mute popover sets saha.ttsDisabled = "true" in localStorage', () => {
     vi.useFakeTimers()
     render(<SpokenOpener text="Hello." variantKey="cold-start" />)
     const button = screen.getByRole('button', { name: 'Replay' })
@@ -191,13 +191,13 @@ describe('<SpokenOpener /> mute long-press (TTS.US-1.H.3)', () => {
     })
 
     const confirm = screen.getByRole('button', {
-      name: "Mute Saumya's voice",
+      name: "Mute Saha's voice",
     })
     act(() => {
       fireEvent.click(confirm)
     })
 
-    expect(window.localStorage.getItem('saumya.ttsDisabled')).toBe('true')
+    expect(window.localStorage.getItem('saha.ttsDisabled')).toBe('true')
   })
 
   it('the popover closes after confirming mute', () => {
@@ -217,12 +217,12 @@ describe('<SpokenOpener /> mute long-press (TTS.US-1.H.3)', () => {
 
     act(() => {
       fireEvent.click(
-        screen.getByRole('button', { name: "Mute Saumya's voice" }),
+        screen.getByRole('button', { name: "Mute Saha's voice" }),
       )
     })
 
     expect(
-      screen.queryByRole('button', { name: "Mute Saumya's voice" }),
+      screen.queryByRole('button', { name: "Mute Saha's voice" }),
     ).not.toBeInTheDocument()
   })
 
@@ -243,7 +243,7 @@ describe('<SpokenOpener /> mute long-press (TTS.US-1.H.3)', () => {
     })
 
     expect(
-      screen.queryByRole('button', { name: "Mute Saumya's voice" }),
+      screen.queryByRole('button', { name: "Mute Saha's voice" }),
     ).not.toBeInTheDocument()
   })
 })

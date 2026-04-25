@@ -4,7 +4,7 @@
  * Per ADR-022: when a `createCheckin` call fails (network, rate limit, transient
  * Convex error), the user can choose "Keep this for later". The full mutation
  * payload is appended to a localStorage queue under
- * `saumya.saveLater.v1`. On next page load, the orchestrator drains and
+ * `saha.saveLater.v1`. On next page load, the orchestrator drains and
  * retries each item.
  *
  * Idempotency is preserved server-side via `clientRequestId` (already part of
@@ -23,7 +23,7 @@
 
 import type { Metric, Mood, FlareState, StageEnum } from "./types";
 
-export const SAVE_LATER_KEY = "saumya.saveLater.v1";
+export const SAVE_LATER_KEY = "saha.saveLater.v1";
 const SCHEMA_VERSION = 1;
 
 /**

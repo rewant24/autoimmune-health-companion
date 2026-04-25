@@ -10,7 +10,7 @@
 
 - **Why out of MVP:** Single-developer scope; translation + voice STT/TTS in more languages is multi-week work.
 - **Post-MVP shape:** Add Hindi first (largest Indian autoimmune-patient demographic overlap with target user). Then Tamil, Telugu, Marathi, Bengali in priority order. Each language requires: UI string translation, STT model support, TTS voice model, plus QA with native speakers.
-- **Architectural hook:** All user-facing copy goes through an i18n string resource system from day one (per § Saumya's voice → multilingual architecture in scoping.md). Adding a language is a drop-in, not a refactor.
+- **Architectural hook:** All user-facing copy goes through an i18n string resource system from day one (per § Saha's voice → multilingual architecture in scoping.md). Adding a language is a drop-in, not a refactor.
 
 ## 2. Full edit on past check-ins
 
@@ -30,7 +30,7 @@
 ## 4. Push notifications for insights
 
 - **Why out of MVP:** Notifications on chronic-illness data risk feeling alarming or intrusive. Pull model forces the app to earn attention, not demand it.
-- **Post-MVP shape:** Opt-in daily or weekly digest notification (*"Saumya has 2 things to show you"*) — never per-insight alerts. Strictly user-initiated opt-in during settings.
+- **Post-MVP shape:** Opt-in daily or weekly digest notification (*"Saha has 2 things to show you"*) — never per-insight alerts. Strictly user-initiated opt-in during settings.
 - **Architectural hook:** None needed for MVP. Notifications surface can be added later without schema changes.
 
 ## 5. Support-system shared view (read-only)
@@ -94,7 +94,7 @@
 
 ## 15. Native iOS and Android apps (wrapping the web MVP)
 
-- **Why out of MVP:** App-store review timelines don't clear the MVP launch window. Web-PWA MVP (per ADR-017) gets Saumya in front of real users on a live URL on launch day; native apps come next.
+- **Why out of MVP:** App-store review timelines don't clear the MVP launch window. Web-PWA MVP (per ADR-017) gets Saha in front of real users on a live URL on launch day; native apps come next.
 - **Post-MVP shape:** Native iOS and Android apps that reuse the Convex backend and the voice-provider abstraction — only the surface layer changes. Native mic APIs give first-class voice capture (including background / lock-screen capture for hands-free flare logging). App-store listings also open paid-tier monetization paths that web can't (Apple/Google in-app purchase, optional).
 - **Architectural hook:** ADR-017 locks voice behind a provider interface. The mic bridge is a drop-in replacement; Convex queries/mutations are platform-agnostic. No backend changes needed when native ships.
 
@@ -112,17 +112,17 @@ This is the **only backlog item that needs a first pass before MVP launch**, bec
 
 ### Target track
 
-**Revenue track** (176-point ceiling, highest of the three). Saumya is a natural fit: chronic-illness patients have sustained willingness-to-pay, waitlist demand is already present, and the doctor-report artifact is a tangible outcome with obvious perceived value (a single visit improved = price justified).
+**Revenue track** (176-point ceiling, highest of the three). Saha is a natural fit: chronic-illness patients have sustained willingness-to-pay, waitlist demand is already present, and the doctor-report artifact is a tangible outcome with obvious perceived value (a single visit improved = price justified).
 
 ### Tier structure (v0 proposal)
 
 | Tier | Price (India) | Price (International) | What's unlocked |
 |---|---|---|---|
-| **Free — "Saumya Friend"** | ₹0 | $0 | Daily voice check-in, Memory (last 30 days), 1 doctor report per month, intake tracking, Community access |
-| **Paid — "Saumya Companion"** | ₹199/month or ₹1,499/year (~37% off) | $4.99/month or $39/year | Unlimited Memory history, unlimited doctor reports, unlimited PDF regenerations, Patterns view (long-horizon insights), WhatsApp share, priority support, future: wearable integrations + support-system shared view |
+| **Free — "Saha Friend"** | ₹0 | $0 | Daily voice check-in, Memory (last 30 days), 1 doctor report per month, intake tracking, Community access |
+| **Paid — "Saha Companion"** | ₹199/month or ₹1,499/year (~37% off) | $4.99/month or $39/year | Unlimited Memory history, unlimited doctor reports, unlimited PDF regenerations, Patterns view (long-horizon insights), WhatsApp share, priority support, future: wearable integrations + support-system shared view |
 
 **Why these numbers:**
-- **₹199/month** anchors below the price of a single OPD consultation (₹500–1,500 in Tier-1 cities) — *"one visit you don't have to repeat pays for a year of Saumya."*
+- **₹199/month** anchors below the price of a single OPD consultation (₹500–1,500 in Tier-1 cities) — *"one visit you don't have to repeat pays for a year of Saha."*
 - **₹1,499/year** is psychologically beneath ₹1,500 and close to one month's medication cost for many autoimmune regimens — legible as *"a fraction of what you already spend on the condition."*
 - **$4.99/month** for international is the default SaaS consumer anchor and avoids the ₹→$ arithmetic.
 - Annual discount at ~37% is aggressive enough to shift most paying users into annual (better LTV, lower churn work for us).

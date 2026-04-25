@@ -81,7 +81,7 @@ export interface ContinuityState {
 
 /**
  * Catalog of opener (and paired closer) variants. Priority order is
- * defined in `lib/saumya/opener-engine.ts` — highest first:
+ * defined in `lib/saha/opener-engine.ts` — highest first:
  *   first-ever > re-entry-same-day > doctor-visit-tomorrow >
  *   blood-test-tomorrow > flare-fatigue-neutral (≥5 ongoing) >
  *   flare-ongoing > streak-milestone (days 7/30/90/180/365 only) >

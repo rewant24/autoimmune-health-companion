@@ -1,4 +1,4 @@
-# Saumya — Tech Stack
+# Saha — Tech Stack
 
 > **Living document.** Authoritative record of every dependency, version, and upgrade policy.
 

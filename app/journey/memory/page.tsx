@@ -21,7 +21,7 @@ import { api } from '@/convex/_generated/api'
 import type { MemoryFilter } from '@/components/memory/_types'
 import { MemoryTab } from '@/components/memory/MemoryTab'
 
-const TEST_USER_KEY = 'saumya.testUser.v1'
+const TEST_USER_KEY = 'saha.testUser.v1'
 
 const FILTER_VALUES: ReadonlySet<MemoryFilter> = new Set([
   'all',

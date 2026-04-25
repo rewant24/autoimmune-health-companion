@@ -216,14 +216,14 @@ Likely **out of MVP** but belong in `post-mvp-backlog.md` with architectural hoo
 |---|---|---|
 | **A. Lab-trend tracking is the doctor's #1 quantitative ask** | Blood-test *schedule* is a first-class event in MVP (§ Doctor-visit capture); blood-test *results* are explicitly **post-MVP** (post-mvp-backlog #3 — "Blood work results (not schedule)") | **Significant.** Sonakshi's feedback elevates lab-result tracking from "nice-to-have post-MVP" to "the most clinically valuable thing the app can give a doctor." Worth Rewant deciding: pull a thin lab-result slice into MVP (manual entry of CRP/ESR/WBC + a single timeline overlay), or hold it post-MVP and instead position MVP doctor-share around adherence + flare-vs-dose. |
 | **B. Qualitative output = patient's talking points, not doctor's narrative** | Doctor Report is currently positioned as a doctor-readable artifact (PDF + cover summary + appendix — § Doctor report flow). Talking-points framing is *implicit* in the report's existence but not stated as the qualitative section's purpose | **Reframe, not rebuild.** The Doctor Report's qualitative section should be explicitly labelled "Talking points for your visit" (Sonakshi-facing), with the doctor-readable summary leaning quantitative. Small copy + structure shift, no architectural change. |
-| **C. No diagnosis, no test recommendations — context + correlation only** | Strongly aligned in spirit: "Never claim causation. Only co-occurrence" (§ Feedback loop), "Witness, don't prescribe" (§ The closer), confidence rules on insight cards. But there is no top-level **product positioning principle** that says *"Saumya does not diagnose or recommend tests."* | **Add as an explicit positioning lock.** The empty `## Out of scope` section (line 1142) is the natural home: lock "diagnosis" and "test recommendations" as out-of-scope for the product as a whole, not just MVP. Also worth a one-liner in § Brand direction or § Conversation design principles. |
+| **C. No diagnosis, no test recommendations — context + correlation only** | Strongly aligned in spirit: "Never claim causation. Only co-occurrence" (§ Feedback loop), "Witness, don't prescribe" (§ The closer), confidence rules on insight cards. But there is no top-level **product positioning principle** that says *"Saha does not diagnose or recommend tests."* | **Add as an explicit positioning lock.** The empty `## Out of scope` section (line 1142) is the natural home: lock "diagnosis" and "test recommendations" as out-of-scope for the product as a whole, not just MVP. Also worth a one-liner in § Brand direction or § Conversation design principles. |
 | **D. "Picture of what works for me" is the north-star user need** | Captured in § Theme 4 (visualizations + patterns) and § Feedback loop (graduated visual-to-verbal). Aligned in substance | **Adopt as a quotable north star.** Sonakshi's exact phrase — *"a picture of what works for me but I don't have the tools to make that picture on my own yet"* — is the cleanest one-line product mission yet. Candidate for landing-page copy, founder quote replacement, or onboarding. |
 
 ### 11.3 Specific edits Rewant could make to `scoping.md`
 
 1. **§ Out of scope (line 1142, currently empty):** add two locked items —
-   - *"**Diagnosis** — Saumya does not name, suggest, or rule out medical conditions. The app surfaces context and correlation; conclusions are the doctor's job."*
-   - *"**Test recommendations** — Saumya does not suggest blood tests, scans, specialists, or any other clinical action. Vast and murky territory; not the product's role."*
+   - *"**Diagnosis** — Saha does not name, suggest, or rule out medical conditions. The app surfaces context and correlation; conclusions are the doctor's job."*
+   - *"**Test recommendations** — Saha does not suggest blood tests, scans, specialists, or any other clinical action. Vast and murky territory; not the product's role."*
    - Source attribution: Sonakshi feedback, 2026-04-25.
 
 2. **§ MVP focus themes / Theme 1 (Communication):** add a clarifying line — *"Doctors prefer hearing qualitative content from the patient directly. The qualitative output of this app is therefore framed as the **patient's talking points** for the consult — not a narrative for the doctor to read. The doctor-readable surface is the quantitative one (adherence, dose-change timeline, flare ↔ dose correlation, lab trends if available)."*
@@ -236,7 +236,7 @@ Likely **out of MVP** but belong in `post-mvp-backlog.md` with architectural hoo
    Either way, log the decision against post-mvp-backlog #3.
 
 5. **§ Landing-page copy locks (line 29):** consider a candidate alternate ROI anchor sourced from Sonakshi's own words —
-   *"You shouldn't have to be your own pattern detective. Saumya gives you a picture of what works for you."*
+   *"You shouldn't have to be your own pattern detective. Saha gives you a picture of what works for you."*
    (Rewant's call vs. the current "logbook" anchor. Sonakshi-sourced quotes are stronger than founder-voiced ones for the social-proof slot.)
 
 ### 11.4 What this feedback does NOT settle

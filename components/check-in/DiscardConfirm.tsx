@@ -43,7 +43,7 @@ export function DiscardConfirm({
   useEffect(() => {
     if (!open) return
     try {
-      window.history.pushState({ saumyaDiscardModal: true }, '')
+      window.history.pushState({ sahaDiscardModal: true }, '')
     } catch {
       // Harmless — some test environments restrict pushState.
     }

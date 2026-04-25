@@ -1,7 +1,7 @@
 /**
  * save-later queue tests (US-1.F.5).
  *
- * Per ADR-022: localStorage queue under key `saumya.saveLater.v1`.
+ * Per ADR-022: localStorage queue under key `saha.saveLater.v1`.
  * Schema-versioned: `{ v: 1, items: [...] }`. Idempotency relies on
  * `clientRequestId` already in the payload (server-side dedupe).
  *
@@ -52,8 +52,8 @@ describe('save-later queue', () => {
     vi.restoreAllMocks()
   })
 
-  it('uses the versioned key saumya.saveLater.v1', () => {
-    expect(SAVE_LATER_KEY).toBe('saumya.saveLater.v1')
+  it('uses the versioned key saha.saveLater.v1', () => {
+    expect(SAVE_LATER_KEY).toBe('saha.saveLater.v1')
   })
 
   it('enqueue writes a v1-shaped envelope with one item', () => {

@@ -189,7 +189,7 @@ One Agent call. Prompt includes the locked-decisions list + first-pass summary. 
 - [ ] `docs/architecture-changelog.md` — append dated entry
 - [ ] `docs/system-map.md` — reflect Cycle 1 shipped
 - [ ] `docs/build-log.md` — session entry (what shipped, reviewer notes, surprises)
-- [ ] `~/.claude/projects/-Users-rewantprakash-1/memory/MEMORY.md` — update Saumya "Next" line to Cycle 2 or pause
+- [ ] `~/.claude/projects/-Users-rewantprakash-1/memory/MEMORY.md` — update Saha "Next" line to Cycle 2 or pause
 - [ ] Commit: `docs: ship F01 C1 — update statuses, changelog, system-map, build-log`
 - [ ] Tag `f01-c1/shipped`
 

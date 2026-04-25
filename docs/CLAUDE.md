@@ -1,10 +1,10 @@
-# Autoimmune Health Companion (Saumya)
+# Autoimmune Health Companion (Saha)
 
 > **On session start, read these files first — in this order:**
 > 1. `docs/scoping.md` — canonical product spec (Rewant-authored). Primary source of truth.
 > 2. `docs/build-plan.md` — active build plan. Structure, conventions, feature breakdowns.
 > 3. `docs/system-map.md` — current visual state: features, subagents, status.
-> 4. `docs/product-taxonomy.md` — capability-level view of what Saumya does.
+> 4. `docs/product-taxonomy.md` — capability-level view of what Saha does.
 > 5. `docs/tech-stack.md` — current versions + upgrade rules.
 > 6. If the user mentions a specific feature (e.g., "Check-in"), also read `docs/features/NN-slug.md`.
 >

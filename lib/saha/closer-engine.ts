@@ -21,11 +21,11 @@ import type {
   ContinuityState,
   OpenerVariantKey,
 } from "@/lib/checkin/types";
-import { selectOpener } from "@/lib/saumya/opener-engine";
+import { selectOpener } from "@/lib/saha/opener-engine";
 import {
   CLOSER_VARIANTS,
   streakMilestoneCloser,
-} from "@/lib/saumya/variants";
+} from "@/lib/saha/variants";
 
 export interface CloserSelection {
   key: OpenerVariantKey;

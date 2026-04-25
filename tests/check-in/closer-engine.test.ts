@@ -1,5 +1,5 @@
 /**
- * Tests for `lib/saumya/closer-engine.ts`.
+ * Tests for `lib/saha/closer-engine.ts`.
  *
  * Per ADR-009 the closer is the SAME rules engine as the opener — paired
  * from the same `ContinuityState` snapshot. These tests verify:
@@ -10,9 +10,9 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { selectOpener } from "@/lib/saumya/opener-engine";
-import { selectCloser } from "@/lib/saumya/closer-engine";
-import { RULED_OUT_PHRASES } from "@/lib/saumya/variants";
+import { selectOpener } from "@/lib/saha/opener-engine";
+import { selectCloser } from "@/lib/saha/closer-engine";
+import { RULED_OUT_PHRASES } from "@/lib/saha/variants";
 import type { ContinuityState } from "@/lib/checkin/types";
 
 const baseState = (overrides: Partial<ContinuityState> = {}): ContinuityState => ({

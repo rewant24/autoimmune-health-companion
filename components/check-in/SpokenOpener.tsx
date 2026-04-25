@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * SpokenOpener — the opener-text wrapper that renders Saumya's greeting
+ * SpokenOpener — the opener-text wrapper that renders Saha's greeting
  * and (when supported) speaks it aloud once on mount.
  *
  * Feature 01, Cycle 2, Chunk 2.E, US-1.H.2 + US-1.H.3.
@@ -15,15 +15,15 @@
  *     if all three conditions hold:
  *       1. `isTtsAvailable()` returns true.
  *       2. `prefers-reduced-motion` is NOT requested.
- *       3. `localStorage.getItem('saumya.ttsDisabled') !== 'true'`.
+ *       3. `localStorage.getItem('saha.ttsDisabled') !== 'true'`.
  *   - On unmount, calls `tts.cancel()` so the queued utterance doesn't
  *     keep speaking after the user navigates away.
  *   - When TTS is unavailable, the speaker button is hidden entirely.
  *
  * Mute long-press (US-1.H.3): a 1s press-and-hold on the speaker icon
- * opens a small popover with a "Mute Saumya's voice" action when TTS
- * is currently active, or an "Un-mute Saumya's voice" action when it's
- * been muted. Confirming flips `saumya.ttsDisabled` in localStorage.
+ * opens a small popover with a "Mute Saha's voice" action when TTS
+ * is currently active, or an "Un-mute Saha's voice" action when it's
+ * been muted. Confirming flips `saha.ttsDisabled` in localStorage.
  * A short tap is a normal replay click.
  */
 
@@ -35,7 +35,7 @@ import {
   type TtsAdapter,
 } from '@/lib/voice/tts-adapter'
 
-const TTS_DISABLED_KEY = 'saumya.ttsDisabled'
+const TTS_DISABLED_KEY = 'saha.ttsDisabled'
 const LONG_PRESS_MS = 1000
 
 export interface SpokenOpenerProps {
@@ -208,7 +208,7 @@ export function SpokenOpener({
                 'hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-700'
               }
             >
-              Un-mute Saumya&apos;s voice
+              Un-mute Saha&apos;s voice
             </button>
           ) : (
             <button
@@ -220,7 +220,7 @@ export function SpokenOpener({
                 'dark:hover:bg-zinc-200'
               }
             >
-              Mute Saumya&apos;s voice
+              Mute Saha&apos;s voice
             </button>
           )}
           <button

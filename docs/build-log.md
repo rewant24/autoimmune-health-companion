@@ -576,4 +576,37 @@ State-machine unit tests grew by 19 cases (47/47 total) covering: scripted/hybri
 - Manual smoke test before tagging `f01-c2/shipped`: clear localStorage + Convex `checkIns` → verify Day-1 tutorial + day-1 milestone fires; seed 6 prior days via `scripts/seed-streak.ts` (dev-only, not yet authored — orchestrator can add as part of smoke test) → verify day-7 ring animation.
 - F02 C1 ship-day learning #5 still relevant: `NEXT_PUBLIC_CONVEX_URL` needs to be set for the preview branch (or globally for "all preview") before opening the PR.
 
+---
+
+## 2026-04-25 · Session 11 — Saumya → Saha rebrand
+
+**Outcome.** Second pre-launch rename of the day. Brand framing shifted from *gentle/calm* (Saumya, सौम्य) to *endurance + together* (Saha, सह) on the rationale that "gentle" softens what autoimmune actually demands of patients, and that Sanskrit सह uniquely carries both meanings (*to bear* + *with*) in one word. Branch `feat/rebrand-saha` off post-F02-C1 main; F01 C2 work stays on its own branch and is unaffected.
+
+**Code sweep.**
+- `package.json` `name` → `saha`.
+- Directory rename `lib/saumya/` → `lib/saha/`; 21 import sites updated across the rules engine, app pages, and tests.
+- `localStorage` keys (all pre-launch — no shipped data, no migration shim): `saumya.saveLater.v1` → `saha.saveLater.v1` (`lib/checkin/save-later.ts:26`), `saumya.ttsDisabled` → `saha.ttsDisabled` (`components/check-in/SpokenOpener.tsx:38`), `saumya.testUser.v1` → `saha.testUser.v1` (`app/check-in/page.tsx:124`, `app/journey/memory/page.tsx:24`). History-state key `saumyaDiscardModal` → `sahaDiscardModal` (`components/check-in/DiscardConfirm.tsx:46`).
+- Brand references in `app/{LandingPage,layout,privacy/page,CheckInGrid,WaitlistCount,VoiceTranscript,check-in/page,journey/memory/page}.tsx`, `components/check-in/{SpokenOpener,Closer,DiscardConfirm}.tsx`, `lib/checkin/types.ts`, `convex/continuity.ts` straight-renamed.
+
+**Landing page (Option B copy).** `app/LandingPage.tsx`:
+- L25 hero pillar: *"Sixty seconds a day. No forms — Saha carries the record with you."*
+- L57 privacy callout: *"What you say to Saha stays between you and Saha. Not used for model training. Not sold."*
+- L412 label: *"Why Saha"*.
+- L448 brand block (italic): *"Saha — सह — Sanskrit, two meanings at once: to endure and with. Because autoimmune is a long carry, and you don't carry it alone. Saha holds the days you can't, and walks beside the days you can."*
+- L575 footer brand line: *"Saha — सह — Sanskrit. Endurance, and together. The two things this asks of all of us."*
+
+**Documentation sweep.** All 14 active doc files updated *Saumya → Saha*. ADR-024 retains its body intact (historical record of the prior rename); only a `Superseded by ADR-025` header is added. ADR-025 appended with full Context / Decision / Immutability-extension / Consequences / Alternatives sections. `architecture-changelog.md` gets a top-of-file 2026-04-25 rename entry; older entries stay as historical timeline.
+
+**Redirect proxy.** New `proxy.ts` at the repo root issues 308 permanent redirects from `saumya-*`, `sakhi-*`, and `autoimmune-*` Vercel hosts to `saha-health-companion.vercel.app`, preserving paths. Branch-preview hosts (`*-git-*`) are intentionally excluded so previews keep working under their own hostnames during development. Chose proxy over `vercel.json` redirects because the latter is path-based, not host-based — the proxy file convention runs at the edge before the page handler and is the cleanest place for host-conditional 308s. (Started as `middleware.ts`; Next 16 deprecates that name in favor of `proxy.ts` with `export function proxy()` — renamed before push.)
+
+**Tests.** Updated import paths (`@/lib/saumya/*` → `@/lib/saha/*`) and key assertions in `tests/check-in/{opener-engine,closer-engine,save-later,spoken-opener}.test.{ts,tsx}`. No new tests for the rebrand itself — verification is by passing the existing 441 cases.
+
+**Verification (planned).** Local: `pnpm tsc`, `pnpm vitest` (target 441/441 green), `pnpm next build`, manual smoke at http://localhost:3000 confirming the new brand block + footer copy, and Application → Local Storage check that save-later + TTS-disabled flags write under `saha.*`. Production: curl the legacy hosts and confirm 308 → saha with path preserved.
+
+**Open follow-ups.**
+- Vercel project rename (`saumya-health-companion` → `saha-health-companion`) and `saha-health-companion.vercel.app` add to the project's Domains list (per F02 C1 ship-day learning #d — without the explicit add, the new alias 401-blocks until added even with SSO's `all_except_custom_domains` mode).
+- Push `feat/rebrand-saha`; `vercel env add NEXT_PUBLIC_CONVEX_URL preview feat/rebrand-saha …` (per build-log Session 7 lesson, the CLI rejects non-per-branch invocations); `vercel redeploy <branch-url>` so the new env var takes effect.
+- After merge, verify the Vercel auto-promote landed; do **not** manually run `vercel --prod` (per F01 C2 ship-day learning #c — that creates a duplicate prod deploy).
+- Memory write-through: `MEMORY.md` Autoimmune section heading → *(Saha, formerly Saumya)*; update `autoimmune_companion.md` if it references Saumya by name; record any new lesson surfaced by this rebrand (e.g., the host-conditional proxy pattern).
+
 **Next.** Tag the Wave 2 integration commit, then dispatch reviewers.

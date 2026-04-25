@@ -1,6 +1,6 @@
 /**
- * Tests for `lib/saumya/opener-engine.ts` — the deterministic rules engine
- * that picks Saumya's opening line each morning.
+ * Tests for `lib/saha/opener-engine.ts` — the deterministic rules engine
+ * that picks Saha's opening line each morning.
  *
  * Priority order (highest first):
  *   first-ever
@@ -21,8 +21,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { selectOpener } from "@/lib/saumya/opener-engine";
-import { RULED_OUT_PHRASES } from "@/lib/saumya/variants";
+import { selectOpener } from "@/lib/saha/opener-engine";
+import { RULED_OUT_PHRASES } from "@/lib/saha/variants";
 import type { ContinuityState } from "@/lib/checkin/types";
 
 const baseState = (overrides: Partial<ContinuityState> = {}): ContinuityState => ({

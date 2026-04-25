@@ -1,10 +1,10 @@
-# Saumya
+# Saha
 
 A voice-first health companion for people living with autoimmune conditions.
 
-> *Saumya* (सौम्य) is Sanskrit for *gentle, soft, calm, kind* — the presence we want next to you on a hard day, remembering with you so you don't walk into that room alone.
+> *Saha* (सह) — Sanskrit, two meanings at once: *to endure* and *with*. Because autoimmune is a long carry, and you don't carry it alone. Saha holds the days you can't, and walks beside the days you can.
 
-**Live:** https://autoimmune-health-companion.vercel.app
+**Live:** https://saha-health-companion.vercel.app
 
 ## What it does
 

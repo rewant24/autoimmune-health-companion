@@ -16,7 +16,7 @@ export function WaitlistCount({ variant = "warm" }: { variant?: Variant }) {
 
   const text =
     count === 0
-      ? "Be among the first to try Saumya."
+      ? "Be among the first to try Saha."
       : count === 1
         ? "1 person on the list."
         : `${count.toLocaleString()} people on the list.`;
