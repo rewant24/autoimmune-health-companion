@@ -29,11 +29,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import {
-  createTtsAdapter,
-  isTtsAvailable,
-  type TtsAdapter,
-} from '@/lib/voice/tts-adapter'
+import { getTtsProvider } from '@/lib/voice/provider'
+import type { TtsProvider } from '@/lib/voice/types'
 
 const TTS_DISABLED_KEY = 'saha.ttsDisabled'
 const LONG_PRESS_MS = 1000
@@ -78,12 +75,13 @@ export function SpokenOpener({
   text,
   variantKey,
 }: SpokenOpenerProps): React.JSX.Element {
-  const ttsRef = useRef<TtsAdapter | null>(null)
-  if (ttsRef.current === null) ttsRef.current = createTtsAdapter()
+  const ttsRef = useRef<TtsProvider | null>(null)
+  if (ttsRef.current === null) ttsRef.current = getTtsProvider()
 
-  // Capture availability once per mount — `isTtsAvailable` reads
-  // `globalThis.speechSynthesis`, which is stable across renders.
-  const available = useMemo(() => isTtsAvailable(), [])
+  // Capture availability once per mount — provider availability is stable
+  // across renders for both adapters (Web Speech reads
+  // `globalThis.speechSynthesis`; Sarvam always returns true).
+  const available = useMemo(() => ttsRef.current?.isAvailable() ?? false, [])
 
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFired = useRef(false)

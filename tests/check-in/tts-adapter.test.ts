@@ -1,5 +1,7 @@
 /**
- * Tests for `lib/voice/tts-adapter.ts` (Feature 01, Cycle 2, Chunk 2.E).
+ * Tests for `lib/voice/web-speech-tts-adapter.ts` (Feature 01, Cycle 2,
+ * Chunk 2.E). File was originally `tts-adapter.ts`; renamed during voice
+ * C1 pre-flight (ADR-026), and the re-export shim was deleted in Wave 2.
  *
  * Stories:
  *   TTS.US-1.H.1 — Web Speech `speechSynthesis` adapter exposing
@@ -19,7 +21,7 @@ import {
   createTtsAdapter,
   isTtsAvailable,
   resetVoiceCacheForTests,
-} from '@/lib/voice/tts-adapter'
+} from '@/lib/voice/web-speech-tts-adapter'
 
 // --- Fake `SpeechSynthesisUtterance` --------------------------------------
 

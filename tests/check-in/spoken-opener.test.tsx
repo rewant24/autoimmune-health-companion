@@ -27,10 +27,12 @@ const { speakMock, cancelMock, isAvailableMock } = vi.hoisted(() => ({
   isAvailableMock: vi.fn().mockReturnValue(true),
 }))
 
-vi.mock('@/lib/voice/tts-adapter', () => ({
-  createTtsAdapter: () => ({ speak: speakMock, cancel: cancelMock }),
-  isTtsAvailable: () => isAvailableMock(),
-  resetVoiceCacheForTests: () => undefined,
+vi.mock('@/lib/voice/provider', () => ({
+  getTtsProvider: () => ({
+    speak: speakMock,
+    cancel: cancelMock,
+    isAvailable: () => isAvailableMock(),
+  }),
 }))
 
 // --- Helpers ---------------------------------------------------------------
