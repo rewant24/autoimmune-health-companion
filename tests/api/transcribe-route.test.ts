@@ -460,6 +460,41 @@ describe('POST /api/transcribe', () => {
     }
   })
 
+  // --------------------------------------------------------------------
+  // Story V.A.4 — abort handling (request.signal -> Sarvam socket close)
+  // --------------------------------------------------------------------
+
+  it('closes the upstream Sarvam socket when the client aborts', async () => {
+    const { POST } = await import('@/app/api/transcribe/route')
+    const ac = new AbortController()
+    // Body that hangs open so abort is the only trigger.
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3]))
+        // Never close.
+      },
+    })
+    const req = new Request('http://localhost/api/transcribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'audio/wav' },
+      body: body as unknown as BodyInit,
+      signal: ac.signal,
+      // @ts-expect-error duplex required for streaming bodies
+      duplex: 'half',
+    })
+    const res = await POST(req)
+    // Wait until the route has registered its abort listener (after the
+    // connect microtask + stream start).
+    await new Promise((r) => setTimeout(r, 20))
+    ac.abort()
+    // Drain so the controller's close runs.
+    const text = await readResponseText(res)
+    expect(fakeState.socket?.closed).toBe(true)
+    const events = parseSseEvents(text)
+    const aborts = events.filter((e) => e.kind === 'voice.aborted')
+    expect(aborts.length).toBeGreaterThanOrEqual(1)
+  })
+
   it('sets X-Voice-Bytes and X-Voice-Duration-Ms response headers', async () => {
     const { POST } = await import('@/app/api/transcribe/route')
     const req = buildStreamingRequest(
