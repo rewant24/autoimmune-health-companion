@@ -145,7 +145,14 @@ export type State =
 
 export type Event =
   | { type: 'TAP_ORB' }
-  | { type: 'PERMISSION_GRANTED' }
+  // Voice C1 (ADR-026): conversational mode supplies an `opener` payload so
+  // the reducer can route to `speaking-opener` instead of `listening`. The
+  // payload-less form preserves the C1 freeform path used by tests and the
+  // taps fallback, so callers who don't want the dialog don't pay for it.
+  | {
+      type: 'PERMISSION_GRANTED'
+      opener?: { text: string; variantKey: OpenerVariantKey }
+    }
   | { type: 'PERMISSION_DENIED' }
   | { type: 'PARTIAL'; text: string }
   | { type: 'PROVIDER_STOPPED'; transcript: Transcript }
@@ -173,7 +180,10 @@ export type Event =
   | { type: 'METRIC_UPDATED'; metric: Metric; value: unknown }
   | { type: 'METRIC_DECLINED'; metric: Metric }
   | { type: 'STAGE_2_CONTINUE' }
-  | { type: 'CONFIRM' }
+  // Voice C1 (ADR-026): conversational mode supplies a `closer` payload so
+  // the reducer can route to `speaking-closer` instead of straight to
+  // `saving`. Payload-less form preserves the C1 path used by existing tests.
+  | { type: 'CONFIRM'; closer?: { text: string } }
   // 2.D — discard flow (request → confirm/cancel).
   | { type: 'DISCARD_REQUEST' }
   | { type: 'DISCARD_CONFIRM' }
@@ -187,7 +197,21 @@ export type Event =
   // the union members + no-op cases; Wave 2 implements transitions.
   | { type: 'OPENER_PLAYED' }
   | { type: 'OPENER_FAILED' }
-  | { type: 'ASK_QUESTION'; metric: Metric; text: string }
+  // ASK_QUESTION carries the question text + an optional `seed`. The seed
+  // is required when transitioning from `extracting` (the reducer has no
+  // metrics/missing/declined to inherit from that state). When dispatched
+  // from `extracting-answer` the seed is omitted and the carried payload
+  // is used. See voice-cycle-1-plan §State-machine extension protocol.
+  | {
+      type: 'ASK_QUESTION'
+      metric: Metric
+      text: string
+      seed?: {
+        metrics: Partial<CheckinMetrics>
+        missing: Metric[]
+        declined: Metric[]
+      }
+    }
   | { type: 'QUESTION_PLAYED' }
   | { type: 'ANSWER_TRANSCRIBED'; transcript: Transcript }
   | {
@@ -221,6 +245,16 @@ export function reducer(state: State, event: Event): State {
     }
     case 'requesting-permission': {
       if (event.type === 'PERMISSION_GRANTED') {
+        // Voice C1: opener payload routes to speaking-opener. Without it,
+        // we fall through to the C1 freeform listening path so existing
+        // tests + the taps fallback still work.
+        if (event.opener) {
+          return {
+            kind: 'speaking-opener',
+            text: event.opener.text,
+            variantKey: event.opener.variantKey,
+          }
+        }
         return { kind: 'listening', partial: '' }
       }
       if (event.type === 'PERMISSION_DENIED') {
@@ -243,6 +277,9 @@ export function reducer(state: State, event: Event): State {
       }
       if (event.type === 'PROVIDER_STOPPED') {
         return { kind: 'processing', transcript: event.transcript }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        return emptyStage2()
       }
       if (event.type === 'VOICE_ERROR') {
         return { kind: 'error', error: event.error }
@@ -295,6 +332,23 @@ export function reducer(state: State, event: Event): State {
           missing: ['pain', 'mood', 'adherenceTaken', 'flare', 'energy'],
           declined: [],
         }
+      }
+      // Voice C1: in conversational mode the page bypasses EXTRACTION_DONE
+      // and dispatches ASK_QUESTION with the extraction result as `seed`,
+      // routing the user into the per-metric voice loop.
+      if (event.type === 'ASK_QUESTION' && event.seed) {
+        return {
+          kind: 'speaking-question',
+          metric: event.metric,
+          text: event.text,
+          metrics: event.seed.metrics,
+          missing: event.seed.missing,
+          declined: event.seed.declined,
+          transcript: state.transcript,
+        }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        return emptyStage2(state.transcript)
       }
       return state
     }
@@ -368,7 +422,21 @@ export function reducer(state: State, event: Event): State {
           declined: [...declined, event.metric],
         }
       }
-      if (event.type === 'CONFIRM') return { kind: 'saving' }
+      if (event.type === 'CONFIRM') {
+        // Voice C1: closer payload routes through speaking-closer → saving;
+        // payload-less form preserves the C1 direct-to-saving path.
+        if (event.closer && state.metrics && state.stage) {
+          return {
+            kind: 'speaking-closer',
+            text: event.closer.text,
+            metrics: state.metrics,
+            declined: state.declined ?? [],
+            stage: state.stage,
+            transcript: state.transcript,
+          }
+        }
+        return { kind: 'saving' }
+      }
       if (event.type === 'DISCARD_REQUEST') {
         return { kind: 'discarding', previous: state }
       }
@@ -403,23 +471,144 @@ export function reducer(state: State, event: Event): State {
       // 2.F owns the celebration dismiss path. Pre-flight no-op.
       return state
     }
-    case 'speaking-opener':
-    case 'speaking-question':
-    case 'listening-answer':
-    case 'extracting-answer':
+    case 'speaking-opener': {
+      if (event.type === 'OPENER_PLAYED' || event.type === 'OPENER_FAILED') {
+        // Both routes drop into the freeform listening state. OPENER_FAILED
+        // degrades silently — the opener text is already on screen so the
+        // user can read what Saha would have said.
+        return { kind: 'listening', partial: '' }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        return emptyStage2()
+      }
+      return state
+    }
+    case 'speaking-question': {
+      if (event.type === 'QUESTION_PLAYED') {
+        return {
+          kind: 'listening-answer',
+          metric: state.metric,
+          partial: '',
+          metrics: state.metrics,
+          missing: state.missing,
+          declined: state.declined,
+          transcript: state.transcript,
+        }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        return carryToStage2(state)
+      }
+      return state
+    }
+    case 'listening-answer': {
+      if (event.type === 'PARTIAL') {
+        return { ...state, partial: event.text }
+      }
+      if (event.type === 'PROVIDER_STOPPED') {
+        return {
+          kind: 'extracting-answer',
+          metric: state.metric,
+          answerTranscript: event.transcript,
+          metrics: state.metrics,
+          missing: state.missing,
+          declined: state.declined,
+          transcript: state.transcript,
+        }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        return carryToStage2(state)
+      }
+      if (event.type === 'VOICE_ERROR') {
+        return { kind: 'error', error: event.error }
+      }
+      return state
+    }
+    case 'extracting-answer': {
+      if (event.type === 'ANSWER_EXTRACTED') {
+        // Three outcomes per protocol:
+        //   1. metric extracted (event.metrics has a value for state.metric)
+        //      → fold into metrics, drop from missing
+        //   2. user declined (event.declined === true)
+        //      → write null, drop from missing, append to declined
+        //   3. neither (no extract, no decline) → leave state alone so the
+        //      page can re-ask via ASK_QUESTION with re-ask copy
+        const captured = event.metrics[state.metric]
+        const wasDeclined = event.declined === true
+        if (captured === undefined && !wasDeclined) {
+          return state
+        }
+        const nextMetrics: Partial<CheckinMetrics> = wasDeclined
+          ? { ...state.metrics, [state.metric]: null }
+          : { ...state.metrics, [state.metric]: captured }
+        const nextMissing = state.missing.filter((m) => m !== state.metric)
+        const nextDeclined = wasDeclined
+          ? state.declined.includes(state.metric)
+            ? state.declined
+            : [...state.declined, state.metric]
+          : state.declined
+        if (nextMissing.length === 0) {
+          // All metrics covered — collapse to confirming. Stage is always
+          // 'hybrid' because some answers came through the voice loop
+          // rather than the cold extract.
+          const filledMetrics: CheckinMetrics = {
+            pain: nextMetrics.pain ?? null,
+            mood: nextMetrics.mood ?? null,
+            adherenceTaken: nextMetrics.adherenceTaken ?? null,
+            flare: nextMetrics.flare ?? null,
+            energy: nextMetrics.energy ?? null,
+          }
+          return {
+            kind: 'confirming',
+            transcript: state.transcript,
+            metrics: filledMetrics,
+            declined: nextDeclined,
+            stage: 'hybrid',
+          }
+        }
+        // More to ask — stay in extracting-answer with updated payload so
+        // the page sees the new missing list and dispatches ASK_QUESTION.
+        return {
+          ...state,
+          metrics: nextMetrics,
+          missing: nextMissing,
+          declined: nextDeclined,
+        }
+      }
+      if (event.type === 'ASK_QUESTION') {
+        // Page picks the next missing metric (or re-asks the current one).
+        // Inherit carried payload; `seed` is ignored from this state since
+        // we already have the loop's running state.
+        return {
+          kind: 'speaking-question',
+          metric: event.metric,
+          text: event.text,
+          metrics: state.metrics,
+          missing: state.missing,
+          declined: state.declined,
+          transcript: state.transcript,
+        }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        return carryToStage2(state)
+      }
+      return state
+    }
     case 'speaking-closer': {
-      // Voice C1 pre-flight no-ops. Wave 2 (orchestrator integration)
-      // wires the transitions per the protocol in the cycle plan:
-      //   speaking-opener  + OPENER_PLAYED   → listening
-      //   speaking-opener  + OPENER_FAILED   → listening
-      //   speaking-opener  + BAIL_TO_TAPS    → stage-2 (empty)
-      //   speaking-question + QUESTION_PLAYED → listening-answer
-      //   speaking-question + BAIL_TO_TAPS    → stage-2 (carry state)
-      //   listening-answer + PROVIDER_STOPPED → extracting-answer
-      //   listening-answer + BAIL_TO_TAPS     → stage-2
-      //   extracting-answer + ANSWER_EXTRACTED → next question | confirming
-      //   speaking-closer  + CLOSER_PLAYED   → saving
-      //   speaking-closer  + BAIL_TO_TAPS    → confirming (cancel TTS)
+      if (event.type === 'CLOSER_PLAYED') {
+        return { kind: 'saving' }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        // User cancelled the closer — drop back to confirming so they can
+        // edit before the (now-cancelled) save. Page is responsible for
+        // calling tts.cancel() to silence playback.
+        return {
+          kind: 'confirming',
+          transcript: state.transcript,
+          metrics: state.metrics,
+          declined: state.declined,
+          stage: state.stage,
+        }
+      }
       return state
     }
     case 'error': {
@@ -593,6 +782,53 @@ function normaliseVoiceError(err: unknown): VoiceError {
   if (isVoiceError(err)) return err
   const message = err instanceof Error ? err.message : undefined
   return { kind: 'aborted', message }
+}
+
+// ---------------- Voice C1 bail-out helpers ----------------
+
+const ALL_METRICS: Metric[] = [
+  'pain',
+  'mood',
+  'adherenceTaken',
+  'flare',
+  'energy',
+]
+
+/**
+ * Construct the empty `stage-2` state used when the user bails out of voice
+ * before any extraction has produced metrics (i.e. from `speaking-opener` or
+ * `listening`). All five metrics land in `missing` so Stage 2 renders a full
+ * scripted fallback. The optional `transcript` lets `extracting + BAIL` keep
+ * the freeform transcript already captured.
+ */
+function emptyStage2(transcript?: Transcript): Extract<State, { kind: 'stage-2' }> {
+  return {
+    kind: 'stage-2',
+    transcript: transcript ?? { text: '', durationMs: 0 },
+    metrics: {},
+    missing: [...ALL_METRICS],
+    declined: [],
+  }
+}
+
+/**
+ * Construct the `stage-2` state from a voice loop's running payload. Used
+ * when the user bails from `speaking-question`, `listening-answer`, or
+ * `extracting-answer` — Stage 2 picks up exactly where the loop left off.
+ */
+function carryToStage2(
+  state:
+    | Extract<State, { kind: 'speaking-question' }>
+    | Extract<State, { kind: 'listening-answer' }>
+    | Extract<State, { kind: 'extracting-answer' }>,
+): Extract<State, { kind: 'stage-2' }> {
+  return {
+    kind: 'stage-2',
+    transcript: state.transcript,
+    metrics: state.metrics,
+    missing: state.missing,
+    declined: state.declined,
+  }
 }
 
 function isVoiceError(err: unknown): err is VoiceError {

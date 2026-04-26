@@ -496,38 +496,190 @@ describe('reducer: milestone transitions (Wave 2 readiness)', () => {
   })
 })
 
-describe('reducer: voice C1 dialog states (pre-flight no-ops)', () => {
-  // Per ADR-026 + voice-cycle-1-plan §State-machine extension protocol:
-  // pre-flight ships the union shapes + no-op transitions. Wave 2 wires
-  // the actual transitions per the protocol. These tests assert (a) the
-  // unions compile (the file imports the new state shapes) and (b)
-  // every new state ignores BAIL_TO_TAPS without crashing — Wave 2
-  // tests will replace these with real transition assertions.
+describe('reducer: voice C1 dialog states (Wave 2 transitions)', () => {
+  // Transitions implemented per ADR-026 + voice-cycle-1-plan
+  // §State-machine extension protocol. The reducer remains pure — the page
+  // is responsible for kicking TTS/STT and dispatching the lifecycle events
+  // (OPENER_PLAYED, QUESTION_PLAYED, ANSWER_EXTRACTED, etc).
   const baseTranscript: Transcript = { text: 'hello', durationMs: 1000 }
+  const ALL_MISSING: Array<
+    'pain' | 'mood' | 'adherenceTaken' | 'flare' | 'energy'
+  > = ['pain', 'mood', 'adherenceTaken', 'flare', 'energy']
 
-  it('speaking-opener + BAIL_TO_TAPS → state unchanged (pre-flight no-op)', () => {
+  // ---- requesting-permission with conversational opener payload ----
+
+  it('PERMISSION_GRANTED with opener payload → speaking-opener', () => {
+    const next = reducer(
+      { kind: 'requesting-permission' },
+      {
+        type: 'PERMISSION_GRANTED',
+        opener: { text: 'Welcome back.', variantKey: 'first-ever' },
+      },
+    )
+    expect(next).toEqual({
+      kind: 'speaking-opener',
+      text: 'Welcome back.',
+      variantKey: 'first-ever',
+    })
+  })
+
+  // ---- speaking-opener ----
+
+  it('speaking-opener + OPENER_PLAYED → listening', () => {
     const s: State = {
       kind: 'speaking-opener',
       text: 'Welcome back.',
       variantKey: 'first-ever',
     }
-    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual(s)
+    expect(reducer(s, { type: 'OPENER_PLAYED' })).toEqual({
+      kind: 'listening',
+      partial: '',
+    })
   })
 
-  it('speaking-question + BAIL_TO_TAPS → state unchanged (pre-flight no-op)', () => {
+  it('speaking-opener + OPENER_FAILED → listening (silent fallback)', () => {
+    const s: State = {
+      kind: 'speaking-opener',
+      text: 'Welcome back.',
+      variantKey: 'first-ever',
+    }
+    expect(reducer(s, { type: 'OPENER_FAILED' })).toEqual({
+      kind: 'listening',
+      partial: '',
+    })
+  })
+
+  it('speaking-opener + BAIL_TO_TAPS → empty stage-2', () => {
+    const s: State = {
+      kind: 'speaking-opener',
+      text: 'Welcome back.',
+      variantKey: 'first-ever',
+    }
+    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual({
+      kind: 'stage-2',
+      transcript: { text: '', durationMs: 0 },
+      metrics: {},
+      missing: ALL_MISSING,
+      declined: [],
+    })
+  })
+
+  // ---- listening (freeform) bail-out ----
+
+  it('listening + BAIL_TO_TAPS → empty stage-2', () => {
+    const next = reducer(
+      { kind: 'listening', partial: 'I had pain' },
+      { type: 'BAIL_TO_TAPS' },
+    )
+    expect(next).toEqual({
+      kind: 'stage-2',
+      transcript: { text: '', durationMs: 0 },
+      metrics: {},
+      missing: ALL_MISSING,
+      declined: [],
+    })
+  })
+
+  // ---- extracting + ASK_QUESTION (entry into per-metric loop) ----
+
+  it('extracting + ASK_QUESTION (with seed) → speaking-question', () => {
+    const next = reducer(
+      { kind: 'extracting', transcript: baseTranscript },
+      {
+        type: 'ASK_QUESTION',
+        metric: 'mood',
+        text: 'How was your mood today?',
+        seed: {
+          metrics: { pain: 4 },
+          missing: ['mood', 'adherenceTaken'],
+          declined: [],
+        },
+      },
+    )
+    expect(next).toEqual({
+      kind: 'speaking-question',
+      metric: 'mood',
+      text: 'How was your mood today?',
+      metrics: { pain: 4 },
+      missing: ['mood', 'adherenceTaken'],
+      declined: [],
+      transcript: baseTranscript,
+    })
+  })
+
+  it('extracting + BAIL_TO_TAPS → empty stage-2 (carries the freeform transcript)', () => {
+    const next = reducer(
+      { kind: 'extracting', transcript: baseTranscript },
+      { type: 'BAIL_TO_TAPS' },
+    )
+    expect(next).toEqual({
+      kind: 'stage-2',
+      transcript: baseTranscript,
+      metrics: {},
+      missing: ALL_MISSING,
+      declined: [],
+    })
+  })
+
+  // ---- speaking-question ----
+
+  it('speaking-question + QUESTION_PLAYED → listening-answer (carries payload)', () => {
     const s: State = {
       kind: 'speaking-question',
       metric: 'pain',
-      text: 'How is your pain today?',
+      text: 'How is your pain?',
       metrics: {},
       missing: ['pain', 'mood'],
       declined: [],
       transcript: baseTranscript,
     }
-    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual(s)
+    expect(reducer(s, { type: 'QUESTION_PLAYED' })).toEqual({
+      kind: 'listening-answer',
+      metric: 'pain',
+      partial: '',
+      metrics: {},
+      missing: ['pain', 'mood'],
+      declined: [],
+      transcript: baseTranscript,
+    })
   })
 
-  it('listening-answer + BAIL_TO_TAPS → state unchanged (pre-flight no-op)', () => {
+  it('speaking-question + BAIL_TO_TAPS → stage-2 carrying loop payload', () => {
+    const s: State = {
+      kind: 'speaking-question',
+      metric: 'pain',
+      text: 'How is your pain?',
+      metrics: { mood: 'okay' },
+      missing: ['pain', 'adherenceTaken'],
+      declined: ['flare'],
+      transcript: baseTranscript,
+    }
+    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual({
+      kind: 'stage-2',
+      transcript: baseTranscript,
+      metrics: { mood: 'okay' },
+      missing: ['pain', 'adherenceTaken'],
+      declined: ['flare'],
+    })
+  })
+
+  // ---- listening-answer ----
+
+  it('listening-answer + PARTIAL → updates partial in place', () => {
+    const s: State = {
+      kind: 'listening-answer',
+      metric: 'pain',
+      partial: '',
+      metrics: {},
+      missing: ['pain'],
+      declined: [],
+      transcript: baseTranscript,
+    }
+    const next = reducer(s, { type: 'PARTIAL', text: 'about a four' })
+    expect(next).toEqual({ ...s, partial: 'about a four' })
+  })
+
+  it('listening-answer + PROVIDER_STOPPED → extracting-answer', () => {
     const s: State = {
       kind: 'listening-answer',
       metric: 'pain',
@@ -537,23 +689,223 @@ describe('reducer: voice C1 dialog states (pre-flight no-ops)', () => {
       declined: [],
       transcript: baseTranscript,
     }
-    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual(s)
-  })
-
-  it('extracting-answer + BAIL_TO_TAPS → state unchanged (pre-flight no-op)', () => {
-    const s: State = {
+    const answerTranscript: Transcript = {
+      text: 'about a four',
+      durationMs: 2000,
+    }
+    expect(
+      reducer(s, { type: 'PROVIDER_STOPPED', transcript: answerTranscript }),
+    ).toEqual({
       kind: 'extracting-answer',
       metric: 'pain',
-      answerTranscript: { text: 'about a four', durationMs: 2000 },
+      answerTranscript,
       metrics: {},
       missing: ['pain'],
       declined: [],
       transcript: baseTranscript,
-    }
-    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual(s)
+    })
   })
 
-  it('speaking-closer + BAIL_TO_TAPS → state unchanged (pre-flight no-op)', () => {
+  it('listening-answer + BAIL_TO_TAPS → stage-2 carrying loop payload', () => {
+    const s: State = {
+      kind: 'listening-answer',
+      metric: 'pain',
+      partial: 'about a four',
+      metrics: { mood: 'okay' },
+      missing: ['pain'],
+      declined: [],
+      transcript: baseTranscript,
+    }
+    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual({
+      kind: 'stage-2',
+      transcript: baseTranscript,
+      metrics: { mood: 'okay' },
+      missing: ['pain'],
+      declined: [],
+    })
+  })
+
+  // ---- extracting-answer ANSWER_EXTRACTED outcomes ----
+
+  it('extracting-answer + ANSWER_EXTRACTED with metric → updates state, stays in extracting-answer when missing remains', () => {
+    const s: State = {
+      kind: 'extracting-answer',
+      metric: 'pain',
+      answerTranscript: { text: 'about a four', durationMs: 2000 },
+      metrics: { mood: 'okay' },
+      missing: ['pain', 'adherenceTaken'],
+      declined: [],
+      transcript: baseTranscript,
+    }
+    const next = reducer(s, {
+      type: 'ANSWER_EXTRACTED',
+      metrics: { pain: 4 },
+      declined: false,
+    })
+    expect(next).toEqual({
+      ...s,
+      metrics: { mood: 'okay', pain: 4 },
+      missing: ['adherenceTaken'],
+      declined: [],
+    })
+  })
+
+  it('extracting-answer + ANSWER_EXTRACTED declined → marks declined, drops from missing', () => {
+    const s: State = {
+      kind: 'extracting-answer',
+      metric: 'pain',
+      answerTranscript: { text: "I'd rather not say", durationMs: 2000 },
+      metrics: {},
+      missing: ['pain', 'mood'],
+      declined: [],
+      transcript: baseTranscript,
+    }
+    const next = reducer(s, {
+      type: 'ANSWER_EXTRACTED',
+      metrics: {},
+      declined: true,
+    })
+    expect(next).toEqual({
+      ...s,
+      metrics: { pain: null },
+      missing: ['mood'],
+      declined: ['pain'],
+    })
+  })
+
+  it('extracting-answer + ANSWER_EXTRACTED that empties missing → confirming(stage=hybrid)', () => {
+    const s: State = {
+      kind: 'extracting-answer',
+      metric: 'energy',
+      answerTranscript: { text: 'about a six', durationMs: 1500 },
+      metrics: {
+        pain: 4,
+        mood: 'okay',
+        adherenceTaken: true,
+        flare: 'no',
+      },
+      missing: ['energy'],
+      declined: [],
+      transcript: baseTranscript,
+    }
+    const next = reducer(s, {
+      type: 'ANSWER_EXTRACTED',
+      metrics: { energy: 6 },
+      declined: false,
+    })
+    expect(next).toEqual({
+      kind: 'confirming',
+      transcript: baseTranscript,
+      metrics: {
+        pain: 4,
+        mood: 'okay',
+        adherenceTaken: true,
+        flare: 'no',
+        energy: 6,
+      },
+      declined: [],
+      stage: 'hybrid',
+    })
+  })
+
+  it('extracting-answer + ANSWER_EXTRACTED with no extract and no decline → state unchanged (re-ask path)', () => {
+    const s: State = {
+      kind: 'extracting-answer',
+      metric: 'pain',
+      answerTranscript: { text: 'umm', durationMs: 800 },
+      metrics: {},
+      missing: ['pain', 'mood'],
+      declined: [],
+      transcript: baseTranscript,
+    }
+    expect(
+      reducer(s, { type: 'ANSWER_EXTRACTED', metrics: {}, declined: false }),
+    ).toEqual(s)
+  })
+
+  it('extracting-answer + ASK_QUESTION (no seed) → speaking-question with carried payload', () => {
+    const s: State = {
+      kind: 'extracting-answer',
+      metric: 'pain',
+      answerTranscript: { text: 'about a four', durationMs: 2000 },
+      metrics: { pain: 4 },
+      missing: ['mood'],
+      declined: [],
+      transcript: baseTranscript,
+    }
+    const next = reducer(s, {
+      type: 'ASK_QUESTION',
+      metric: 'mood',
+      text: 'And your mood?',
+    })
+    expect(next).toEqual({
+      kind: 'speaking-question',
+      metric: 'mood',
+      text: 'And your mood?',
+      metrics: { pain: 4 },
+      missing: ['mood'],
+      declined: [],
+      transcript: baseTranscript,
+    })
+  })
+
+  it('extracting-answer + BAIL_TO_TAPS → stage-2 carrying loop payload', () => {
+    const s: State = {
+      kind: 'extracting-answer',
+      metric: 'pain',
+      answerTranscript: { text: 'about a four', durationMs: 2000 },
+      metrics: { mood: 'okay' },
+      missing: ['pain'],
+      declined: ['flare'],
+      transcript: baseTranscript,
+    }
+    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual({
+      kind: 'stage-2',
+      transcript: baseTranscript,
+      metrics: { mood: 'okay' },
+      missing: ['pain'],
+      declined: ['flare'],
+    })
+  })
+
+  // ---- confirming with closer payload ----
+
+  it('confirming + CONFIRM with closer payload → speaking-closer (carries metrics/declined/stage)', () => {
+    const next = reducer(
+      {
+        kind: 'confirming',
+        transcript: baseTranscript,
+        metrics: {
+          pain: 4,
+          mood: 'okay',
+          adherenceTaken: true,
+          flare: 'no',
+          energy: 6,
+        },
+        declined: ['flare'],
+        stage: 'hybrid',
+      },
+      { type: 'CONFIRM', closer: { text: 'See you tomorrow.' } },
+    )
+    expect(next).toEqual({
+      kind: 'speaking-closer',
+      text: 'See you tomorrow.',
+      metrics: {
+        pain: 4,
+        mood: 'okay',
+        adherenceTaken: true,
+        flare: 'no',
+        energy: 6,
+      },
+      declined: ['flare'],
+      stage: 'hybrid',
+      transcript: baseTranscript,
+    })
+  })
+
+  // ---- speaking-closer ----
+
+  it('speaking-closer + CLOSER_PLAYED → saving', () => {
     const s: State = {
       kind: 'speaking-closer',
       text: 'See you tomorrow.',
@@ -568,13 +920,42 @@ describe('reducer: voice C1 dialog states (pre-flight no-ops)', () => {
       stage: 'open',
       transcript: baseTranscript,
     }
-    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual(s)
+    expect(reducer(s, { type: 'CLOSER_PLAYED' })).toEqual({ kind: 'saving' })
+  })
+
+  it('speaking-closer + BAIL_TO_TAPS → confirming (cancel TTS, edit again)', () => {
+    const s: State = {
+      kind: 'speaking-closer',
+      text: 'See you tomorrow.',
+      metrics: {
+        pain: 4,
+        mood: 'okay',
+        adherenceTaken: true,
+        flare: 'no',
+        energy: 6,
+      },
+      declined: ['flare'],
+      stage: 'hybrid',
+      transcript: baseTranscript,
+    }
+    expect(reducer(s, { type: 'BAIL_TO_TAPS' })).toEqual({
+      kind: 'confirming',
+      transcript: baseTranscript,
+      metrics: {
+        pain: 4,
+        mood: 'okay',
+        adherenceTaken: true,
+        flare: 'no',
+        energy: 6,
+      },
+      declined: ['flare'],
+      stage: 'hybrid',
+    })
   })
 
   it('union compiles: every new event type is assignable to Event', () => {
-    // Type-level assertion — if any new event type is missing from the
-    // Event union, this file fails tsc. The runtime assertion is just
-    // a sentinel.
+    // Type-level sentinel — if any new event type is missing from the
+    // Event union, this file fails tsc.
     const events: Array<Parameters<typeof reducer>[1]> = [
       { type: 'OPENER_PLAYED' },
       { type: 'OPENER_FAILED' },
