@@ -148,7 +148,12 @@ export async function POST(req: Request): Promise<Response> {
   // Hand the bytes back. We don't stream chunk-by-chunk because the spike
   // confirmed REST returns a single full WAV buffer — there's nothing to
   // chunk. Fixed `Content-Length` lets the browser progress meter work.
-  return new Response(result.audio, {
+  //
+  // The `as BodyInit` cast works around a TS 5.9 lib-typing regression
+  // where `Uint8Array<ArrayBufferLike>` isn't assignable to BodyInit even
+  // though it's a valid value at runtime. Same workaround pattern Next
+  // 16's own examples use.
+  return new Response(result.audio as unknown as BodyInit, {
     status: 200,
     headers: {
       "Content-Type": result.contentType,
