@@ -699,3 +699,35 @@ State-machine unit tests grew by 19 cases (47/47 total) covering: scripted/hybri
 - Stale Vercel aliases (`saumya-*`, `sakhi-*`, `autoimmune-*`) still attached — proxy 308s handle them, leave for cleanup later.
 
 **Next.** Tag `onboarding-shell/pre-flight-done`, push branch + tag. Then Wave 1 dispatch — three parallel build subagents (A onboarding screens, B setup + storage, C welcome + home + nav) in a single multi-tool-call message, per the cycle plan §Task 1.
+
+---
+
+## 2026-04-26 — Session 15: Voice C1 Wave 1 dispatched + integrated
+
+**Branch.** `feat/voice-sarvam` advanced from `a451ab8` (`voice-c1/pre-flight-done`) to `5026342` (`voice-c1/wave-1-integrated`). Branch base unchanged. Local only — no push, no Vercel/Convex commands.
+
+**Setup.** Four git worktrees at `/Volumes/Coding Projects + Docker/voice-c1-build-{a,b,c,d}/`, each on `feat/voice-c1/build-{a,b,c,d}` rooted at the pre-flight tag. `node_modules` symlinked from main checkout. Four parallel build subagents dispatched in a single multi-tool-call message per `docs/features/voice-cycle-1-plan.md` §Task 1.
+
+**What shipped (per chunk).**
+- **V.A — STT route + SSE bridge** (4 commits, 14 tests). `app/api/transcribe/route.ts` POST proxy with SSE partial + final events, `runtime = 'nodejs'`. `lib/voice/sarvam-stt-server.ts` wraps `sarvamai`'s `speechToTextStreaming.connect` with `{ model: 'saaras:v3', input_audio_codec: 'wav', sample_rate: '16000', high_vad_sensitivity: 'true' }` per spike outcome. Cost guards: 415 on bad content-type, 5 MB byte cap (`voice.session_too_large`), 90 s duration cap (`voice.session_too_long`), `X-Voice-{Bytes,Duration-Ms}` headers. 503 if `SARVAM_API_KEY` missing. `request.signal` abort closes upstream Sarvam socket cleanly.
+- **V.B — STT adapter + recorder** (2 commits, 40 tests). `lib/voice/sarvam-adapter.ts` implements `VoiceProvider` over `/api/transcribe` with chunked `fetch` upload (`duplex: 'half'`) + SSE consumer. `lib/voice/sarvam-recorder.ts` is the WebAudio resampler — `MediaStream` → `AudioContext` → 16kHz mono PCM s16le → 250ms WAV chunks (PCM-only path mandatory per spike, WebM/Opus rejected by Sarvam). Constructor `language_code` mandatory, flows through `?lang=` query param. Public `abort()` method beyond the `VoiceProvider` interface for bail-to-taps wiring.
+- **V.C — TTS route + adapter** (2 commits, 23 tests). `app/api/speak/route.ts` POST `{ text, language_code, voice? }` calls `client.textToSpeech.convert` REST endpoint, base64-decodes `audios[0]`, returns `audio/wav`. Defaults `speaker: 'anushka'`, `model: 'bulbul:v2'` (best `en-IN` female on the bulbul:v2 line per spike, ~1.1 s first byte). `lib/voice/sarvam-tts-adapter.ts` implements `TtsProvider` with blob-URL playback (no `MediaSource`, no WebAudio decode — wav plays direct). Idempotent re-cancel rejects pending speak with `{ kind: 'aborted' }`.
+- **V.D — follow-up engine + variants + decline detector** (3 commits, 45 tests). `lib/saha/follow-up-engine.ts` exports `selectFollowUpQuestion(metric, attempt, continuityState)` and `selectDeclineAcknowledgement(metric)`. `lib/saha/follow-up-variants.ts` carries the 22-string locked catalog (5 metrics × 2 attempts × 1 continuity-tone variant on `flare`, plus 5 decline acks). `lib/saha/decline-detector.ts` runs `/\b(?:skip|next|don'?t (?:want|know)|not sure|move on|pass|none|nothing)\b/i` — conservative.
+
+**Integration.** Sequential `--no-ff` merges into `feat/voice-sarvam` in order V.A → V.B → V.C → V.D. Zero file-ownership overlap (verified with `git log --name-only voice-c1/pre-flight-done..feat/voice-c1/build-*`), zero conflicts. Tag `voice-c1/wave-1-integrated` placed at `5026342`.
+
+**Verification.**
+- `npm run test:run` → **706/706 passing** (was 588 at pre-flight; +118 from Wave 1: 14 V.A + 40 V.B + 23 V.C + 45 V.D, minus a small overlap in renamed setup files).
+- `npx tsc --noEmit` clean.
+- `npm run build` clean — new ƒ routes `/api/speak` and `/api/transcribe` surfaced. All 17 routes resolve.
+
+**Surprises / lessons (Wave 1).**
+- **jsdom has no `ReadableStream`.** V.A and V.B both polyfilled it from `node:stream/web` in their test files. Worth noting for any future test that posts a streaming body — production code is fine because Next.js exposes `ReadableStream` natively in its runtimes.
+- **Sarvam streaming STT does NOT accept WebM/Opus** at the protocol level (`SpeechToTextStreamingInputAudioCodec` enumerates only `wav | pcm_s16le | pcm_l16 | pcm_raw`). Confirmed during the pre-flight spike, baked into V.B's WebAudio resampler. `MediaRecorder` raw passthrough was never an option.
+- **`SpeechToTextStreamingSocket.transcribe` accepts `audio: string` (base64), not `Buffer`.** V.A wraps `Buffer.from(...).toString('base64')` per chunk.
+- **No `is_final` flag on STT messages** in the SDK version we're on (`sarvamai` 1.1.7). V.A treats every transcript as the running text and promotes the LAST one to "final" on flush/close.
+- **Pre-existing Next 16 PageProps issue** on `app/check-in/page.tsx` (`CheckinPageProps = {}` test-seam default) and `app/check-in/saved/page.tsx` (`SavedView` named export). Surfaces as an error in `next build` when run from a *worktree* with symlinked node_modules — does NOT reproduce in the main checkout. Wave 2 rewires `page.tsx` and removes the `providerOverride` test seam, which fixes the first organically. The `SavedView` named-export issue is a separate small cleanup for Wave 2.
+- **Build-A's enqueue-then-close ordering on SSE error frames is load-bearing.** All cap-hit / abort paths enqueue the error frame *before* `handle.close()` because the close callback closes the controller synchronously. V.B's adapter relies on receiving these frames; documented in code comments at each occurrence.
+- **Public `abort()` on `SarvamAdapter`** is intentionally beyond the `VoiceProvider` interface — Wave 2's bail-to-taps wiring needs to cancel without going through the `stop()`-then-await dance. If the page-level orchestrator prefers a different surface, easy to rename.
+
+**Next.** Wave 2 (orchestrator only — no parallel chunks): flip the two placeholders in `lib/voice/provider.ts`, trash the `lib/voice/tts-adapter.ts` re-export shim, implement state-machine transitions for the 7 new events, build `<SwitchToTapsButton>`, rewire `app/check-in/page.tsx` for the multi-turn loop + closer TTS + same-day-reentry quick path. Local smoke against a dev `SARVAM_API_KEY`. Tag `voice-c1/wave-2-integrated`. Still no push / no Vercel / no Convex until Rewant promotes.
