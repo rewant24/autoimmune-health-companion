@@ -1,16 +1,21 @@
 /**
- * Locked variant catalog for Saha's per-metric follow-up questions
- * (Voice C1, Build-D).
+ * Locked variant catalog for Saha's per-metric follow-up questions and
+ * decline-acknowledgement copy (Voice C1, Build-D).
  *
  * Companion to `OPENER_VARIANTS` / `CLOSER_VARIANTS` — same shape: a
  * verbatim record consumed by the rules engine in `follow-up-engine.ts`.
  * Reviewers verify exact match against the catalog at
  * `docs/features/voice-cycle-1-plan.md` line 462.
  *
+ * Coverage: 5 metrics × 2 attempts × ≤2 continuity tones + 5 decline
+ * acknowledgements = 22 strings total.
+ *
  * Continuity-tone variant: only `flare` has one (used when
  * `continuityState.flareOngoingDays > 0`). All other metrics use the
  * default attempt-1 line regardless of continuity.
  */
+
+import type { Metric } from "@/lib/checkin/types";
 
 /** Stable key for the variant the engine returned. */
 export type FollowUpVariantKey =
@@ -55,3 +60,28 @@ export const FOLLOW_UP_VARIANTS: Record<FollowUpVariantKey, string> = {
   "flare.attempt2": "Sorry — flare today: yes, no, or ongoing?",
   "energy.attempt2": "Sorry — energy today, 1 to 10?",
 };
+
+/** Stable key for the per-metric decline acknowledgement. */
+export type DeclineAckKey =
+  | "pain.decline"
+  | "mood.decline"
+  | "adherenceTaken.decline"
+  | "flare.decline"
+  | "energy.decline";
+
+/**
+ * Decline-acknowledgement copy keyed by `DeclineAckKey`. Played as a short
+ * TTS line confirming a metric was skipped before the engine moves on.
+ */
+export const DECLINE_ACK_VARIANTS: Record<DeclineAckKey, string> = {
+  "pain.decline": "OK, skipping pain.",
+  "mood.decline": "OK, skipping mood.",
+  "adherenceTaken.decline": "OK, skipping medication.",
+  "flare.decline": "OK, skipping flare.",
+  "energy.decline": "OK, skipping energy.",
+};
+
+/** Resolve a metric to its decline-ack key. Pure mapping. */
+export function declineAckKeyForMetric(metric: Metric): DeclineAckKey {
+  return `${metric}.decline` as DeclineAckKey;
+}

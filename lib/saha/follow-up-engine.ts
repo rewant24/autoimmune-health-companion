@@ -16,12 +16,18 @@
 
 import type { ContinuityState, Metric } from "@/lib/checkin/types";
 import {
+  DECLINE_ACK_VARIANTS,
   FOLLOW_UP_VARIANTS,
   type FollowUpVariantKey,
+  declineAckKeyForMetric,
 } from "@/lib/saha/follow-up-variants";
 
 export interface FollowUpQuestionSelection {
   variantKey: FollowUpVariantKey;
+  text: string;
+}
+
+export interface DeclineAckSelection {
   text: string;
 }
 
@@ -55,4 +61,15 @@ function pickVariantKey(
     return "flare.attempt1.flareOngoing";
   }
   return `${metric}.attempt1.default` as FollowUpVariantKey;
+}
+
+/**
+ * Resolve the 1-second TTS line played when the user declines a metric.
+ * One variant per metric — no continuity influence.
+ */
+export function selectDeclineAcknowledgement(
+  metric: Metric,
+): DeclineAckSelection {
+  const key = declineAckKeyForMetric(metric);
+  return { text: DECLINE_ACK_VARIANTS[key] };
 }

@@ -10,8 +10,14 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { selectFollowUpQuestion } from "@/lib/saha/follow-up-engine";
-import { FOLLOW_UP_VARIANTS } from "@/lib/saha/follow-up-variants";
+import {
+  selectDeclineAcknowledgement,
+  selectFollowUpQuestion,
+} from "@/lib/saha/follow-up-engine";
+import {
+  DECLINE_ACK_VARIANTS,
+  FOLLOW_UP_VARIANTS,
+} from "@/lib/saha/follow-up-variants";
 import type { ContinuityState, Metric } from "@/lib/checkin/types";
 
 const baseState = (
@@ -144,14 +150,38 @@ describe("selectFollowUpQuestion — attempt 2 re-ask per metric", () => {
   });
 });
 
-describe("Locked catalog integrity (follow-up questions)", () => {
+describe("selectDeclineAcknowledgement — one variant per metric", () => {
+  const cases: Array<[Metric, string]> = [
+    ["pain", "OK, skipping pain."],
+    ["mood", "OK, skipping mood."],
+    ["adherenceTaken", "OK, skipping medication."],
+    ["flare", "OK, skipping flare."],
+    ["energy", "OK, skipping energy."],
+  ];
+
+  it.each(cases)("%s decline ack copy", (metric, expectedText) => {
+    expect(selectDeclineAcknowledgement(metric).text).toBe(expectedText);
+  });
+});
+
+describe("Locked catalog integrity", () => {
   it("FOLLOW_UP_VARIANTS has exactly 11 entries (5 defaults + 1 continuity tone + 5 re-asks)", () => {
     expect(Object.keys(FOLLOW_UP_VARIANTS).length).toBe(11);
+  });
+
+  it("DECLINE_ACK_VARIANTS has exactly 5 entries", () => {
+    expect(Object.keys(DECLINE_ACK_VARIANTS).length).toBe(5);
   });
 
   it("every follow-up string is non-empty", () => {
     for (const text of Object.values(FOLLOW_UP_VARIANTS)) {
       expect(text.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("every decline ack starts with 'OK, skipping'", () => {
+    for (const text of Object.values(DECLINE_ACK_VARIANTS)) {
+      expect(text.startsWith("OK, skipping")).toBe(true);
     }
   });
 
