@@ -307,4 +307,53 @@ describe('POST /api/transcribe', () => {
     expect(mod.runtime).toBe('nodejs')
     expect(mod.dynamic).toBe('force-dynamic')
   })
+
+  // --------------------------------------------------------------------
+  // Story V.A.2 — SARVAM_API_KEY handling (server-only, no leakage)
+  // --------------------------------------------------------------------
+
+  it('returns 503 voice.provider_unconfigured when SARVAM_API_KEY is missing', async () => {
+    delete process.env.SARVAM_API_KEY
+    const { POST } = await import('@/app/api/transcribe/route')
+    const req = buildStreamingRequest(
+      'http://localhost/api/transcribe',
+      [new Uint8Array([1, 2, 3])],
+    )
+    const res = await POST(req)
+    expect(res.status).toBe(503)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('voice.provider_unconfigured')
+    // Sanity: we never echo whatever value was set into the body.
+    const text = JSON.stringify(body)
+    expect(text).not.toContain('test-key-do-not-leak')
+  })
+
+  it('returns 502 voice.connect_failed when Sarvam connect throws', async () => {
+    fakeState.connectShouldThrow = new Error('upstream unavailable')
+    const { POST } = await import('@/app/api/transcribe/route')
+    const req = buildStreamingRequest(
+      'http://localhost/api/transcribe',
+      [new Uint8Array([1, 2, 3])],
+    )
+    const res = await POST(req)
+    expect(res.status).toBe(502)
+    const body = (await res.json()) as { error: { code: string } }
+    expect(body.error.code).toBe('voice.connect_failed')
+  })
+
+  it('never echoes the SARVAM_API_KEY in any response body or header (negative regression)', async () => {
+    process.env.SARVAM_API_KEY = 'super-secret-key-12345'
+    fakeState.connectShouldThrow = new Error('boom')
+    const { POST } = await import('@/app/api/transcribe/route')
+    const req = buildStreamingRequest(
+      'http://localhost/api/transcribe',
+      [new Uint8Array([1])],
+    )
+    const res = await POST(req)
+    const body = await res.text()
+    expect(body).not.toContain('super-secret-key-12345')
+    for (const [, value] of res.headers.entries()) {
+      expect(value).not.toContain('super-secret-key-12345')
+    }
+  })
 })
