@@ -57,8 +57,8 @@ import { useMutation, useQuery } from 'convex/react'
 import { useRouter } from 'next/navigation'
 
 import { api } from '@/convex/_generated/api'
-import type { VoiceProvider, Transcript } from '@/lib/voice/types'
-import { getVoiceProvider } from '@/lib/voice/provider'
+import type { TtsProvider, VoiceProvider, Transcript } from '@/lib/voice/types'
+import { getTtsProvider, getVoiceProvider } from '@/lib/voice/provider'
 import {
   toOrbState,
   useCheckinMachine,
@@ -72,8 +72,14 @@ import { ConfirmSummary } from '@/components/check-in/ConfirmSummary'
 import { SpokenOpener } from '@/components/check-in/SpokenOpener'
 import { Day1Tutorial } from '@/components/check-in/Day1Tutorial'
 import { MilestoneCelebration } from '@/components/check-in/MilestoneCelebration'
+import { SwitchToTapsButton } from '@/components/check-in/SwitchToTapsButton'
 import { selectOpener } from '@/lib/saha/opener-engine'
 import { selectCloser } from '@/lib/saha/closer-engine'
+import {
+  selectFollowUpQuestion,
+  selectDeclineAcknowledgement,
+} from '@/lib/saha/follow-up-engine'
+import { detectDecline } from '@/lib/saha/decline-detector'
 import {
   extractMetrics,
   ExtractDailyCapError,
@@ -119,6 +125,11 @@ export interface CheckinPageProps {
    * adapter via `getVoiceProvider()`. Production callers omit this.
    */
   providerOverride?: VoiceProvider
+  /**
+   * Test seam — inject a fake TTS provider instead of pulling the real
+   * adapter via `getTtsProvider()`. Production callers omit this.
+   */
+  ttsProviderOverride?: TtsProvider
 }
 
 const TEST_USER_KEY = 'saha.testUser.v1'
@@ -201,11 +212,22 @@ interface ConfirmingSnapshot {
 
 export default function CheckinPage({
   providerOverride,
+  ttsProviderOverride,
 }: CheckinPageProps = {}): React.JSX.Element {
   const provider = useMemo<VoiceProvider>(
     () => providerOverride ?? getVoiceProvider(),
     [providerOverride],
   )
+  const tts = useMemo<TtsProvider>(
+    () => ttsProviderOverride ?? getTtsProvider(),
+    [ttsProviderOverride],
+  )
+  // Snapshot once per mount — both adapters report stable availability
+  // (Web Speech reads `globalThis.speechSynthesis`; Sarvam returns true).
+  // Voice mode = TTS available. When false the page renders the C1
+  // freeform-then-Stage-2 flow without any opener / question / closer
+  // playback so jsdom + browsers without speechSynthesis still work.
+  const ttsAvailable = useMemo(() => tts.isAvailable(), [tts])
 
   const router = useRouter()
   // SSR-safe identity + date.
@@ -318,6 +340,15 @@ export default function CheckinPage({
   // suppressing the eventual `EXTRACTION_DONE` / `EXTRACTION_FAILED`
   // dispatch and stranding the orb on the thinking spinner.
   const extractionRunIdRef = useRef(0)
+  // Token for the in-flight per-metric answer extraction. Same purpose
+  // as `extractionRunIdRef` — keeps a superseded answer turn from
+  // dispatching ANSWER_EXTRACTED into a state that has moved on.
+  const answerExtractionRunIdRef = useRef(0)
+  // Voice C1 re-ask counter — bumped each time an answer turn produces
+  // neither a value nor a decline. After two attempts the page treats
+  // the metric as declined and advances the loop. Keyed per metric so
+  // the counter resets when the next missing metric is asked.
+  const reaskCountRef = useRef<Partial<Record<Metric, number>>>({})
 
   const onSave = async (): Promise<void> => {
     const snapshot = confirmingRef.current
@@ -379,7 +410,33 @@ export default function CheckinPage({
     await createCheckin(toConvexArgs(payload))
   }
 
-  const { state, dispatch } = useCheckinMachine(provider, onSave)
+  // Voice-mode opener selector — gated on `ttsAvailable` so the C1
+  // freeform path keeps working without TTS. The hook calls this when
+  // `start()` resolves; an `undefined` return makes it dispatch a
+  // payload-less PERMISSION_GRANTED, preserving the C1 → listening
+  // transition the existing tests rely on.
+  //
+  // NOTE: same-day re-entry deliberately keeps voice mode active for the
+  // opener turn even though the page short-circuits the multi-turn loop
+  // — the `re-entry-same-day` opener variant carries the right "Hey, you
+  // already saved one — anything to add?" framing.
+  const openerSelectionRef = useRef(openerSelection)
+  useEffect(() => {
+    openerSelectionRef.current = openerSelection
+  }, [openerSelection])
+
+  const getOpenerForGrant = useMemo(
+    () => () => {
+      if (!ttsAvailable) return undefined
+      const sel = openerSelectionRef.current
+      return { text: sel.text, variantKey: sel.key }
+    },
+    [ttsAvailable],
+  )
+
+  const { state, dispatch } = useCheckinMachine(provider, onSave, {
+    getOpener: getOpenerForGrant,
+  })
 
   // 1. Drain save-later queue once on mount. Retries reuse the original
   //    `clientRequestId` so any item the server already saw is a no-op.
@@ -436,6 +493,9 @@ export default function CheckinPage({
     // effect and used to clobber the in-flight call.
     extractionRunIdRef.current += 1
     const runId = extractionRunIdRef.current
+    // Reset per-turn re-ask counter — a fresh extraction starts a new
+    // voice-loop attempt for each metric.
+    reaskCountRef.current = {}
     dispatch({ type: 'EXTRACTION_START' })
     void (async () => {
       try {
@@ -446,6 +506,50 @@ export default function CheckinPage({
         })
         if (runId !== extractionRunIdRef.current) return
         const cov = coverage(metrics)
+        // Same-day re-entry quick path: if today's row already exists
+        // and the freeform extraction yielded nothing new, jump straight
+        // to confirming so the user can edit the prior values without
+        // sitting through the follow-up loop they already completed.
+        const everyMetricEmpty =
+          metrics.pain == null &&
+          metrics.mood == null &&
+          metrics.adherenceTaken == null &&
+          metrics.flare == null &&
+          metrics.energy == null
+        if (existingTodayRow !== null && everyMetricEmpty) {
+          // Pre-fill ConfirmSummary with the prior row's values so the
+          // user sees what they saved earlier and can edit, instead of
+          // an "all skipped" review card.
+          const prior: CheckinMetrics = {
+            pain: existingTodayRow.pain ?? null,
+            mood: existingTodayRow.mood ?? null,
+            adherenceTaken: existingTodayRow.adherenceTaken ?? null,
+            flare: existingTodayRow.flare ?? null,
+            energy: existingTodayRow.energy ?? null,
+          }
+          dispatch({
+            type: 'EXTRACTION_DONE',
+            metrics: prior,
+            missing: [],
+            stage: 'open',
+          })
+          return
+        }
+        // Voice mode + still-missing metrics: dispatch ASK_QUESTION with
+        // seed so the reducer routes extracting → speaking-question
+        // (skips Stage 2 entirely until the user bails).
+        if (ttsAvailable && cov.missing.length > 0) {
+          const next = cov.missing[0]
+          if (next === undefined) return
+          const q = selectFollowUpQuestion(next, 1, continuityState)
+          dispatch({
+            type: 'ASK_QUESTION',
+            metric: next,
+            text: q.text,
+            seed: { metrics, missing: cov.missing, declined: [] },
+          })
+          return
+        }
         const stage: StageEnum =
           cov.missing.length === 0
             ? 'open'
@@ -468,7 +572,192 @@ export default function CheckinPage({
         dispatch({ type: 'EXTRACTION_FAILED' })
       }
     })()
-  }, [state, dispatch, userId, todayIso])
+  }, [
+    state,
+    dispatch,
+    userId,
+    todayIso,
+    ttsAvailable,
+    continuityState,
+    existingTodayRow,
+  ])
+
+  // 3a. Speaking-opener TTS playback. On speaking-opener entry, kick
+  //     `tts.speak(text)` and dispatch OPENER_PLAYED on resolve;
+  //     OPENER_FAILED on reject so the reducer still drops into
+  //     listening (failure degrades silently — opener text is on screen).
+  useEffect(() => {
+    if (state.kind !== 'speaking-opener') return
+    let cancelled = false
+    const text = state.text
+    void tts.speak(text).then(
+      () => {
+        if (!cancelled) dispatch({ type: 'OPENER_PLAYED' })
+      },
+      () => {
+        if (!cancelled) dispatch({ type: 'OPENER_FAILED' })
+      },
+    )
+    return () => {
+      cancelled = true
+      tts.cancel()
+    }
+  }, [state.kind, state.kind === 'speaking-opener' ? state.text : '', tts, dispatch])
+
+  // 3b. Speaking-question TTS playback for each follow-up turn.
+  useEffect(() => {
+    if (state.kind !== 'speaking-question') return
+    let cancelled = false
+    const text = state.text
+    void tts.speak(text).then(
+      () => {
+        if (!cancelled) dispatch({ type: 'QUESTION_PLAYED' })
+      },
+      () => {
+        // TTS failure on a follow-up shouldn't trap the loop — treat as
+        // played so the user can still answer. The question text is also
+        // captioned in the UI so they have it visually either way.
+        if (!cancelled) dispatch({ type: 'QUESTION_PLAYED' })
+      },
+    )
+    return () => {
+      cancelled = true
+      tts.cancel()
+    }
+  }, [state.kind, state.kind === 'speaking-question' ? state.text : '', tts, dispatch])
+
+  // 3c. Speaking-closer TTS — kicks on `confirming → speaking-closer`
+  //     transition (driven by the page passing a closer payload to
+  //     CONFIRM). On resolve dispatches CLOSER_PLAYED, which the reducer
+  //     routes to `saving`.
+  useEffect(() => {
+    if (state.kind !== 'speaking-closer') return
+    let cancelled = false
+    const text = state.text
+    void tts.speak(text).then(
+      () => {
+        if (!cancelled) dispatch({ type: 'CLOSER_PLAYED' })
+      },
+      () => {
+        // Closer TTS failure shouldn't block save — fall through to
+        // saving so the data persists either way.
+        if (!cancelled) dispatch({ type: 'CLOSER_PLAYED' })
+      },
+    )
+    return () => {
+      cancelled = true
+      tts.cancel()
+    }
+  }, [state.kind, state.kind === 'speaking-closer' ? state.text : '', tts, dispatch])
+
+  // 3d. Extracting-answer — extract the per-metric value from the user's
+  //     answer transcript and dispatch ANSWER_EXTRACTED. Decline detector
+  //     piggybacks: if the transcript matches a decline phrase, mark the
+  //     metric as declined regardless of what extractMetrics returned.
+  //     Re-ask: when neither extracted nor declined, bump the per-metric
+  //     counter; first miss → re-ask with attempt-2 copy; second miss →
+  //     give up + treat as declined to keep the loop forward-only.
+  useEffect(() => {
+    if (state.kind !== 'extracting-answer') return
+    if (userId === null || todayIso === null) return
+    answerExtractionRunIdRef.current += 1
+    const runId = answerExtractionRunIdRef.current
+    const metric = state.metric
+    const answerText = state.answerTranscript.text
+    void (async () => {
+      let extracted: Partial<CheckinMetrics> = {}
+      try {
+        extracted = await extractMetrics({
+          transcript: answerText,
+          userId,
+          date: todayIso,
+        })
+      } catch {
+        // Treat extract failure as no value — falls through to re-ask /
+        // decline path below. No state change to error here; the user is
+        // mid-loop and we'd rather degrade gracefully than throw them
+        // out of voice mode.
+      }
+      if (runId !== answerExtractionRunIdRef.current) return
+      const captured = extracted[metric]
+      const isDecline =
+        captured == null && detectDecline(answerText)
+      if (isDecline) {
+        // Acknowledge the decline aloud (best-effort; ignore failures).
+        const ack = selectDeclineAcknowledgement(metric)
+        void tts.speak(ack.text).catch(() => {})
+        dispatch({
+          type: 'ANSWER_EXTRACTED',
+          metrics: {},
+          declined: true,
+        })
+        // After ANSWER_EXTRACTED, the page's answer-loop effect (below)
+        // picks the next missing metric and dispatches ASK_QUESTION.
+        return
+      }
+      if (captured !== undefined) {
+        dispatch({
+          type: 'ANSWER_EXTRACTED',
+          metrics: { [metric]: captured } as Partial<CheckinMetrics>,
+          declined: false,
+        })
+        return
+      }
+      // Re-ask path: bump counter; if we've already re-asked once, give
+      // up and treat as declined so the loop progresses.
+      const prev = reaskCountRef.current[metric] ?? 0
+      reaskCountRef.current[metric] = prev + 1
+      if (prev >= 1) {
+        dispatch({
+          type: 'ANSWER_EXTRACTED',
+          metrics: {},
+          declined: true,
+        })
+        return
+      }
+      // First re-ask: dispatch ASK_QUESTION with attempt-2 copy directly.
+      // The reducer routes extracting-answer → speaking-question.
+      const reask = selectFollowUpQuestion(metric, 2, continuityState)
+      dispatch({
+        type: 'ASK_QUESTION',
+        metric,
+        text: reask.text,
+      })
+    })()
+  }, [
+    state,
+    userId,
+    todayIso,
+    tts,
+    dispatch,
+    continuityState,
+  ])
+
+  // 3e. Answer loop driver — when ANSWER_EXTRACTED has folded a metric
+  //     and the reducer has stayed in extracting-answer with new
+  //     `missing`, pick the next metric and dispatch ASK_QUESTION.
+  useEffect(() => {
+    if (state.kind !== 'extracting-answer') return
+    // After ANSWER_EXTRACTED, the reducer either moves to confirming
+    // (no missing left) or stays in extracting-answer with the next
+    // missing metric to ask. We listen to the carried `missing` and the
+    // current metric — when current metric is no longer first in
+    // missing, advance the loop.
+    const next = state.missing[0]
+    if (next === undefined || next === state.metric) return
+    const q = selectFollowUpQuestion(next, 1, continuityState)
+    dispatch({
+      type: 'ASK_QUESTION',
+      metric: next,
+      text: q.text,
+    })
+  }, [
+    state.kind,
+    state.kind === 'extracting-answer' ? state.metric : null,
+    state.kind === 'extracting-answer' ? state.missing : null,
+    continuityState,
+    dispatch,
+  ])
 
   // 4. On save success: detect milestone first (chunk 2.F). When the
   //    save completes a streak day worth celebrating (or it was the
@@ -525,8 +814,20 @@ export default function CheckinPage({
           onMetricDeclined={(metric) =>
             dispatch({ type: 'METRIC_DECLINED', metric })
           }
-          onSave={() => dispatch({ type: 'CONFIRM' })}
-          onRetry={() => dispatch({ type: 'CONFIRM' })}
+          onSave={() =>
+            dispatch(
+              ttsAvailable
+                ? { type: 'CONFIRM', closer: { text: closerSelection.text } }
+                : { type: 'CONFIRM' },
+            )
+          }
+          onRetry={() =>
+            dispatch(
+              ttsAvailable
+                ? { type: 'CONFIRM', closer: { text: closerSelection.text } }
+                : { type: 'CONFIRM' },
+            )
+          }
           onDiscard={() => dispatch({ type: 'RESET' })}
           onSaveLater={() => {
             const payload = lastPayloadRef.current
@@ -596,14 +897,29 @@ export default function CheckinPage({
     )
   }
 
-  // Render ConfirmSummary for both `confirming` AND `saving` so the
-  // user sees the "Saving…" state. `saved` is handled by the router
-  // push above; this branch is briefly visible during the transition.
+  // Render ConfirmSummary for `confirming`, `saving`, AND `speaking-closer`
+  // (voice-mode closer playback happens on the confirm screen — UI stays
+  // visible while TTS plays). `saved` is handled by the router push above;
+  // this branch is briefly visible during the transition.
   if (
-    (state.kind === 'confirming' || state.kind === 'saving') &&
+    (state.kind === 'confirming' ||
+      state.kind === 'saving' ||
+      state.kind === 'speaking-closer') &&
     confirmingRef.current
   ) {
     const snapshot = confirmingRef.current
+    const onSaveTap = (): void => {
+      // Voice mode: route through speaking-closer for the spoken closer.
+      // Taps mode: payload-less CONFIRM goes straight to saving.
+      if (ttsAvailable) {
+        dispatch({
+          type: 'CONFIRM',
+          closer: { text: closerSelection.text },
+        })
+      } else {
+        dispatch({ type: 'CONFIRM' })
+      }
+    }
     return (
       <ScreenShell>
         <ConfirmSummary
@@ -617,7 +933,7 @@ export default function CheckinPage({
           onMetricDeclined={(metric) =>
             dispatch({ type: 'METRIC_DECLINED', metric })
           }
-          onSave={() => dispatch({ type: 'CONFIRM' })}
+          onSave={onSaveTap}
           onDiscard={() => dispatch({ type: 'RESET' })}
           onSaveLater={() => {
             const payload = lastPayloadRef.current
@@ -633,7 +949,12 @@ export default function CheckinPage({
     )
   }
 
-  // idle / requesting-permission / listening / processing / extracting
+  // idle / requesting-permission / listening / processing / extracting +
+  // voice-mode dialog states (speaking-opener, speaking-question,
+  // listening-answer, extracting-answer). The Switch-to-Taps button is
+  // mounted whenever the user is inside the voice loop so they always
+  // have a forward-only escape into Stage 2.
+  const showBailButton = isVoiceDialogState(state)
   return (
     <ScreenShell>
       {state.kind === 'idle' ? (
@@ -645,6 +966,22 @@ export default function CheckinPage({
           <p className="text-base text-zinc-600 dark:text-zinc-400">
             Tap the orb and tell me in your own words.
           </p>
+        </header>
+      ) : null}
+
+      {state.kind === 'speaking-opener' ? (
+        <header className="flex flex-col gap-3">
+          <h1 className="text-center text-base font-normal text-zinc-800 dark:text-zinc-100">
+            {state.text}
+          </h1>
+        </header>
+      ) : null}
+
+      {state.kind === 'speaking-question' ? (
+        <header className="flex flex-col gap-3">
+          <h2 className="text-center text-base font-normal text-zinc-800 dark:text-zinc-100">
+            {state.text}
+          </h2>
         </header>
       ) : null}
 
@@ -660,15 +997,54 @@ export default function CheckinPage({
       >
         {transientCopyFor(state)}
       </p>
+
+      {showBailButton ? (
+        <SwitchToTapsButton
+          onBail={() => {
+            // Cancel any in-flight TTS so the playback doesn't keep
+            // running over the Stage 2 grid the reducer is about to render.
+            tts.cancel()
+            dispatch({ type: 'BAIL_TO_TAPS' })
+          }}
+        />
+      ) : null}
     </ScreenShell>
+  )
+}
+
+/**
+ * Whether the page is inside the voice-mode dialog loop and should
+ * mount the Switch-to-Taps bail-out affordance. Excludes `listening`
+ * (the C1 freeform turn already has a tap-orb stop affordance) and the
+ * cold extraction states (no voice-loop state to bail out of yet).
+ */
+function isVoiceDialogState(state: State): boolean {
+  return (
+    state.kind === 'speaking-opener' ||
+    state.kind === 'speaking-question' ||
+    state.kind === 'listening-answer' ||
+    state.kind === 'extracting-answer'
   )
 }
 
 /** Short text rendered inside the orb. */
 function orbLabelFor(state: State): string | undefined {
-  if (state.kind === 'listening') return 'Listening'
-  if (state.kind === 'processing' || state.kind === 'extracting') {
+  if (state.kind === 'listening' || state.kind === 'listening-answer') {
+    return 'Listening'
+  }
+  if (
+    state.kind === 'processing' ||
+    state.kind === 'extracting' ||
+    state.kind === 'extracting-answer'
+  ) {
     return 'Thinking...'
+  }
+  if (
+    state.kind === 'speaking-opener' ||
+    state.kind === 'speaking-question' ||
+    state.kind === 'speaking-closer'
+  ) {
+    return 'Saha...'
   }
   return undefined
 }
@@ -678,11 +1054,18 @@ function transientCopyFor(state: State): string {
   switch (state.kind) {
     case 'listening':
       return state.partial || 'I\u2019m listening.'
+    case 'listening-answer':
+      return state.partial || 'I\u2019m listening.'
     case 'processing':
     case 'extracting':
+    case 'extracting-answer':
       return 'Thinking...'
     case 'requesting-permission':
       return 'Asking for the mic...'
+    case 'speaking-opener':
+    case 'speaking-question':
+    case 'speaking-closer':
+      return ''
     case 'saving':
       return 'Saving...'
     default:

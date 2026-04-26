@@ -661,18 +661,44 @@ export interface CheckinMachine {
 }
 
 /**
+ * Optional hook configuration for Voice C1 conversational mode.
+ *
+ * `getOpener` is consulted by the hook when `start()` resolves on the
+ * idle → requesting-permission path. If it returns a payload, the hook
+ * dispatches `PERMISSION_GRANTED` with the opener so the reducer routes
+ * into `speaking-opener`; if it returns `undefined` the hook falls back
+ * to the C1 payload-less form (PERMISSION_GRANTED → listening). Page
+ * implementations gate on `tts.isAvailable()` so the C1 freeform path
+ * keeps working in jsdom + on browsers without speechSynthesis.
+ */
+export interface UseCheckinMachineOptions {
+  getOpener?: () =>
+    | { text: string; variantKey: OpenerVariantKey }
+    | undefined
+}
+
+/**
  * React hook wiring the reducer to a voice provider.
  *
  * - On `TAP_ORB` from `idle` → the reducer moves to `requesting-permission`.
- *   The hook then calls `provider.start()`. Resolution → PERMISSION_GRANTED;
+ *   The hook then calls `provider.start()`. Resolution → PERMISSION_GRANTED
+ *   (with an opener payload from `options.getOpener` when supplied);
  *   rejection shaped like a VoiceError → PERMISSION_DENIED / VOICE_ERROR.
- * - On `TAP_ORB` from `listening` → hook calls `provider.stop()`, then
- *   dispatches `PROVIDER_STOPPED` with the returned transcript.
+ * - On `TAP_ORB` from `listening` or `listening-answer` → hook calls
+ *   `provider.stop()`, then dispatches `PROVIDER_STOPPED` with the
+ *   returned transcript. The reducer routes `listening` → `processing`
+ *   and `listening-answer` → `extracting-answer`.
  * - Provider `onPartial` → dispatches `PARTIAL`.
  * - Provider `onError` → dispatches `VOICE_ERROR`.
  *
  * `onSave` is called when the state enters `saving`. Success →
  * `SAVE_OK`; throw/reject → `SAVE_ERROR`.
+ *
+ * When the reducer enters `listening-answer` after a question, the hook
+ * re-arms the provider with a fresh `start()` so the user can speak the
+ * answer turn. `PERMISSION_GRANTED` from this re-arm is swallowed —
+ * permission has already been granted for this session and the reducer
+ * is already past `requesting-permission`.
  *
  * Cycle 1 note: callers pass a logging no-op for `onSave`. Cycle 2 wires
  * the Convex `createCheckin` mutation here.
@@ -680,11 +706,13 @@ export interface CheckinMachine {
 export function useCheckinMachine(
   provider: VoiceProvider,
   onSave: () => Promise<void>,
+  options?: UseCheckinMachineOptions,
 ): CheckinMachine {
   const [state, dispatch] = useReducer(reducer, initialState)
   const providerRef = useRef(provider)
   const onSaveRef = useRef(onSave)
   const stateRef = useRef(state)
+  const optionsRef = useRef(options)
 
   useEffect(() => {
     providerRef.current = provider
@@ -698,6 +726,10 @@ export function useCheckinMachine(
     stateRef.current = state
   }, [state])
 
+  useEffect(() => {
+    optionsRef.current = options
+  }, [options])
+
   // Wire provider callbacks once per provider instance.
   useEffect(() => {
     const p = providerRef.current
@@ -709,6 +741,25 @@ export function useCheckinMachine(
   // event and present even when this hook isn't wired). Don't duplicate it
   // here or each tap vibrates twice.
 
+  // Re-arm the provider when the reducer enters `listening-answer` for a
+  // follow-up turn. Permission is already granted; we swallow the resolution
+  // since the reducer is already past `requesting-permission` and a stray
+  // PERMISSION_GRANTED would no-op anyway.
+  useEffect(() => {
+    if (state.kind !== 'listening-answer') return
+    let cancelled = false
+    providerRef.current.start().catch((err: unknown) => {
+      if (cancelled) return
+      const ve = normaliseVoiceError(err)
+      dispatch({ type: 'VOICE_ERROR', error: ve })
+    })
+    return () => {
+      cancelled = true
+    }
+    // Re-arm only when the answer turn begins. `state.metric` changes per
+    // question so depending on it correctly fires once per turn.
+  }, [state.kind, state.kind === 'listening-answer' ? state.metric : null])
+
   const wrappedDispatch = (event: Event): void => {
     const current = stateRef.current
 
@@ -716,10 +767,19 @@ export function useCheckinMachine(
     if (event.type === 'TAP_ORB') {
       if (current.kind === 'idle') {
         dispatch({ type: 'TAP_ORB' })
-        // Kick off provider.start; resolve → PERMISSION_GRANTED.
+        // Kick off provider.start; resolve → PERMISSION_GRANTED (with the
+        // optional opener payload so the reducer can route into
+        // speaking-opener for the conversational dialog).
         providerRef.current
           .start()
-          .then(() => dispatch({ type: 'PERMISSION_GRANTED' }))
+          .then(() => {
+            const opener = optionsRef.current?.getOpener?.()
+            if (opener) {
+              dispatch({ type: 'PERMISSION_GRANTED', opener })
+            } else {
+              dispatch({ type: 'PERMISSION_GRANTED' })
+            }
+          })
           .catch((err: unknown) => {
             const ve = normaliseVoiceError(err)
             if (ve.kind === 'permission-denied') {
@@ -730,7 +790,7 @@ export function useCheckinMachine(
           })
         return
       }
-      if (current.kind === 'listening') {
+      if (current.kind === 'listening' || current.kind === 'listening-answer') {
         providerRef.current
           .stop()
           .then((transcript) =>
