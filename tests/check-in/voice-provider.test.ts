@@ -7,6 +7,8 @@ import {
 } from '@/lib/voice/provider'
 import { WebSpeechAdapter } from '@/lib/voice/web-speech-adapter'
 import { OpenAIRealtimeAdapter } from '@/lib/voice/openai-realtime-adapter'
+import { SarvamAdapter } from '@/lib/voice/sarvam-adapter'
+import { SarvamTtsAdapter } from '@/lib/voice/sarvam-tts-adapter'
 
 describe('resolveVoiceProviderName', () => {
   it('defaults to web-speech when env is undefined', () => {
@@ -51,8 +53,10 @@ describe('getVoiceProvider factory', () => {
     expect(a).not.toBe(b)
   })
 
-  it('throws NotImplementedError for sarvam STT (pending V.B)', () => {
-    expect(() => getVoiceProvider('sarvam')).toThrow(/Sarvam STT/)
+  it('returns a SarvamAdapter for sarvam (Wave 2: V.B wired)', () => {
+    const provider = getVoiceProvider('sarvam')
+    expect(provider).toBeInstanceOf(SarvamAdapter)
+    expect(provider.capabilities).toEqual({ partials: true, vad: true })
   })
 })
 
@@ -85,8 +89,10 @@ describe('getTtsProvider factory', () => {
     expect(typeof tts.isAvailable).toBe('function')
   })
 
-  it('throws NotImplementedError for sarvam TTS (pending V.C)', () => {
-    expect(() => getTtsProvider('sarvam')).toThrow(/Sarvam TTS/)
+  it('returns a SarvamTtsAdapter for sarvam (Wave 2: V.C wired)', () => {
+    const tts = getTtsProvider('sarvam')
+    expect(tts).toBeInstanceOf(SarvamTtsAdapter)
+    expect(tts.isAvailable()).toBe(true)
   })
 
   it('returns fresh instances on each call (no singleton)', () => {

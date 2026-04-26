@@ -7,13 +7,24 @@
  * implementations eagerly if we later need per-target tree-shaking. For
  * cycle 1 the adapters are small enough that direct imports are fine.
  *
- * Sarvam adapters land in V.B (STT) and V.C (TTS); the resolver branches
- * for `'sarvam'` are NotImplementedError placeholders during pre-flight
- * so tests can assert the resolver shape before the adapters exist.
+ * Wave 2 (voice C1) wires the real `SarvamAdapter` (STT, V.B) and
+ * `SarvamTtsAdapter` (TTS, V.C) into both `'sarvam'` branches. Both
+ * default to `'en-IN'` for cycle 1; multilingual config will route
+ * through here when F03+ adds language settings.
+ *
+ * Browser-side env note: `process.env.VOICE_PROVIDER` and
+ * `VOICE_TTS_PROVIDER` are NOT inlined into the client bundle (Next.js
+ * only inlines `NEXT_PUBLIC_*`), so the resolver effectively reads them
+ * server-side only. For client-side selection we also accept the
+ * `NEXT_PUBLIC_*` variants so dev / preview can toggle providers
+ * without code edits. `SARVAM_API_KEY` MUST stay non-public — the
+ * routes (`/api/transcribe`, `/api/speak`) read it server-side.
  */
 
 import { WebSpeechAdapter } from './web-speech-adapter'
 import { OpenAIRealtimeAdapter } from './openai-realtime-adapter'
+import { SarvamAdapter } from './sarvam-adapter'
+import { SarvamTtsAdapter } from './sarvam-tts-adapter'
 import { createTtsAdapter } from './web-speech-tts-adapter'
 import type {
   TtsProvider,
@@ -21,6 +32,14 @@ import type {
   VoiceProvider,
   VoiceProviderName,
 } from './types'
+
+/** Default language code for cycle 1 — Indian English. */
+const DEFAULT_LANGUAGE_CODE = 'en-IN'
+
+function readEnv(name: string): string | undefined {
+  if (typeof process === 'undefined') return undefined
+  return process.env[name]
+}
 
 // --- STT ------------------------------------------------------------------
 
@@ -32,9 +51,8 @@ import type {
  * (missing, typo, empty string) falls back to `web-speech`.
  */
 export function resolveVoiceProviderName(
-  raw: string | undefined = typeof process !== 'undefined'
-    ? process.env.VOICE_PROVIDER
-    : undefined,
+  raw: string | undefined = readEnv('NEXT_PUBLIC_VOICE_PROVIDER') ??
+    readEnv('VOICE_PROVIDER'),
 ): VoiceProviderName {
   if (raw === 'openai-realtime') return 'openai-realtime'
   if (raw === 'sarvam') return 'sarvam'
@@ -53,7 +71,7 @@ export function getVoiceProvider(
     case 'openai-realtime':
       return new OpenAIRealtimeAdapter()
     case 'sarvam':
-      throw new Error('NotImplementedError: Sarvam STT — pending V.B')
+      return new SarvamAdapter({ language_code: DEFAULT_LANGUAGE_CODE })
     case 'web-speech':
     default:
       return new WebSpeechAdapter()
@@ -67,25 +85,22 @@ export function getVoiceProvider(
  * `sarvam`. Anything else falls back to `web-speech`.
  */
 export function resolveTtsProviderName(
-  raw: string | undefined = typeof process !== 'undefined'
-    ? process.env.VOICE_TTS_PROVIDER
-    : undefined,
+  raw: string | undefined = readEnv('NEXT_PUBLIC_VOICE_TTS_PROVIDER') ??
+    readEnv('VOICE_TTS_PROVIDER'),
 ): TtsProviderName {
   if (raw === 'sarvam') return 'sarvam'
   return 'web-speech'
 }
 
 /**
- * TTS factory. Returns a fresh adapter instance per call. The Sarvam
- * branch is a placeholder during pre-flight; V.C replaces it with the
- * real `SarvamTtsAdapter`.
+ * TTS factory. Returns a fresh adapter instance per call.
  */
 export function getTtsProvider(
   name: TtsProviderName = resolveTtsProviderName(),
 ): TtsProvider {
   switch (name) {
     case 'sarvam':
-      throw new Error('NotImplementedError: Sarvam TTS — pending V.C')
+      return new SarvamTtsAdapter({ language_code: DEFAULT_LANGUAGE_CODE })
     case 'web-speech':
     default:
       return createTtsAdapter()
