@@ -1,11 +1,10 @@
 /**
  * Onboarding Shell — copy module.
  *
- * Centralizes every onboarding string. As of the fix-pass, all `TODO(rewant-copy)`
- * placeholders have been resolved by Reviewer-1 (R1) drafts and approved by
- * Rewant during the Onboarding Shell cycle. The constant names retain the
- * `_PLACEHOLDER` suffix only for backwards-compat with callers; the strings
- * themselves are the final, ship-ready copy.
+ * Centralizes every onboarding string. All copy below is the final,
+ * ship-ready set: R1 drafts approved by Rewant during the Onboarding
+ * Shell cycle fix-pass. The constant names retain the `_PLACEHOLDER`
+ * suffix only for backwards-compat with callers — no copy is pending.
  *
  * Plan reference:
  *   docs/features/00-onboarding-shell-cycle-plan.md

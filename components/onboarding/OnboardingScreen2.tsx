@@ -6,7 +6,7 @@
  * Story: Onboarding.US-2.
  *
  * Headline note: the original scoping line ("A digital friend for the
- * day-to-day…") was authored under the prior Saumya/gentle framing. R1
+ * day-to-day…") was authored under the prior "gentle" framing. R1
  * supplied a Saha-voice rewrite during the cycle fix-pass; approved by
  * Rewant. The new line keeps the same job (memory-burden → data) but in
  * the "endurance + together" register.

@@ -8,8 +8,6 @@
  *   - "Welcome, [name]" personalized when name is present.
  *   - Falls back to plain "Welcome" if name missing.
  *   - Reads profile client-side to avoid SSR localStorage access.
- *
- * Copy is placeholder pending Rewant — TODO(rewant-copy) below.
  */
 
 import { useEffect, useState } from 'react'
@@ -30,8 +28,6 @@ export function HomeGreeting(): React.JSX.Element {
   return (
     <header data-testid="home-greeting" className="px-6 pt-10 pb-4">
       <p className="type-label">Today</p>
-      {/* TODO(rewant-copy): home greeting line — Rewant to confirm or replace
-          under the "endurance + together" voice. */}
       <h1
         className="mt-3"
         style={{

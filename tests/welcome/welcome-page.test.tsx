@@ -92,7 +92,7 @@ describe('/welcome page', () => {
     const text = region.textContent ?? ''
     // Must speak in the locked voice.
     expect(text).toMatch(/endure/i)
-    // Must NOT use the prior Saumya "gentle/soft/calm/kind" framing.
+    // Must NOT use the prior "gentle/soft/calm/kind" framing.
     expect(text).not.toMatch(/\bgentle\b/i)
     expect(text).not.toMatch(/\bsoft\b/i)
     expect(text).not.toMatch(/\bcalm\b/i)

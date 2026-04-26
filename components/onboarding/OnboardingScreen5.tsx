@@ -4,9 +4,9 @@
  * Onboarding Screen 5 — Memory + Patterns (Saha first-person, final screen).
  *
  * Story: Onboarding.US-5 — Locked verbatim from scoping § Screen 5.
- * Reviewer note: copy was authored under prior "Saumya / gentle"
- * framing. Reviewer-1 must flag for Rewant to confirm under Saha
- * "endurance + together" voice or supply a rewrite via TODO(rewant-copy).
+ * Brand-voice note: copy was authored under the prior "gentle" framing
+ * but was re-validated under the Saha "endurance + together" voice
+ * during the cycle fix-pass and approved by Rewant as-is.
  *
  * CTA "Start my first check-in" → `/setup/name` (per Q1 lock: skip Setup A).
  *
