@@ -356,4 +356,131 @@ describe('POST /api/transcribe', () => {
       expect(value).not.toContain('super-secret-key-12345')
     }
   })
+
+  // --------------------------------------------------------------------
+  // Story V.A.3 — cost + abuse guards (Content-Type, byte cap, duration
+  // cap, X-Voice-* response headers)
+  // --------------------------------------------------------------------
+
+  it('returns 415 when Content-Type is missing or not an accepted audio type', async () => {
+    const { POST } = await import('@/app/api/transcribe/route')
+    // Missing Content-Type entirely.
+    const reqA = new Request('http://localhost/api/transcribe', {
+      method: 'POST',
+      body: 'x',
+    })
+    const resA = await POST(reqA)
+    expect(resA.status).toBe(415)
+    const bodyA = (await resA.json()) as { error: { code: string } }
+    expect(bodyA.error.code).toBe('voice.bad_content_type')
+
+    // Wrong Content-Type.
+    const reqB = new Request('http://localhost/api/transcribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    })
+    const resB = await POST(reqB)
+    expect(resB.status).toBe(415)
+  })
+
+  it('accepts each of audio/wav, audio/webm, audio/ogg', async () => {
+    const { POST } = await import('@/app/api/transcribe/route')
+    for (const ct of ['audio/wav', 'audio/webm', 'audio/ogg']) {
+      const req = buildStreamingRequest(
+        'http://localhost/api/transcribe',
+        [new Uint8Array([1, 2, 3])],
+        { contentType: ct },
+      )
+      const res = await POST(req)
+      expect(res.status).toBe(200)
+      // Drain so the stream finishes and the fake socket cleans up.
+      await readResponseText(res)
+      fakeState.socket = null
+    }
+  })
+
+  it('emits voice.session_too_large and closes when audio bytes exceed 5MB', async () => {
+    const { POST } = await import('@/app/api/transcribe/route')
+    // 6 MB total in 4 chunks of 1.5 MB each.
+    const big = new Uint8Array(1.5 * 1024 * 1024)
+    const chunks = [big, big, big, big]
+    const req = buildStreamingRequest(
+      'http://localhost/api/transcribe',
+      chunks,
+    )
+    const res = await POST(req)
+    const text = await readResponseText(res)
+    const events = parseSseEvents(text)
+    const errors = events.filter(
+      (e) => e.kind === 'voice.session_too_large',
+    )
+    expect(errors).toHaveLength(1)
+    expect(fakeState.socket?.closed).toBe(true)
+  })
+
+  it('emits voice.session_too_long and closes when the 90s cap fires', async () => {
+    vi.useFakeTimers()
+    try {
+      const { POST } = await import('@/app/api/transcribe/route')
+      // Body that never closes — let the cap timer be the trigger.
+      const body = new ReadableStream<Uint8Array>({
+        start() {
+          // Never enqueue, never close.
+        },
+      })
+      const req = new Request('http://localhost/api/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'audio/wav' },
+        body: body as unknown as BodyInit,
+        // @ts-expect-error duplex required by Node fetch for streaming bodies
+        duplex: 'half',
+      })
+      const resPromise = POST(req)
+      // Let the connect microtask resolve before advancing the clock.
+      await vi.advanceTimersByTimeAsync(0)
+      const res = await resPromise
+      // Push past the 90s cap.
+      await vi.advanceTimersByTimeAsync(91_000)
+      // Allow flush / finalize tasks to drain.
+      await vi.advanceTimersByTimeAsync(500)
+      // We can't easily drain the stream under fake timers without
+      // deadlocking on the body promise — assert via the fake socket and
+      // then drain under real timers.
+      expect(fakeState.socket?.closed).toBe(true)
+      vi.useRealTimers()
+      const text = await readResponseText(res)
+      const events = parseSseEvents(text)
+      const tooLong = events.filter(
+        (e) => e.kind === 'voice.session_too_long',
+      )
+      expect(tooLong).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('sets X-Voice-Bytes and X-Voice-Duration-Ms response headers', async () => {
+    const { POST } = await import('@/app/api/transcribe/route')
+    const req = buildStreamingRequest(
+      'http://localhost/api/transcribe',
+      [new Uint8Array([1, 2, 3])],
+    )
+    const res = await POST(req)
+    expect(res.headers.get('X-Voice-Bytes')).toBe('0')
+    expect(res.headers.get('X-Voice-Duration-Ms')).toBe('0')
+    await readResponseText(res)
+    // Non-200 short-circuits also set them.
+    delete process.env.SARVAM_API_KEY
+    vi.resetModules()
+    const { POST: POST2 } = await import('@/app/api/transcribe/route')
+    const req2 = buildStreamingRequest(
+      'http://localhost/api/transcribe',
+      [new Uint8Array([1])],
+    )
+    const res2 = await POST2(req2)
+    expect(res2.status).toBe(503)
+    expect(res2.headers.get('X-Voice-Bytes')).toBe('0')
+    expect(res2.headers.get('X-Voice-Duration-Ms')).toBe('0')
+  })
 })
