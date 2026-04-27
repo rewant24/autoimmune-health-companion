@@ -167,6 +167,13 @@ export class SarvamAdapter implements VoiceProvider {
     reject: (err: VoiceError) => void
   } | null = null
   private finalPromise: Promise<Transcript> | null = null
+  /**
+   * Fix F.2: cache the in-flight stop() invocation so concurrent
+   * callers (silence VAD racing a manual tap, or any future
+   * double-call) share one POST + one resetTurnState. Cleared by
+   * resetTurnState so the next turn re-arms cleanly.
+   */
+  private stopPromise: Promise<Transcript> | null = null
 
   private started = false
   private stopped = false
@@ -397,10 +404,25 @@ export class SarvamAdapter implements VoiceProvider {
     }
     if (this.errored) throw this.errored
     if (this.finalTranscript) return this.finalTranscript
-
-    // Mark stopped so further chunks short-circuit.
+    // Fix F.2 reentrancy: a second concurrent stop() returns the same
+    // promise instead of firing another POST + racing resetTurnState.
+    // Cleared in resetTurnState so the next turn re-arms cleanly. The
+    // assignment must happen synchronously before any await so a
+    // re-entrant caller sees the cached promise — otherwise both
+    // calls progress past the guard and fire duplicate POSTs.
+    if (this.stopPromise) return this.stopPromise
     this.stopped = true
+    this.stopPromise = this.runStopFlow()
+    return this.stopPromise
+  }
 
+  /**
+   * Real stop() body, kept private so `stop()` can synchronously
+   * cache the resulting promise on `this.stopPromise` before any
+   * await. Concurrent stop() calls share this single in-flight
+   * promise (Fix F.2).
+   */
+  private async runStopFlow(): Promise<Transcript> {
     // Stop the recorder first so any partial in-flight buffer flushes
     // its trailing chunk into our buffer (buffered) or stream (streaming).
     try {
@@ -459,16 +481,14 @@ export class SarvamAdapter implements VoiceProvider {
     // so the same adapter instance can be re-armed by start() for the
     // next conversational turn — the hook reuses one instance across
     // listening / listening-answer turns.
-    return this.finalPromise.then(
-      (t) => {
-        this.resetTurnState()
-        return t
-      },
-      (e) => {
-        this.resetTurnState()
-        throw e
-      },
-    )
+    try {
+      const t = await this.finalPromise
+      this.resetTurnState()
+      return t
+    } catch (e) {
+      this.resetTurnState()
+      throw e
+    }
   }
 
   /**
@@ -509,6 +529,7 @@ export class SarvamAdapter implements VoiceProvider {
     this.finalSettled = null
     this.finalPromise = null
     this.silenceFired = false
+    this.stopPromise = null
   }
 
   // --- Internals ----------------------------------------------------------

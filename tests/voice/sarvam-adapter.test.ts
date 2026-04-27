@@ -492,6 +492,68 @@ describe('SarvamAdapter — stop() final + partials (US-V.B.3)', () => {
     await a.start()
     await expect(a.stop()).rejects.toMatchObject({ kind: 'network' })
   })
+
+  it('Fix F.2: concurrent stop() calls share one POST and resolve to the same transcript', async () => {
+    const { stream } = makeFakeStream()
+    const recorder = makeFakeRecorder()
+    const ctrl = makeStreamingResponse()
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(ctrl.response) as unknown as typeof fetch
+
+    const a = new SarvamAdapter({
+      language_code: 'en-IN',
+      getUserMediaImpl: vi.fn().mockResolvedValue(stream),
+      recorderFactory: () => recorder,
+      fetchImpl,
+    })
+    await a.start()
+
+    // Push the SSE final asynchronously so both stop() calls land
+    // before the response resolves.
+    setTimeout(() => {
+      ctrl.push(
+        'event: final\ndata: {"text":"shared","durationMs":1234}\n\n',
+      )
+      ctrl.end()
+    }, 0)
+
+    const a1 = a.stop()
+    const a2 = a.stop()
+    const [t1, t2] = await Promise.all([a1, a2])
+    expect(t1).toEqual(t2)
+    expect(t1.text).toBe('shared')
+    // The reentrancy guard means exactly one POST is fired.
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('Fix F.2: serial stop() after first resolves throws (preserves !started guard)', async () => {
+    const { stream } = makeFakeStream()
+    const recorder = makeFakeRecorder()
+    const ctrl = makeStreamingResponse()
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(ctrl.response) as unknown as typeof fetch
+
+    const a = new SarvamAdapter({
+      language_code: 'en-IN',
+      getUserMediaImpl: vi.fn().mockResolvedValue(stream),
+      recorderFactory: () => recorder,
+      fetchImpl,
+    })
+    await a.start()
+    setTimeout(() => {
+      ctrl.push('event: final\ndata: {"text":"hi","durationMs":1}\n\n')
+      ctrl.end()
+    }, 0)
+    await a.stop()
+
+    // resetTurnState fired; a fresh stop() now hits the !started guard.
+    await expect(a.stop()).rejects.toMatchObject({
+      kind: 'aborted',
+      message: 'SarvamAdapter.stop: stop() called before start()',
+    })
+  })
 })
 
 // --- US-V.B.4 — cleanup ---------------------------------------------------
