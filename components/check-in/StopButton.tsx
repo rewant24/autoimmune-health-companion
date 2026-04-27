@@ -12,8 +12,16 @@
  * but a visible Stop button gives a deterministic explicit affordance
  * for noisy environments where silence detection misfires.
  *
- * Mirrors the SwitchToTapsButton pattern: sticky bottom, 200ms fade-in
- * (skipped under prefers-reduced-motion), generous tap target.
+ * Mirrors the SwitchToTapsButton pattern: floats above the BottomNav,
+ * 200ms fade-in (skipped under prefers-reduced-motion), generous tap
+ * target.
+ *
+ * Positioning: `fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))]`
+ * so the button sits 80px above the safe-area-aware bottom of the
+ * viewport, comfortably clearing the BottomNav (~64px tall + safe
+ * area). `z-50` keeps it above BottomNav's `z-40`. Pre-fix-B versions
+ * used `sticky bottom-4 z-10`, which left the button trapped under the
+ * BottomNav on every voice-c1 smoke.
  */
 
 import { useEffect, useState } from 'react'
@@ -45,7 +53,8 @@ export function StopButton({ onStop }: StopButtonProps): React.JSX.Element {
   return (
     <div
       className={
-        'sticky bottom-4 z-10 mt-6 flex w-full justify-center px-4 ' +
+        'fixed inset-x-0 z-50 flex justify-center px-4 ' +
+        '[bottom:calc(5rem+env(safe-area-inset-bottom))] ' +
         'pointer-events-none'
       }
     >

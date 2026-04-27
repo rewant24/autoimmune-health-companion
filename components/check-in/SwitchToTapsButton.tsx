@@ -8,8 +8,12 @@
  * `docs/features/voice-cycle-1-plan.md`).
  *
  * Behaviour:
- *   - Renders a sticky button at the bottom of the viewport with copy
- *     "Switch to taps".
+ *   - Renders a floating button at the bottom of the viewport with
+ *     copy "Switch to taps". Positioned `fixed inset-x-0
+ *     bottom-[calc(5rem+env(safe-area-inset-bottom))] z-50` so it sits
+ *     above the BottomNav (`z-40`, ~64px tall + safe area). Pre-fix-B
+ *     versions used `sticky bottom-4 z-10`, which left the button
+ *     hidden under the BottomNav on every voice-c1 smoke.
  *   - On click, calls the supplied `onBail` handler. The page is
  *     responsible for cancelling in-flight TTS + STT and dispatching
  *     `{ type: 'BAIL_TO_TAPS' }` to the state machine.
@@ -54,7 +58,8 @@ export function SwitchToTapsButton({
   return (
     <div
       className={
-        'sticky bottom-4 z-10 mt-6 flex w-full justify-center px-4 ' +
+        'fixed inset-x-0 z-50 flex justify-center px-4 ' +
+        '[bottom:calc(5rem+env(safe-area-inset-bottom))] ' +
         'pointer-events-none'
       }
     >

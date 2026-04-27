@@ -122,22 +122,49 @@ alone too. Leaving as-is.
   the current user.
 - No push.
 
-### Fix B — float StopButton + SwitchToTapsButton above BottomNav
+### Fix B — float StopButton + SwitchToTapsButton above BottomNav — DONE
 
-**Status:** pending
+**Status:** committed (see commit hash in log tail)
 
-**Approach:** swap `sticky bottom-4 z-10` → `fixed inset-x-0 bottom-20
-z-50` in both components; add bottom padding to ScreenShell so the orb
-and transcript don't overlap.
+**Approach:** swapped `sticky bottom-4 z-10` → `fixed inset-x-0 z-50`
+with a Tailwind arbitrary `[bottom:calc(5rem+env(safe-area-inset-bottom))]`
+on both buttons. Increased ScreenShell's bottom padding to clear both
+the BottomNav (~64px) and the floating button row (~44px tap target).
 
-**Files expected to change:**
-- `components/check-in/StopButton.tsx`
-- `components/check-in/SwitchToTapsButton.tsx`
-- `components/check-in/ScreenShell.tsx`
-- `tests/check-in/stop-button.test.tsx` (className assertion if any)
-- `tests/check-in/switch-to-taps-button.test.tsx`
+**Files changed (3):**
+- `components/check-in/StopButton.tsx` — wrapper className flipped to
+  `fixed`/`z-50`/safe-area-aware bottom; doc-comment updated.
+- `components/check-in/SwitchToTapsButton.tsx` — identical change
+  (these two affordances mirror each other by design).
+- `components/check-in/ScreenShell.tsx` — bottom padding bumped from
+  `max(1.5rem, env(safe-area-inset-bottom))` to
+  `calc(8rem + env(safe-area-inset-bottom))` so the centred orb stays
+  clear of both floating layers.
 
-**Result:** _(filled in after commit)_
+**Why `bottom:calc(5rem + env(safe-area-inset-bottom))` instead of
+plain `bottom-20`:** BottomNav grows by `env(safe-area-inset-bottom)`
+on iOS notch / home-indicator devices via its internal padding-bottom.
+A plain `bottom-20` (5rem from viewport edge) would let the safe-area
+eat into the gap above the nav. Adding the same env() expression to
+the button keeps the ~16px breathing room consistent across devices.
+
+**Tests touched:** none. The two test files lock in the click contract
++ fade-in + reduced-motion behaviour on the inner `<button>`; neither
+asserts on the outer wrapper's positional className. All 759 tests
+still pass.
+
+**Verification:**
+- `tsc --noEmit`: clean
+- `npm run test:run`: **759/759** (unchanged)
+- `npm run build`: clean
+
+**Notes:**
+- ScreenShell's existing `flex-col items-center justify-center` keeps
+  the orb visually centred. The added bottom padding shifts the centre
+  slightly upward (by half the added padding), which is the desired
+  effect — the orb should never sit beneath the floating buttons.
+- Manual smoke recommended to confirm orb position on real device
+  viewports; vitest can't catch layout overlap.
 
 ### Fix C — autoplay-blocked greeting cue (Option 1)
 
