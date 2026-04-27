@@ -224,8 +224,8 @@ describe('SarvamAdapter — start() (US-V.B.2)', () => {
   it('flows language_code through as ?lang=… on the upload URL', async () => {
     const { stream } = makeFakeStream()
     const recorder = makeFakeRecorder()
-    const { response } = makeStreamingResponse()
-    const fetchImpl = vi.fn().mockResolvedValue(response) as unknown as typeof fetch
+    const ctrl = makeStreamingResponse()
+    const fetchImpl = vi.fn().mockResolvedValue(ctrl.response) as unknown as typeof fetch
 
     const a = new SarvamAdapter({
       language_code: 'hi-IN',
@@ -234,22 +234,24 @@ describe('SarvamAdapter — start() (US-V.B.2)', () => {
       fetchImpl,
     })
     await a.start()
+    // Buffered-upload contract: fetch only fires from stop(), not start().
+    expect(fetchImpl).not.toHaveBeenCalled()
+    setTimeout(() => {
+      ctrl.push('event: final\ndata: {"text":"hi","durationMs":1000}\n\n')
+      ctrl.end()
+    }, 0)
+    await a.stop()
     expect(fetchImpl).toHaveBeenCalledTimes(1)
     const [url, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock
       .calls[0]
     expect(String(url)).toBe('/api/transcribe?lang=hi-IN')
     expect((init as RequestInit).method).toBe('POST')
-    // Body must be a stream (recorder pushes chunks into it). We can't
-    // directly assert ReadableStream identity but we can check the
-    // duplex flag was passed.
-    expect((init as unknown as { duplex?: string }).duplex).toBe('half')
   })
 
   it('URL-encodes language_code in the lang param', async () => {
     const { stream } = makeFakeStream()
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(makeStreamingResponse().response) as unknown as typeof fetch
+    const ctrl = makeStreamingResponse()
+    const fetchImpl = vi.fn().mockResolvedValue(ctrl.response) as unknown as typeof fetch
 
     const a = new SarvamAdapter({
       language_code: 'en-IN, fallback',
@@ -258,20 +260,24 @@ describe('SarvamAdapter — start() (US-V.B.2)', () => {
       fetchImpl,
     })
     await a.start()
+    setTimeout(() => {
+      ctrl.push('event: final\ndata: {"text":"hi","durationMs":1000}\n\n')
+      ctrl.end()
+    }, 0)
+    await a.stop()
     const [url] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0]
     expect(String(url)).toBe('/api/transcribe?lang=en-IN%2C%20fallback')
   })
 
-  it('passes recorder chunks into the upload stream as POSTed bytes', async () => {
+  it('POSTs the concatenated PCM chunks as the request body on stop()', async () => {
     const { stream } = makeFakeStream()
     const recorder = makeFakeRecorder()
 
-    // We need to read from the request body the adapter constructs.
-    // Capture the body at fetch time so we can read it under test.
-    let postedBody: ReadableStream<Uint8Array> | null = null
+    let postedBody: BodyInit | null = null
+    const ctrl = makeStreamingResponse()
     const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
-      postedBody = (init?.body as ReadableStream<Uint8Array>) ?? null
-      return makeStreamingResponse().response
+      postedBody = (init?.body as BodyInit) ?? null
+      return ctrl.response
     }) as unknown as typeof fetch
 
     const a = new SarvamAdapter({
@@ -282,13 +288,25 @@ describe('SarvamAdapter — start() (US-V.B.2)', () => {
     })
     await a.start()
 
+    // Emit two chunks while recording — they should be buffered then
+    // flushed as a single concatenated body when stop() POSTs.
+    const a1 = new Uint8Array([0x12, 0x34, 0x56, 0x78])
+    const a2 = new Uint8Array([0x9a, 0xbc, 0xde, 0xf0])
+    recorder.emit(a1)
+    recorder.emit(a2)
+
+    setTimeout(() => {
+      ctrl.push('event: final\ndata: {"text":"hi","durationMs":1000}\n\n')
+      ctrl.end()
+    }, 0)
+    await a.stop()
+
     expect(postedBody).not.toBeNull()
-    const reader = (postedBody as unknown as ReadableStream<Uint8Array>).getReader()
-    const chunk = new Uint8Array([0x12, 0x34, 0x56, 0x78])
-    recorder.emit(chunk)
-    const first = await reader.read()
-    expect(first.done).toBe(false)
-    expect(first.value).toEqual(chunk)
+    expect(postedBody).toBeInstanceOf(Uint8Array)
+    const body = postedBody as unknown as Uint8Array
+    expect(Array.from(body)).toEqual([
+      0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,
+    ])
   })
 })
 
@@ -313,10 +331,19 @@ describe('SarvamAdapter — stop() final + partials (US-V.B.3)', () => {
     a.onPartial((p) => partials.push(p))
     await a.start()
 
-    ctrl.push('event: partial\ndata: {"text":"my pain"}\n\n')
-    ctrl.push('event: partial\ndata: {"text":"my pain is a 7"}\n\n')
-    // Yield to microtasks so the consumer loop drains.
-    await new Promise<void>((r) => setTimeout(r, 0))
+    // Buffered upload: the SSE response is only opened by stop(), so
+    // partials arrive in the response body that the route streams back
+    // (response streaming works on HTTP/1.1; only request streaming
+    // requires HTTP/2). Push the partials, then a final, then end.
+    setTimeout(() => {
+      ctrl.push('event: partial\ndata: {"text":"my pain"}\n\n')
+      ctrl.push('event: partial\ndata: {"text":"my pain is a 7"}\n\n')
+      ctrl.push(
+        'event: final\ndata: {"text":"my pain is a 7","durationMs":1000}\n\n',
+      )
+      ctrl.end()
+    }, 0)
+    await a.stop()
     expect(partials).toEqual(['my pain', 'my pain is a 7'])
   })
 
@@ -478,7 +505,13 @@ describe('SarvamAdapter — cleanup (US-V.B.4)', () => {
     const errors: VoiceError[] = []
     a.onError((e) => errors.push(e))
     await a.start()
+    // Buffered-upload contract: fetch only fires from stop(). Kick stop
+    // (don't await), then abort once the fetch is in flight.
+    const stopPromise = a.stop().catch(() => undefined)
+    // Yield so the fetch is scheduled before abort runs.
+    await new Promise<void>((r) => setTimeout(r, 0))
     a.abort('test abort')
+    await stopPromise
     expect(captured.signal).not.toBeNull()
     expect(captured.signal?.aborted).toBe(true)
     // Mic released, recorder told to stop.

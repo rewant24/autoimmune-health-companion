@@ -36,9 +36,15 @@ import type {
 /** Default language code for cycle 1 — Indian English. */
 const DEFAULT_LANGUAGE_CODE = 'en-IN'
 
-function readEnv(name: string): string | undefined {
-  if (typeof process === 'undefined') return undefined
-  return process.env[name]
+// IMPORTANT: Next.js / Turbopack only inline `process.env.FOO` when the
+// property is accessed with the literal name as a static identifier.
+// Dynamic access via `process.env[varName]` (or any computed property)
+// is NOT replaced and resolves to `undefined` in the browser bundle,
+// because `process.env` ships empty on the client. So we must spell each
+// `NEXT_PUBLIC_*` variable out by hand below — do NOT refactor back into
+// a `readEnv(name)` helper.
+function safeEnv(value: string | undefined): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
 // --- STT ------------------------------------------------------------------
@@ -51,8 +57,8 @@ function readEnv(name: string): string | undefined {
  * (missing, typo, empty string) falls back to `web-speech`.
  */
 export function resolveVoiceProviderName(
-  raw: string | undefined = readEnv('NEXT_PUBLIC_VOICE_PROVIDER') ??
-    readEnv('VOICE_PROVIDER'),
+  raw: string | undefined = safeEnv(process.env.NEXT_PUBLIC_VOICE_PROVIDER) ??
+    safeEnv(process.env.VOICE_PROVIDER),
 ): VoiceProviderName {
   if (raw === 'openai-realtime') return 'openai-realtime'
   if (raw === 'sarvam') return 'sarvam'
@@ -85,8 +91,9 @@ export function getVoiceProvider(
  * `sarvam`. Anything else falls back to `web-speech`.
  */
 export function resolveTtsProviderName(
-  raw: string | undefined = readEnv('NEXT_PUBLIC_VOICE_TTS_PROVIDER') ??
-    readEnv('VOICE_TTS_PROVIDER'),
+  raw: string | undefined = safeEnv(
+    process.env.NEXT_PUBLIC_VOICE_TTS_PROVIDER,
+  ) ?? safeEnv(process.env.VOICE_TTS_PROVIDER),
 ): TtsProviderName {
   if (raw === 'sarvam') return 'sarvam'
   return 'web-speech'

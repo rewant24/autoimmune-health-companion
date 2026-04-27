@@ -101,10 +101,19 @@ export class SarvamAdapter implements VoiceProvider {
   private mediaStream: MediaStream | null = null
   private recorder: SarvamRecorderLike | null = null
   private uploadController: AbortController | null = null
-  private uploadStreamController: ReadableStreamDefaultController<Uint8Array> | null =
-    null
   private responseReader: ReadableStreamDefaultReader<Uint8Array> | null = null
   private fetchPromise: Promise<Response> | null = null
+  /**
+   * Buffered PCM chunks captured between start() and stop(). Cycle 1
+   * uses a buffered upload (single POST on stop) rather than a streaming
+   * request body because Chrome requires HTTP/2 or HTTP/3 for streaming
+   * uploads — there is no localhost exception, so the streaming variant
+   * fails with `TypeError: Failed to fetch` against `next dev`. Response
+   * streaming still works on HTTP/1.1, so the SSE reply path is
+   * unchanged. See `lib/voice/sarvam-adapter.ts` history if reverting.
+   */
+  private pcmChunks: Uint8Array[] = []
+  private pcmByteLength = 0
 
   private startedAt = 0
   private latestPartial = ''
@@ -179,33 +188,36 @@ export class SarvamAdapter implements VoiceProvider {
     this.started = true
     this.startedAt = Date.now()
 
+    // Pre-arm the final-settled promise BEFORE any awaits. The hook
+    // re-arms start() for the answer turn while the reducer is already
+    // in `listening-answer`; if the user taps the orb to stop during the
+    // getUserMedia / recorder.start window, stop() runs before this
+    // would otherwise be set and would throw "finalPromise missing".
+    // Allocating up-front makes start() / stop() race-safe and lets
+    // error paths reject the same promise so awaiters see the failure.
+    this.finalPromise = new Promise<Transcript>((resolve, reject) => {
+      this.finalSettled = { resolve, reject }
+    })
+    // Suppress unhandled-rejection if no one awaits before reject runs.
+    this.finalPromise.catch(() => undefined)
+
     // 1. Acquire mic.
     let stream: MediaStream
     try {
       stream = await this.getUserMediaImpl({ audio: true })
     } catch (e) {
       const err = mapMediaError(e)
+      this.finalSettled?.reject(err)
+      this.finalSettled = null
+      this.cleanupAfterFailure()
       this.emitError(err)
       throw err
     }
     this.mediaStream = stream
 
-    // 2. Build the upload ReadableStream — recorder pushes 250 ms PCM
-    //    chunks into it; the controller is closed when the recorder
-    //    stops.
-    const self = this
-    const uploadBody = new ReadableStream<Uint8Array>({
-      start(controller) {
-        self.uploadStreamController = controller
-      },
-      cancel() {
-        // Caller cancelled — drop our handle so we don't double-close.
-        self.uploadStreamController = null
-      },
-    })
-
-    // 3. Spin up the recorder before the fetch so the first bytes are
-    //    queued and the stream isn't read-empty.
+    // 2. Build the recorder — chunks accumulate in `pcmChunks` until
+    //    stop() flushes them as a single buffered POST. (See class
+    //    field comment for the HTTP/2 / streaming-upload reason.)
     let recorder: SarvamRecorderLike
     try {
       recorder = this.recorderFactory(stream)
@@ -217,6 +229,8 @@ export class SarvamAdapter implements VoiceProvider {
             ? e.message
             : 'SarvamAdapter: recorder construction failed',
       }
+      this.finalSettled?.reject(err)
+      this.finalSettled = null
       this.cleanupAfterFailure()
       this.emitError(err)
       throw err
@@ -224,13 +238,9 @@ export class SarvamAdapter implements VoiceProvider {
     this.recorder = recorder
 
     recorder.onChunk((chunk) => {
-      const ctrl = this.uploadStreamController
-      if (!ctrl || this.stopped) return
-      try {
-        ctrl.enqueue(chunk)
-      } catch {
-        // Stream closed under us — ignore; upload has settled.
-      }
+      if (this.stopped) return
+      this.pcmChunks.push(chunk)
+      this.pcmByteLength += chunk.byteLength
     })
 
     try {
@@ -241,42 +251,12 @@ export class SarvamAdapter implements VoiceProvider {
         message:
           e instanceof Error ? e.message : 'SarvamAdapter: recorder.start failed',
       }
+      this.finalSettled?.reject(err)
+      this.finalSettled = null
       this.cleanupAfterFailure()
       this.emitError(err)
       throw err
     }
-
-    // 4. Build abort controller + URL with the language query param.
-    this.uploadController = new this.abortControllerCtor()
-    const url = `${this.endpoint}?lang=${encodeURIComponent(this.language_code)}`
-
-    // 5. Kick the fetch. `duplex: 'half'` is required by the platform
-    //    when the request body is a stream that's still being written.
-    this.finalPromise = new Promise<Transcript>((resolve, reject) => {
-      this.finalSettled = { resolve, reject }
-    })
-    // Attach a no-op catch so a rejection that happens before
-    // `stop()` is awaited (e.g. external `abort()` in mid-session)
-    // doesn't surface as an unhandled rejection. Awaiting `stop()`
-    // still receives the rejection.
-    this.finalPromise.catch(() => undefined)
-
-    this.fetchPromise = this.fetchImpl(url, {
-      method: 'POST',
-      body: uploadBody,
-      // `duplex` is required for streaming bodies. TS's RequestInit
-      // doesn't list it yet, so cast.
-      ...({ duplex: 'half' } as RequestInit),
-      signal: this.uploadController.signal,
-      headers: { 'Content-Type': 'audio/wav' },
-    } as RequestInit)
-
-    // 6. Consume the response in the background. We do NOT await it
-    //    here — `start()` resolves once the recorder is rolling and
-    //    the request is in flight. `stop()` waits on `finalPromise`.
-    this.consumeResponse(this.fetchPromise).catch((err) => {
-      this.handleResponseFailure(err)
-    })
   }
 
   async stop(): Promise<Transcript> {
@@ -290,40 +270,85 @@ export class SarvamAdapter implements VoiceProvider {
     if (this.errored) throw this.errored
     if (this.finalTranscript) return this.finalTranscript
 
-    // Mark stopped so further chunks/listeners short-circuit.
+    // Mark stopped so further chunks short-circuit.
     this.stopped = true
 
     // Stop the recorder first so any partial in-flight buffer flushes
-    // through the uploadStream as the trailing chunk.
+    // its trailing chunk into our buffer.
     try {
       await this.recorder?.stop()
     } catch {
-      // Recorder shutdown errors are non-fatal — we still need to
-      // close the upload stream so the route sees EOF.
+      // Recorder shutdown errors are non-fatal — we still try to
+      // upload whatever PCM we did capture.
     }
 
-    // Close the upload stream so the server knows we're done sending
-    // audio and emits its `final` SSE event.
-    try {
-      this.uploadStreamController?.close()
-    } catch {
-      // already closed — ignore
-    }
-
-    // Release the mic immediately. Sarvam's `final` arrives over the
-    // already-open response stream; no need to keep the mic indicator
-    // lit while we wait.
+    // Release the mic immediately. The `final` SSE event arrives over
+    // the response stream of the upload below; no need to keep the
+    // mic indicator lit while we wait.
     this.releaseMicTracks()
 
-    // Wait on the final SSE event (or a typed error).
+    // Concatenate buffered PCM and POST as a single (non-streaming)
+    // request body. Chrome requires HTTP/2+ for streaming request
+    // bodies and there is no localhost exception, so this buffered
+    // path is what works against `next dev` (HTTP/1.1).
+    const body = concatChunks(this.pcmChunks, this.pcmByteLength)
+    this.pcmChunks = []
+    this.pcmByteLength = 0
+
+    this.uploadController = new this.abortControllerCtor()
+    const url = `${this.endpoint}?lang=${encodeURIComponent(this.language_code)}`
+    this.fetchPromise = this.fetchImpl(url, {
+      method: 'POST',
+      body,
+      signal: this.uploadController.signal,
+      headers: { 'Content-Type': 'audio/wav' },
+    } as RequestInit)
+
+    // Drain the SSE response in the background; rejections route
+    // through handleResponseFailure into finalSettled.reject.
+    this.consumeResponse(this.fetchPromise).catch((err) => {
+      this.handleResponseFailure(err)
+    })
+
     if (!this.finalPromise) {
       const err: VoiceError = {
         kind: 'aborted',
-        message: 'SarvamAdapter.stop: response stream never started',
+        message: 'SarvamAdapter.stop: finalPromise missing',
       }
       throw err
     }
-    return this.finalPromise
+    // Reset turn-scoped state once the final settles (success or error)
+    // so the same adapter instance can be re-armed by start() for the
+    // next conversational turn — the hook reuses one instance across
+    // listening / listening-answer turns.
+    return this.finalPromise.then(
+      (t) => {
+        this.resetTurnState()
+        return t
+      },
+      (e) => {
+        this.resetTurnState()
+        throw e
+      },
+    )
+  }
+
+  /** Reset turn-scoped state but keep listeners — see stop() for context. */
+  private resetTurnState(): void {
+    this.started = false
+    this.stopped = false
+    this.recorder = null
+    this.uploadController = null
+    this.responseReader = null
+    this.fetchPromise = null
+    this.pcmChunks = []
+    this.pcmByteLength = 0
+    this.startedAt = 0
+    this.latestPartial = ''
+    this.finalTranscript = null
+    this.errored = null
+    this.finalSettled = null
+    this.finalPromise = null
   }
 
   // --- Internals ----------------------------------------------------------
@@ -398,7 +423,22 @@ export class SarvamAdapter implements VoiceProvider {
   }
 
   private handleSseEvent(ev: ParsedSseEvent): void {
-    switch (ev.event) {
+    // The route emits frames as `data: {"type":"partial"|"final"|"error",...}`
+    // with no SSE `event:` line, so all frames arrive with the default
+    // event name `message`. Dispatch off the JSON `type` field instead.
+    let kind = ev.event
+    if (kind === 'message' || !kind) {
+      const trimmed = ev.data?.trim() ?? ''
+      if (trimmed.startsWith('{')) {
+        try {
+          const peeked = JSON.parse(trimmed) as { type?: unknown }
+          if (typeof peeked.type === 'string') kind = peeked.type
+        } catch {
+          // Not valid JSON — fall through and let the default branch ignore it.
+        }
+      }
+    }
+    switch (kind) {
       case 'partial': {
         const text = parsePartialPayload(ev.data)
         if (text === null) return
@@ -496,11 +536,8 @@ export class SarvamAdapter implements VoiceProvider {
     } catch {
       // ignore
     }
-    try {
-      this.uploadStreamController?.close()
-    } catch {
-      // ignore
-    }
+    this.pcmChunks = []
+    this.pcmByteLength = 0
     this.recorder?.stop().catch(() => undefined)
     this.releaseMicTracks()
     this.finalSettled?.reject(err)
@@ -509,15 +546,13 @@ export class SarvamAdapter implements VoiceProvider {
   }
 
   private cleanupAfterFailure(): void {
-    try {
-      this.uploadStreamController?.close()
-    } catch {
-      // ignore
-    }
-    this.uploadStreamController = null
     this.releaseMicTracks()
     this.recorder = null
     this.uploadController = null
+    this.pcmChunks = []
+    this.pcmByteLength = 0
+    // Allow callers to retry via a fresh start() after a failure.
+    this.started = false
   }
 
   private emitError(err: VoiceError): void {
@@ -579,6 +614,17 @@ function mapFetchError(err: unknown): VoiceError {
     message:
       err instanceof Error ? err.message : 'SarvamAdapter: upload network error',
   }
+}
+
+function concatChunks(chunks: Uint8Array[], total: number): Uint8Array {
+  if (chunks.length === 1) return chunks[0]
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    out.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return out
 }
 
 async function safeReadText(response: Response): Promise<string> {

@@ -122,6 +122,28 @@ export async function connectSarvamStt(
     'Api-Subscription-Key': apiKey,
   })
 
+  // The SDK's `connect()` returns as soon as the underlying
+  // `ReconnectingWebSocket` is constructed — readyState may still be
+  // CONNECTING. The first `transcribe()` call would then throw "Socket
+  // is not open" via the SDK's `assertSocketIsOpen()` check. Buffered
+  // uploads expose this race because the entire body is ready to send
+  // immediately after connect. `waitForOpen()` is the SDK's official
+  // affordance; only present on newer versions, so guard the call.
+  const maybeWaitForOpen = (
+    socket as unknown as { waitForOpen?: () => Promise<unknown> }
+  ).waitForOpen
+  if (typeof maybeWaitForOpen === 'function') {
+    try {
+      await maybeWaitForOpen.call(socket)
+    } catch (err) {
+      throw new Error(
+        err instanceof Error
+          ? `voice.connect_failed: ${err.message}`
+          : 'voice.connect_failed',
+      )
+    }
+  }
+
   let closed = false
   const markClosed = (): boolean => {
     if (closed) return false
