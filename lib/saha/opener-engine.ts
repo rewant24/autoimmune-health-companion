@@ -46,10 +46,19 @@ const STREAK_THRESHOLDS: ReadonlySet<number> = new Set([7, 30, 90, 180, 365]);
 /**
  * Pick the right opener variant for the given continuity snapshot.
  * See file header for priority order.
+ *
+ * `name` is the runtime profile name (e.g. read from `lib/profile/storage`).
+ * Pass `null` (the default) when no profile is set — the variant copy
+ * collapses cleanly to a name-less form. Each call site decides whether
+ * to plumb a name through; the engine itself is name-agnostic for key
+ * selection.
  */
-export function selectOpener(state: ContinuityState): OpenerSelection {
+export function selectOpener(
+  state: ContinuityState,
+  name: string | null = null,
+): OpenerSelection {
   const key = pickKey(state);
-  const text = textForKey(key, state);
+  const text = textForKey(key, state, name);
   return { key, text };
 }
 
@@ -124,9 +133,13 @@ function isPositiveRead(yesterday: NonNullable<ContinuityState["yesterday"]>): b
   return false;
 }
 
-function textForKey(key: OpenerVariantKey, state: ContinuityState): string {
+function textForKey(
+  key: OpenerVariantKey,
+  state: ContinuityState,
+  name: string | null,
+): string {
   if (key === "streak-milestone") {
-    return streakMilestoneOpener(state.streakDays);
+    return streakMilestoneOpener(state.streakDays, name);
   }
-  return OPENER_VARIANTS[key];
+  return OPENER_VARIANTS[key](name);
 }
