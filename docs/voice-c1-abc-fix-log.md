@@ -230,6 +230,50 @@ mutually exclusive.
   manual smoke can grep the DOM without depending on the className
   string format.
 
+### Fix D — AudioContext.resume on start — DONE
+
+**Status:** committed as `bd5ff10`
+
+**Approach:** added `if (context.state === 'suspended') await context.resume()` in `SarvamRecorder.start()` after AudioContext construction (before `createMediaStreamSource`).
+
+**Why:** Chrome treats an AudioContext created after an awaited promise (the `await getUserMedia` in the adapter) as past the user-gesture window and starts it `suspended`. The worklet wires up but pulls no samples → recorder produces zero PCM chunks → server-side `socket.flush()` throws "Cannot flush: no audio input has been received." `resume()` restarts the audio thread and is a no-op on already-running contexts.
+
+**Files changed (2):**
+- `lib/voice/sarvam-recorder.ts` — guarded `resume()` after context creation in `start()`.
+- `tests/voice/sarvam-recorder.test.ts` — `FakeAudioContext` defaults `state: 'suspended'` (mirrors prod Chrome path), exposes `async resume() { state = 'running' }`. New lifecycle test asserts `state === 'running'` after `start()`.
+
+**Verification:**
+- `tsc --noEmit`: clean
+- recorder test: 19/19 (was 18 + 1 new)
+- `npm run test:run`: **764/764**
+- `npm run build`: clean
+
+**Notes:**
+- Confirmed via 2026-04-28 manual smoke that this was the cause of bug #2: user tapped orb, granted mic, spoke, transcription failed with "Cannot flush". Independent of Fix E.
+
+### Fix E — auto-progress greeting → listening — DONE
+
+**Status:** committed as `692b2b1`
+
+**Approach:** reducer routes `GREETING_PLAYED` from `idle-greeting` to `requesting-permission` (auto-progress, ADR-026). `GREETING_FAILED` still routes to `idle-ready { greetingBlocked: true }` for the autoplay-blocked manual-gate path. New hook effect fires `provider.start()` on entering `requesting-permission` from `idle-greeting` or `idle-ready`. The TAP_ORB interceptor was simplified to only fire `start()` on cold `idle` (where it owns the opener payload); `idle-greeting` / `idle-ready` taps now just dispatch TAP_ORB and let the new effect handle `start()`.
+
+**Why:** the A/B/C fix-pass over-applied the manual gate to both played and failed paths. The original Voice C1 design (ADR-026) is opener → automatic listening; only the autoplay-blocked path should require a manual tap.
+
+**Files changed (2):**
+- `lib/checkin/state-machine.ts` — reducer `idle-greeting` case + `useCheckinMachine` hook (new `priorStateRef`, new `requesting-permission` effect, simplified TAP_ORB interceptor).
+- `tests/check-in/state-machine.test.ts` — 2 reducer tests updated for new transition; 4 hook tests added: auto-progress fires `start()`, cold-tap regression (opener payload still attached via interceptor), no double-fire on cold tap, `greetingBlocked` manual tap fires `start()` via effect.
+
+**Verification:**
+- `tsc --noEmit`: clean
+- state-machine test: 80/80 (was 76 + 4 new hook tests)
+- `npm run test:run`: **768/768** (was 764 from Fix D)
+- `npm run build`: clean
+
+**Notes:**
+- `app/check-in/page.tsx` idle-ready render block was left untouched. Its non-`greetingBlocked` branch is now dead state-machine code (no transition lands there) but pruning is out of scope; the live `greetingBlocked === true` path still renders the same block.
+- `priorStateRef` is internal hook plumbing — not visible to the reducer, not exported. Avoids a shape change on `requesting-permission` that would touch every test that constructs that state.
+- Manual smoke (Phase 3 of `~/.claude/plans/async-brewing-peacock.md`) outstanding.
+
 ## Manual smoke checklist (after all three commits)
 
 Walk these on `npm run dev` (Chrome) before declaring shipped:
