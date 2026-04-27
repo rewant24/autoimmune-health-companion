@@ -274,7 +274,45 @@ mutually exclusive.
 - `priorStateRef` is internal hook plumbing — not visible to the reducer, not exported. Avoids a shape change on `requesting-permission` that would touch every test that constructs that state.
 - Manual smoke (Phase 3 of `~/.claude/plans/async-brewing-peacock.md`) outstanding.
 
-## Manual smoke checklist (after all three commits)
+### Fix F.1 — silence VAD owned by hook — DONE
+
+**Status:** committed as `00c08a9`
+
+**Approach:** added optional `onSilence(cb)` to `VoiceProvider`; SarvamAdapter fans the recorder's silence event out to listeners instead of calling `this.stop()` directly. The hook subscribes alongside `onPartial` / `onError`, calls `provider.stop()`, and dispatches `PROVIDER_STOPPED` with the resolved transcript — same path as a manual tap. A `stopInitiatedRef` dedupes silence + late tap into a single `stop()` invocation per turn; the ref resets when the reducer leaves `listening` / `listening-answer`.
+
+**Why:** Fix D unblocked PCM chunk flow → recorder's silence VAD started firing for the first time → adapter's internal `stop()` POSTed the audio and got a transcript back, but discarded the returned `Promise<Transcript>`. The hook never learned about it, so the reducer was stranded in `listening` while the audio had already been processed. Users tapped a stale `<StopButton>`, which raced a second `stop()` that produced an empty POST and a `"stop() called before start()"` error. This is not a regression of Fix D — it's a pre-existing architectural gap that Fix D made observable for the first time.
+
+**Files changed (6):**
+- `lib/voice/types.ts` — `VoiceProvider` gains optional `onSilence(cb)`; web-speech adapter and OpenAI stub omit it (no VAD source).
+- `lib/voice/sarvam-adapter.ts` — `silenceListeners` array + public `onSilence(cb)`; recorder.onSilenceDetected fans out to listeners instead of self-stopping.
+- `lib/checkin/state-machine.ts` — `stopInitiatedRef`, `provider.onSilence?(...)` subscription in the provider-callback effect, ref-reset effect on state.kind transitions, dedupe guard in the TAP_ORB listening branch.
+- `tests/voice/sarvam-adapter-streaming.test.ts` — flipped the silence test: asserts the listener fires and `recorder.stopCalls === 0` (adapter no longer auto-stops).
+- `tests/voice/sarvam-adapter.test.ts` — `makeFakeRecorder` gains `onSilenceDetected` + `fireSilence` seam; new buffered-mode silence test.
+- `tests/check-in/state-machine.test.ts` — `FakeProvider` gains `onSilence` + `fireSilence` seam; 2 new hook tests: silence dispatches `PROVIDER_STOPPED` end-to-end, late tap after silence is a no-op (single `stop()` call).
+
+**Verification:**
+- `tsc --noEmit`: clean
+- `npm run test:run`: **771/771** (768 baseline + 3 new)
+- `npm run build`: clean across 17 routes
+
+### Fix F.2 — SarvamAdapter.stop() reentrancy guard — DONE
+
+**Status:** committed as `ed5c369`
+
+**Approach:** cached the in-flight stop promise on `this.stopPromise`; concurrent callers share it instead of re-running the buffered POST. The cache is set **synchronously** (before any await) so a re-entrant call sees it; the body of `stop()` is extracted into a private `runStopFlow()` so the wrapper can assign `stopPromise = this.runStopFlow()` and return immediately. Cleared in `resetTurnState` so the next turn re-arms cleanly. Serial-post-resolve behaviour is unchanged — the `!started` guard still throws `"stop() called before start()"` for callers who arrive after the turn is over.
+
+**Why:** A second concurrent `stop()` (silence VAD racing a manual tap, or any future double-call) used to run the buffered POST a second time with now-empty `pcmChunks`, producing an empty POST that Sarvam rejected with `"Cannot flush: no audio input has been received."` First attempt at the guard set `stopPromise` *after* an `await`, so two callers that entered before the first await both progressed past the guard and fired duplicate POSTs — the test caught this on the first run; refactor to `runStopFlow()` fixed it.
+
+**Files changed (2):**
+- `lib/voice/sarvam-adapter.ts` — `stopPromise` field + `runStopFlow()` extraction; `resetTurnState` clears `stopPromise`.
+- `tests/voice/sarvam-adapter.test.ts` — concurrent stop() shares one POST + same transcript; serial stop() after first resolves throws via `!started` guard (preserves existing behaviour).
+
+**Verification:**
+- `tsc --noEmit`: clean
+- `npm run test:run`: **773/773** (771 baseline + 2 new)
+- `npm run build`: clean across 17 routes
+
+## Manual smoke checklist (after all five commits — A, B, C, D, E, F)
 
 Walk these on `npm run dev` (Chrome) before declaring shipped:
 
@@ -291,3 +329,23 @@ Walk these on `npm run dev` (Chrome) before declaring shipped:
   speaker to hear how Saha greets you, then tap the orb to begin."
   Tapping the speaker plays the greeting; tapping the orb proceeds to
   listening.
+- [ ] **Fix F.1 (autoplay-blocked path):** after Fix C above, tap the
+  orb → grant mic → speak ~3s, then stay silent ≥1.5s. Orb
+  auto-progresses to "Thinking…" with the heard transcript. Network
+  shows exactly one `POST /api/transcribe` (audio bytes), one SSE
+  final frame with non-empty text. **No** `<StopButton>` tap required.
+- [ ] **Fix F.1 (autoplay-allowed path):** after MEI grants autoplay
+  (typically after one prior interaction with the page), reload
+  `/check-in`. Opener plays automatically; mic prompt fires without an
+  orb tap. Grant mic → speak ~3s, then stay silent. Orb
+  auto-progresses just like above. **No** `"stop() called before
+  start()"` in the console; **no** `"Cannot flush"` in the dev
+  terminal.
+- [ ] **Fix F.1 edge — tap before silence:** speak ~1s, tap StopButton
+  immediately. One POST, one PROVIDER_STOPPED.
+- [ ] **Fix F.1 edge — tap after silence:** speak, fall silent, wait
+  for auto-stop, then tap StopButton anyway. Tap is a no-op (guard
+  swallowed); no error toast.
+- [ ] **Fix F.2:** during the same flow, dev tools network tab shows
+  exactly one `POST /api/transcribe` per turn (not two). Mute toggle
+  / reduced-motion still behave as before.
