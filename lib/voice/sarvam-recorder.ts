@@ -180,6 +180,16 @@ export class SarvamRecorder {
     this.context = context
     this.inputSampleRate = context.sampleRate
 
+    // Chrome rule: an AudioContext created after an awaited promise
+    // (getUserMedia in the adapter) starts `suspended` because the
+    // user-gesture window has expired. resume() restarts the audio
+    // thread; without it no samples flow through the worklet and
+    // stop()'s flush call sees zero chunks → Sarvam SDK throws
+    // "Cannot flush: no audio input has been received."
+    if (context.state === 'suspended') {
+      await context.resume()
+    }
+
     const source = context.createMediaStreamSource(this.stream)
     this.source = source
 

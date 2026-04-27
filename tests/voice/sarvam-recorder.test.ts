@@ -36,6 +36,11 @@ interface FakeWorkletNode {
 
 class FakeAudioContext {
   sampleRate: number
+  // Mirrors the production browser path that Fix D addresses: a real
+  // AudioContext created after an awaited getUserMedia starts in
+  // 'suspended' state on Chrome. The recorder is expected to call
+  // resume() to transition it to 'running'.
+  state: 'suspended' | 'running' | 'closed' = 'suspended'
   destination = { _isDest: true }
   audioWorklet = {
     addModule: vi.fn(async (_url: string) => undefined),
@@ -53,8 +58,13 @@ class FakeAudioContext {
     }
   }
 
+  async resume() {
+    this.state = 'running'
+  }
+
   async close() {
     this.closed = true
+    this.state = 'closed'
   }
 }
 
@@ -178,6 +188,28 @@ describe('SarvamRecorder — start() / stop() lifecycle', () => {
     await r.stop()
     // Second stop must not throw.
     await expect(r.stop()).resolves.toBeUndefined()
+  })
+
+  it('start() resumes a suspended AudioContext (Fix D — Chrome gesture-expiry)', async () => {
+    // Production Chrome creates the AudioContext in `suspended` state
+    // when it's constructed after an awaited getUserMedia. Without
+    // resume() the worklet pulls no samples, the recorder produces zero
+    // chunks, and Sarvam's `socket.flush()` throws. The FakeAudioContext
+    // mirrors that path (default state: 'suspended').
+    const ctxs: FakeAudioContext[] = []
+    const Ctor = vi.fn(function (this: FakeAudioContext, opts?: { sampleRate?: number }) {
+      const c = new FakeAudioContext(opts)
+      ctxs.push(c)
+      return c
+    }) as unknown as typeof AudioContext
+    const r = new SarvamRecorder({
+      stream: makeStream(),
+      audioContextCtor: Ctor,
+    })
+    expect(ctxs.length).toBe(0)
+    await r.start()
+    expect(ctxs[0].state).toBe('running')
+    await r.stop()
   })
 })
 
