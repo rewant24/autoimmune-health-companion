@@ -23,7 +23,6 @@ export function CheckInPromptCard(): React.JSX.Element {
       }}
     >
       <p className="type-label">Daily check-in</p>
-      {/* TODO(rewant-copy): home check-in prompt copy — confirm voice. */}
       <h2
         className="mt-3"
         style={{

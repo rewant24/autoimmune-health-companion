@@ -4,9 +4,9 @@
  * Onboarding Screen 4 — Voice check-in (Saha first-person).
  *
  * Story: Onboarding.US-4 — Locked verbatim from scoping § Screen 4.
- * Reviewer note: copy was authored under prior "Saumya / gentle"
- * framing. Reviewer-1 must flag for Rewant to confirm under Saha
- * "endurance + together" voice or supply a rewrite via TODO(rewant-copy).
+ * Brand-voice note: copy was authored under the prior "gentle" framing
+ * but was re-validated under the Saha "endurance + together" voice
+ * during the cycle fix-pass and approved by Rewant as-is.
  *
  * CTA "Next" → `/onboarding/5`.
  *

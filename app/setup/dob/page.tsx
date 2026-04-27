@@ -66,7 +66,7 @@ export default function SetupDobPage(): React.JSX.Element {
     <SetupShell
       step={2}
       heading="When were you born?"
-      subhead="Helps Saha keep your timeline grounded."
+      subhead="Saha uses this to anchor patterns over time."
       disabled={!valid}
       onNext={next}
     >

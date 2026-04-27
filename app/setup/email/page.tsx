@@ -43,7 +43,7 @@ export default function SetupEmailPage(): React.JSX.Element {
     <SetupShell
       step={3}
       heading="What's your email?"
-      subhead="Used for sign-in later. We won't share it."
+      subhead="For sign-in later. Stays with Saha."
       disabled={!valid}
       onNext={next}
     >

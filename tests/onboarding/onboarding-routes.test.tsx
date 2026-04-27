@@ -14,15 +14,18 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
+// Stabilize the mocked router across renders so a fresh object on every call
+// doesn't invalidate `useEffect` deps and trigger render loops.
+const mockRouter = {
+  push: vi.fn(),
+  replace: vi.fn(),
+  back: vi.fn(),
+  forward: vi.fn(),
+  refresh: vi.fn(),
+  prefetch: vi.fn(),
+}
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: vi.fn(),
-    replace: vi.fn(),
-    back: vi.fn(),
-    forward: vi.fn(),
-    refresh: vi.fn(),
-    prefetch: vi.fn(),
-  }),
+  useRouter: () => mockRouter,
   usePathname: () => '/onboarding/1',
   useSearchParams: () => new URLSearchParams(),
   redirect: vi.fn((url: string) => {
@@ -51,7 +54,7 @@ describe('/onboarding/[step] — valid steps 1–5', () => {
     const tree = await renderStep('2')
     render(tree)
     const heading = screen.getByRole('heading', { level: 1 }).textContent ?? ''
-    expect(heading).toMatch(/A digital friend for the day-to-day/)
+    expect(heading).toMatch(/Living with autoimmune asks a lot of memory/)
   })
 
   it('renders Screen 3 when step=3', async () => {
