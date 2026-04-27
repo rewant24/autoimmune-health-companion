@@ -166,25 +166,84 @@ still pass.
 - Manual smoke recommended to confirm orb position on real device
   viewports; vitest can't catch layout overlap.
 
-### Fix C — autoplay-blocked greeting cue (Option 1)
+### Fix C — autoplay-blocked greeting cue (Option 1) — DONE
 
-**Status:** pending
+**Status:** committed (see commit hash in log tail)
 
-**Approach:** extend `idle-ready` state with `greetingBlocked?: boolean`
-flag, set true only when reached via `GREETING_FAILED`. Conditional
-subcopy; pulse the existing speaker icon on `SpokenOpener` when
-`highlightSpeaker` prop is true. Respect `prefers-reduced-motion`.
+**Approach:** extended `idle-ready` state with `greetingBlocked?:
+boolean`, set true only via the `GREETING_FAILED` route in the reducer.
+Page reads the flag to swap subcopy and pass `highlightSpeaker` to
+SpokenOpener. SpokenOpener renders an attention ring around the
+speaker icon and switches its accessible label to "Tap to hear
+greeting" when highlighted.
 
-**Files expected to change:**
-- `lib/checkin/state-machine.ts`
-- `app/check-in/page.tsx`
-- `components/check-in/SpokenOpener.tsx`
-- `tests/check-in/state-machine.test.ts`
-- `tests/check-in/spoken-opener.test.tsx`
+**Files changed (5):**
+- `lib/checkin/state-machine.ts` — `idle-ready` shape gains optional
+  `greetingBlocked` field; `idle-greeting` reducer split into separate
+  `GREETING_PLAYED` (no flag) and `GREETING_FAILED` (`greetingBlocked:
+  true`) cases.
+- `components/check-in/SpokenOpener.tsx` — new optional
+  `highlightSpeaker` prop. When true (and TTS is available), the
+  speaker button gets `ring-2 ring-teal-400 ring-offset-2
+  motion-safe:animate-pulse`. The `motion-safe:` variant means the
+  pulse only animates when `prefers-reduced-motion: no-preference` —
+  the ring stays visible regardless. Accessible label switches from
+  "Replay" → "Tap to hear greeting" so screen readers surface the
+  intent.
+- `app/check-in/page.tsx` — idle-ready render block reads
+  `state.greetingBlocked === true` and threads it into both the
+  `highlightSpeaker` prop and the conditional subcopy ("Tap the
+  speaker to hear how Saha greets you, then tap the orb to begin." vs
+  the existing "Tap the orb and tell me in your own words.").
+- `tests/check-in/state-machine.test.ts` — replaced the single
+  GREETING_PLAYED/FAILED-equivalence test with two distinct cases:
+  FAILED produces `greetingBlocked: true`; PLAYED leaves it
+  undefined.
+- `tests/check-in/spoken-opener.test.tsx` — three new cases under
+  "highlightSpeaker prop": default (no highlight), highlight on
+  (ring + pulse classes present), accessible-label swap.
 
-**Alternative (Option 2 — orb-as-greeting-trigger):** considered, not
-chosen. Would change the orb→listening contract on first tap when
-`GREETING_FAILED` was seen. Bigger blast radius; more state-machine
-surgery. Park unless Option 1 doesn't read well in smoke.
+**Why Option 1 over Option 2:** Option 2 (orb-as-greeting-trigger on
+first tap when blocked, then listening on second tap) would alter the
+TAP_ORB → requesting-permission contract that the
+`useCheckinMachine` hook side-effects on. That's a bigger blast
+radius — reducer + hook + tests all touch that path. Option 1 stays
+purely additive: existing transitions are unchanged, the optional flag
+defaults to undefined, and the visual cue rides on the existing
+SpokenOpener speaker button. If smoke shows the ring isn't drawing
+enough attention, we can layer Option 2 on top later — they're not
+mutually exclusive.
 
-**Result:** _(filled in after commit)_
+**Verification:**
+- `tsc --noEmit`: clean
+- `npm run test:run`: **763/763** (was 759; +1 state-machine, +3
+  SpokenOpener)
+- `npm run build`: clean
+
+**Notes:**
+- Reduced-motion behaviour relies on Tailwind's `motion-safe:` variant.
+  In jsdom (the test environment) `prefers-reduced-motion` doesn't
+  match by default, so the test verifies the class string contains
+  `motion-safe:animate-pulse` rather than runtime-checking the
+  computed animation.
+- The `data-highlight="true"` attribute is added when highlighting so
+  manual smoke can grep the DOM without depending on the className
+  string format.
+
+## Manual smoke checklist (after all three commits)
+
+Walk these on `npm run dev` (Chrome) before declaring shipped:
+
+- [ ] **Fix A:** profile name (set via Setup or `saha.testUser.v1` /
+  profile localStorage) appears interpolated in opener — e.g. "Hey
+  Rewant — glad you're here." With profile cleared / null name, line
+  collapses to "Hey — glad you're here."
+- [ ] **Fix B:** during a listening turn, StopButton is visible above
+  the BottomNav at viewport bottom. Same for SwitchToTapsButton during
+  voice-dialog states. Orb is not covered.
+- [ ] **Fix C:** open `/check-in` in a fresh tab (no prior gesture).
+  Chrome should block autoplay; the speaker icon next to the opener
+  text shows a teal pulse ring and the subcopy reads "Tap the
+  speaker to hear how Saha greets you, then tap the orb to begin."
+  Tapping the speaker plays the greeting; tapping the orb proceeds to
+  listening.

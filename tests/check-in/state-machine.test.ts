@@ -72,8 +72,19 @@ describe('reducer: idle-greeting / idle-ready transitions (Voice C1 fix-pass)', 
     expect(reducer(greeting, { type: 'GREETING_PLAYED' })).toEqual(ready)
   })
 
-  it('GREETING_FAILED also moves idle-greeting → idle-ready (autoplay block degrades silently)', () => {
-    expect(reducer(greeting, { type: 'GREETING_FAILED' })).toEqual(ready)
+  it('GREETING_FAILED moves idle-greeting → idle-ready with greetingBlocked: true (Fix C — page surfaces the autoplay-blocked cue)', () => {
+    expect(reducer(greeting, { type: 'GREETING_FAILED' })).toEqual({
+      ...ready,
+      greetingBlocked: true,
+    })
+  })
+
+  it('GREETING_PLAYED does not set greetingBlocked (natural cold-start path)', () => {
+    const result = reducer(greeting, { type: 'GREETING_PLAYED' })
+    expect(result.kind).toBe('idle-ready')
+    if (result.kind === 'idle-ready') {
+      expect(result.greetingBlocked).toBeUndefined()
+    }
   })
 
   it('TAP_ORB during idle-greeting jumps to requesting-permission (skip the greeting)', () => {

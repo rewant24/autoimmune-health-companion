@@ -250,4 +250,56 @@ describe('<SpokenOpener /> mute long-press (TTS.US-1.H.3)', () => {
   })
 })
 
+// --- Voice C1 Fix C — autoplay-blocked greeting cue ------------------------
+
+describe('SpokenOpener — highlightSpeaker prop (Voice C1 Fix C)', () => {
+  beforeEach(() => {
+    isAvailableMock.mockReturnValue(true)
+  })
+
+  it('renders the speaker button without highlight when prop is omitted', () => {
+    render(<SpokenOpener text="Hi." variantKey="cold-start" autoSpeak={false} />)
+    const button = screen.getByRole('button', { name: 'Replay' })
+    expect(button.dataset.highlight).toBeUndefined()
+    expect(button.className).not.toMatch(/animate-pulse/)
+    expect(button.className).not.toMatch(/ring-teal-400 ring-offset-2/)
+  })
+
+  it('renders the speaker button with attention ring when highlightSpeaker is true', () => {
+    render(
+      <SpokenOpener
+        text="Hi."
+        variantKey="cold-start"
+        autoSpeak={false}
+        highlightSpeaker
+      />,
+    )
+    const button = screen.getByRole('button', { name: 'Tap to hear greeting' })
+    expect(button.dataset.highlight).toBe('true')
+    expect(button.className).toMatch(/ring-2/)
+    expect(button.className).toMatch(/ring-teal-400/)
+    // motion-safe variant compiles to the unprefixed class so the
+    // animation runs by default in jsdom (no reduced-motion query
+    // matches). The ring + pulse together are the cue.
+    expect(button.className).toMatch(/motion-safe:animate-pulse/)
+  })
+
+  it('switches accessible label to "Tap to hear greeting" when highlightSpeaker is true', () => {
+    render(
+      <SpokenOpener
+        text="Hi."
+        variantKey="cold-start"
+        autoSpeak={false}
+        highlightSpeaker
+      />,
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Replay' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Tap to hear greeting' }),
+    ).toBeInTheDocument()
+  })
+})
+
 const LONG_PRESS_MS = 1000

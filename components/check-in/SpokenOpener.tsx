@@ -52,6 +52,17 @@ export interface SpokenOpenerProps {
    * second call would cancel the first.
    */
   autoSpeak?: boolean
+  /**
+   * When true, draws attention to the speaker-icon button so the user
+   * notices it as the way to hear the greeting they missed. The
+   * check-in page passes this `true` from the `idle-ready` state when
+   * `greetingBlocked === true` (Chrome blocked `audio.play()` on
+   * cold-mount). Renders as a soft animated pulse ring around the
+   * button, or a static ring when `prefers-reduced-motion: reduce` is
+   * set. No-op when TTS isn't available (button is hidden anyway).
+   * Voice C1 Fix C.
+   */
+  highlightSpeaker?: boolean
 }
 
 function readTtsDisabled(): boolean {
@@ -84,6 +95,7 @@ export function SpokenOpener({
   text,
   variantKey,
   autoSpeak = true,
+  highlightSpeaker = false,
 }: SpokenOpenerProps): React.JSX.Element {
   const ttsRef = useRef<TtsProvider | null>(null)
   if (ttsRef.current === null) ttsRef.current = getTtsProvider()
@@ -181,7 +193,8 @@ export function SpokenOpener({
         {available ? (
           <button
             type="button"
-            aria-label="Replay"
+            aria-label={highlightSpeaker ? 'Tap to hear greeting' : 'Replay'}
+            data-highlight={highlightSpeaker ? 'true' : undefined}
             onPointerDown={startLongPress}
             onPointerUp={cancelLongPress}
             onPointerLeave={cancelLongPress}
@@ -192,7 +205,14 @@ export function SpokenOpener({
               'align-middle text-zinc-500 hover:bg-zinc-100 ' +
               'focus-visible:outline-none focus-visible:ring-2 ' +
               'focus-visible:ring-teal-400 focus-visible:ring-offset-2 ' +
-              'dark:hover:bg-zinc-800'
+              'dark:hover:bg-zinc-800' +
+              // Fix C — attention ring when greeting autoplay was blocked.
+              // Animate the pulse only when reduced-motion is NOT set;
+              // fall back to a static ring otherwise so the cue is still
+              // visible without motion.
+              (highlightSpeaker
+                ? ' ring-2 ring-teal-400 ring-offset-2 motion-safe:animate-pulse'
+                : '')
             }
           >
             <SpeakerGlyph />

@@ -50,7 +50,18 @@ export type State =
   // feeling today?" automatically without losing the explicit consent
   // step before the mic activates.
   | { kind: 'idle-greeting'; text: string; variantKey: OpenerVariantKey }
-  | { kind: 'idle-ready'; text: string; variantKey: OpenerVariantKey }
+  // `greetingBlocked` is set true only when entering via GREETING_FAILED
+  // (autoplay block — Chrome refuses `audio.play()` on cold-mount when
+  // the navigation gesture didn't carry over). The page reads this to
+  // surface a "Tap to hear" cue near the speaker icon. Omitted on the
+  // GREETING_PLAYED path so the natural cold-start experience is
+  // unchanged. Voice C1 Fix C.
+  | {
+      kind: 'idle-ready'
+      text: string
+      variantKey: OpenerVariantKey
+      greetingBlocked?: boolean
+    }
   | { kind: 'requesting-permission' }
   | { kind: 'listening'; partial: string }
   | { kind: 'processing'; transcript: Transcript }
@@ -280,12 +291,22 @@ export function reducer(state: State, event: Event): State {
         return { kind: 'requesting-permission' }
       }
       // Both played + failed land in idle-ready: the user has read or
-      // heard the opener and now controls when listening starts.
-      if (event.type === 'GREETING_PLAYED' || event.type === 'GREETING_FAILED') {
+      // heard the opener and now controls when listening starts. The
+      // FAILED route carries `greetingBlocked: true` so the page can
+      // surface a "Tap to hear" cue near the speaker icon (Fix C).
+      if (event.type === 'GREETING_PLAYED') {
         return {
           kind: 'idle-ready',
           text: state.text,
           variantKey: state.variantKey,
+        }
+      }
+      if (event.type === 'GREETING_FAILED') {
+        return {
+          kind: 'idle-ready',
+          text: state.text,
+          variantKey: state.variantKey,
+          greetingBlocked: true,
         }
       }
       return state

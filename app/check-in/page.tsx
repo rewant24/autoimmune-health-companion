@@ -1034,9 +1034,18 @@ export default function CheckinPage({
             // SpokenOpener's internal auto-speak so the same utterance
             // doesn't fire twice and cancel itself.
             autoSpeak={!ttsAvailable}
+            // Fix C — pulse the speaker icon when Chrome blocked autoplay
+            // on cold-mount so the user notices the way to hear what they
+            // missed. State only carries `greetingBlocked` on the
+            // GREETING_FAILED path.
+            highlightSpeaker={
+              state.kind === 'idle-ready' && state.greetingBlocked === true
+            }
           />
           <p className="text-base text-zinc-600 dark:text-zinc-400">
-            Tap the orb and tell me in your own words.
+            {state.kind === 'idle-ready' && state.greetingBlocked === true
+              ? 'Tap the speaker to hear how Saha greets you, then tap the orb to begin.'
+              : 'Tap the orb and tell me in your own words.'}
           </p>
         </header>
       ) : null}
