@@ -108,8 +108,8 @@ describe("selectOpener — variant per state", () => {
     );
     expect(result.key).toBe("flare-fatigue-neutral");
     // Same neutral line as the default — the key carries the meaning, the
-    // copy stays calm.
-    expect(result.text).toBe("Morning, Sonakshi. How's your day been?");
+    // copy stays calm. No name passed → name-less form.
+    expect(result.text).toBe("Morning. How's your day been?");
   });
 
   it("flare-ongoing fires for a 1–4 day rolling flare", () => {
@@ -245,7 +245,54 @@ describe("selectOpener — variant per state", () => {
       }),
     );
     expect(result.key).toBe("neutral-default");
-    expect(result.text).toBe("Morning, Sonakshi. How's your day been?");
+    // No name passed → name-less form.
+    expect(result.text).toBe("Morning. How's your day been?");
+  });
+});
+
+describe("selectOpener — name interpolation", () => {
+  it("first-ever drops the name when no profile is set", () => {
+    const result = selectOpener(baseState({ isFirstEverCheckin: true }));
+    expect(result.text).toBe(
+      "Hey — glad you're here. How are you feeling today?",
+    );
+  });
+
+  it("first-ever interpolates the runtime name when supplied", () => {
+    const result = selectOpener(baseState({ isFirstEverCheckin: true }), "Asha");
+    expect(result.text).toBe(
+      "Hey Asha — glad you're here. How are you feeling today?",
+    );
+  });
+
+  it("trims whitespace and treats empty/whitespace-only names as null", () => {
+    expect(selectOpener(baseState({ isFirstEverCheckin: true }), "  ").text).toBe(
+      "Hey — glad you're here. How are you feeling today?",
+    );
+    expect(selectOpener(baseState({ isFirstEverCheckin: true }), "").text).toBe(
+      "Hey — glad you're here. How are you feeling today?",
+    );
+    expect(
+      selectOpener(baseState({ isFirstEverCheckin: true }), "  Maya ").text,
+    ).toBe("Hey Maya — glad you're here. How are you feeling today?");
+  });
+
+  it("streak-milestone interpolates the name", () => {
+    const result = selectOpener(
+      baseState({
+        streakDays: 7,
+        lastCheckinDaysAgo: 1,
+        yesterday: {
+          date: "2026-04-24",
+          pain: 4,
+          mood: "okay",
+          flare: "no",
+          isRoughDay: false,
+        },
+      }),
+      "Asha",
+    );
+    expect(result.text).toBe("7 days in a row, Asha. How's today?");
   });
 });
 

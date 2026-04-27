@@ -55,11 +55,11 @@ export type ExtractedMetrics = z.infer<typeof ExtractedMetricsSchema>;
  * The system prompt sent on every extraction call. Kept verbatim so the
  * "no hallucination" + "negation counts" lines are easy to find on review.
  */
-export const SYSTEM_PROMPT = `You are an extraction layer for a daily voice check-in in an autoimmune-health companion app. The user (Sonakshi) speaks freely about her day. Your only job is to extract five structured metrics from her transcript:
+export const SYSTEM_PROMPT = `You are an extraction layer for a daily voice check-in in an autoimmune-health companion app. The user speaks freely about their day. Your only job is to extract five structured metrics from the transcript:
 
 - pain: integer 1–10. Self-reported pain level. 1 = no pain, 10 = worst imaginable.
 - mood: one of "heavy" | "flat" | "okay" | "bright" | "great".
-- adherenceTaken: boolean. Did she take today's prescribed medication(s)? true if she took them, false if she skipped/forgot.
+- adherenceTaken: boolean. Did the user take today's prescribed medication(s)? true if they took them, false if they skipped/forgot.
 - flare: one of "no" | "yes" | "ongoing". "no" = no flare today; "yes" = a new flare started today; "ongoing" = a flare from a prior day is still rolling.
 - energy: integer 1–10. 1 = wiped out / exhausted, 10 = full energy.
 

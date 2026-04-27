@@ -53,8 +53,10 @@ describe('/check-in page', () => {
     const provider = new FakeVoiceProvider()
     render(<CheckinPage providerOverride={provider} />)
 
+    // No profile is set in the test localStorage, so the opener uses the
+    // name-less form (per `lib/saha/variants.ts`).
     expect(
-      screen.getByText("Hey Sonakshi — glad you're here. How are you feeling today?"),
+      screen.getByText("Hey — glad you're here. How are you feeling today?"),
     ).toBeInTheDocument()
     expect(
       screen.getByText('Tap the orb and tell me in your own words.'),

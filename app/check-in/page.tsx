@@ -76,6 +76,7 @@ import { SwitchToTapsButton } from '@/components/check-in/SwitchToTapsButton'
 import { StopButton } from '@/components/check-in/StopButton'
 import { selectOpener } from '@/lib/saha/opener-engine'
 import { selectCloser } from '@/lib/saha/closer-engine'
+import { readProfile } from '@/lib/profile/storage'
 import {
   selectFollowUpQuestion,
   selectDeclineAcknowledgement,
@@ -246,9 +247,16 @@ export default function CheckinPage({
   // `null` → identical HTML → no mismatch.
   const [userId, setUserId] = useState<string | null>(null)
   const [todayIso, setTodayIso] = useState<string | null>(null)
+  // Profile-name read is deferred to post-mount for the same reason as
+  // userId/todayIso above — `readProfile` touches localStorage and would
+  // diverge between SSR and the client's first render. SSR + first paint
+  // see `null` (no name → name-less opener); the post-mount swap to the
+  // real value is a single re-render.
+  const [profileName, setProfileName] = useState<string | null>(null)
   useEffect(() => {
     setUserId(getOrCreateTestUserId())
     setTodayIso(todayIsoDate())
+    setProfileName(readProfile()?.name ?? null)
   }, [])
 
   const continuityQuery = useQuery(
@@ -299,15 +307,16 @@ export default function CheckinPage({
     )
   }, [])
 
-  // Recompute opener + closer whenever continuity changes. Pure functions —
-  // safe under the React 19 strict-mode double-invoke.
+  // Recompute opener + closer whenever continuity (or the profile name)
+  // changes. Pure functions — safe under the React 19 strict-mode
+  // double-invoke.
   const openerSelection = useMemo(
-    () => selectOpener(continuityState),
-    [continuityState],
+    () => selectOpener(continuityState, profileName),
+    [continuityState, profileName],
   )
   const closerSelection = useMemo(
-    () => selectCloser(continuityState),
-    [continuityState],
+    () => selectCloser(continuityState, profileName),
+    [continuityState, profileName],
   )
   // Post-save closer — reflects state AFTER this save. Only differs
   // from `closerSelection` when the +1 lands on a milestone threshold
@@ -316,13 +325,16 @@ export default function CheckinPage({
   // That's real." instead of the pre-save neutral default.
   const postSaveCloser = useMemo(
     () =>
-      selectCloser({
-        ...continuityState,
-        streakDays: continuityState.streakDays + 1,
-        // First-ever check-in is no longer "first-ever" once it saves.
-        isFirstEverCheckin: false,
-      }),
-    [continuityState],
+      selectCloser(
+        {
+          ...continuityState,
+          streakDays: continuityState.streakDays + 1,
+          // First-ever check-in is no longer "first-ever" once it saves.
+          isFirstEverCheckin: false,
+        },
+        profileName,
+      ),
+    [continuityState, profileName],
   )
 
   const createCheckin = useMutation(api.checkIns.createCheckin)
