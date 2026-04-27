@@ -126,6 +126,13 @@ export class SarvamAdapter implements VoiceProvider {
 
   private partialListeners: Array<(partial: string) => void> = []
   private errorListeners: Array<(err: VoiceError) => void> = []
+  /**
+   * Fix F.1: silence-VAD listeners. Adapter fans out the recorder's
+   * `onSilenceDetected` event to subscribers (the hook) instead of
+   * calling `this.stop()` directly. The hook owns stop policy so the
+   * reducer transitions via the same PROVIDER_STOPPED path as a tap.
+   */
+  private silenceListeners: Array<() => void> = []
 
   private mediaStream: MediaStream | null = null
   private recorder: SarvamRecorderLike | null = null
@@ -212,6 +219,16 @@ export class SarvamAdapter implements VoiceProvider {
 
   onError(cb: (err: VoiceError) => void): void {
     this.errorListeners.push(cb)
+  }
+
+  /**
+   * Fix F.1: subscribe to silence-VAD events. Fired once per turn when
+   * the recorder's `onSilenceDetected` triggers. The hook calls `stop()`
+   * in response so the reducer learns the transcript via the same
+   * PROVIDER_STOPPED path as a manual tap.
+   */
+  onSilence(cb: () => void): void {
+    this.silenceListeners.push(cb)
   }
 
   async start(): Promise<void> {
@@ -331,17 +348,26 @@ export class SarvamAdapter implements VoiceProvider {
     }
 
     // Silence VAD wiring (Phase 2) — fires once when the recorder
-    // detects trailing silence after speech. Adapter triggers stop()
-    // so the upload (or upload completion in streaming mode) finalises.
+    // detects trailing silence after speech.
+    //
+    // Fix F.1: stop policy moved to the hook. We fan the silence event
+    // out to external listeners (the hook subscribes via `onSilence`)
+    // instead of calling `this.stop()` directly. The previous shape
+    // discarded the Promise<Transcript> returned by stop() so the hook
+    // never learned the transcript and the reducer was stranded in
+    // `listening` while the audio had already been POSTed.
     if (typeof recorder.onSilenceDetected === 'function') {
       recorder.onSilenceDetected(() => {
         if (this.silenceFired || this.stopped) return
         this.silenceFired = true
-        // Schedule on a microtask so the recorder's emit loop completes
-        // the current chunk before we pull the rug.
-        Promise.resolve()
-          .then(() => this.stop())
-          .catch(() => undefined)
+        for (const cb of this.silenceListeners) {
+          try {
+            cb()
+          } catch {
+            // Listener errors are non-fatal — the hook is the only
+            // subscriber today and it already routes its own failures.
+          }
+        }
       })
     }
 

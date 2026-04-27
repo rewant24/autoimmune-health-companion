@@ -795,6 +795,14 @@ export function useCheckinMachine(
   //     requesting-permission via TAP_ORB on the autoplay-blocked
   //     path): the effect fires provider.start() with no payload.
   const priorStateRef = useRef<State['kind']>(state.kind)
+  // Fix F.1: track whether a stop() has already been initiated for
+  // the current listening turn. Set when silence VAD fires OR when
+  // the user taps the StopButton. Prevents a stale tap (after silence
+  // already auto-stopped) from racing a second provider.stop() call —
+  // which used to produce an empty POST plus a "stop() called before
+  // start()" error. Reset by the effect below when the reducer leaves
+  // the listening states.
+  const stopInitiatedRef = useRef(false)
 
   useEffect(() => {
     providerRef.current = provider
@@ -817,7 +825,37 @@ export function useCheckinMachine(
     const p = providerRef.current
     p.onPartial((text) => dispatch({ type: 'PARTIAL', text }))
     p.onError((error) => dispatch({ type: 'VOICE_ERROR', error }))
+    // Fix F.1: silence VAD callback. Mirrors the TAP_ORB stop branch —
+    // calls provider.stop() and dispatches PROVIDER_STOPPED with the
+    // resolved transcript so the reducer routes `listening` →
+    // `processing` and `listening-answer` → `extracting-answer`. The
+    // dedupe ref keeps a late tap or a stray second silence fire from
+    // racing a second stop() call.
+    p.onSilence?.(() => {
+      if (stopInitiatedRef.current) return
+      stopInitiatedRef.current = true
+      providerRef.current
+        .stop()
+        .then((transcript) =>
+          dispatch({ type: 'PROVIDER_STOPPED', transcript }),
+        )
+        .catch((err: unknown) => {
+          const ve = normaliseVoiceError(err)
+          dispatch({ type: 'VOICE_ERROR', error: ve })
+        })
+    })
   }, [])
+
+  // Fix F.1: clear the stop-initiated guard when the listening turn
+  // ends so the next turn's silence VAD / tap can fire fresh. We
+  // reset on any state.kind transition that leaves both listening
+  // states; entering them re-arms naturally because the ref defaults
+  // to false and the silence/tap branches set it.
+  useEffect(() => {
+    if (state.kind !== 'listening' && state.kind !== 'listening-answer') {
+      stopInitiatedRef.current = false
+    }
+  }, [state.kind])
 
   // R3-7: Haptic feedback lives on the Orb component (closer to the tap
   // event and present even when this hook isn't wired). Don't duplicate it
@@ -931,6 +969,10 @@ export function useCheckinMachine(
         return
       }
       if (current.kind === 'listening' || current.kind === 'listening-answer') {
+        // Fix F.1: dedupe with the silence-VAD branch. If silence has
+        // already kicked off stop() for this turn, swallow the tap.
+        if (stopInitiatedRef.current) return
+        stopInitiatedRef.current = true
         providerRef.current
           .stop()
           .then((transcript) =>

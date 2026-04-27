@@ -277,7 +277,7 @@ describe('SarvamAdapter — streaming mode', () => {
     expect(drained.length).toBeGreaterThan(0)
   })
 
-  it('triggers stop() when recorder fires onSilenceDetected', async () => {
+  it('forwards onSilence to listeners — Fix F.1 (hook owns stop policy)', async () => {
     const { stream } = makeFakeStream()
     const recorder = makeFakeRecorder()
     const ctrl = makeStreamingResponse()
@@ -290,6 +290,8 @@ describe('SarvamAdapter — streaming mode', () => {
       fetchImpl,
       streamingMode: 'streaming',
     })
+    const silenceCb = vi.fn()
+    a.onSilence(silenceCb)
     await a.start()
 
     // Drain body so streaming doesn't backpressure.
@@ -298,15 +300,15 @@ describe('SarvamAdapter — streaming mode', () => {
       | undefined
     void drainBody(init!.body as unknown as ReadableStream<Uint8Array>)
 
-    // The adapter's stop() will await recorder.stop() and the SSE final.
-    // Push final before firing silence so the await chain resolves cleanly.
-    setTimeout(() => {
-      ctrl.push('event: final\ndata: {"text":"done","durationMs":1}\n\n')
-      ctrl.end()
-    }, 0)
     recorder.fireSilence()
-    // The silence handler schedules stop on a microtask — wait for it.
-    await new Promise((r) => setTimeout(r, 10))
-    expect(recorder.stopCalls).toBe(1)
+    // Listener fires synchronously when the adapter fans out — no await.
+    expect(silenceCb).toHaveBeenCalledTimes(1)
+    // Adapter must NOT auto-stop the recorder anymore — that's the
+    // hook's job in production. Stale "auto-stop" was the bug F.1 fixes.
+    expect(recorder.stopCalls).toBe(0)
+
+    // Second silence fire on the same turn is swallowed by silenceFired.
+    recorder.fireSilence()
+    expect(silenceCb).toHaveBeenCalledTimes(1)
   })
 })

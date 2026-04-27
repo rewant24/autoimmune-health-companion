@@ -1042,6 +1042,8 @@ describe('reducer: voice C1 dialog states (Wave 2 transitions)', () => {
 interface FakeProvider extends VoiceProvider {
   start: VoiceProvider['start'] & { mock: { calls: unknown[][] } }
   stop: VoiceProvider['stop'] & { mock: { calls: unknown[][] } }
+  /** Test seam: fire the captured silence listener (Fix F.1). */
+  fireSilence: () => void
 }
 
 function makeFakeProvider(): FakeProvider {
@@ -1051,14 +1053,19 @@ function makeFakeProvider(): FakeProvider {
   } as unknown as VoiceCapabilities
   const start = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
   const stop = vi.fn<() => Promise<Transcript>>().mockResolvedValue({
-    text: '',
-    durationMs: 0,
+    text: 'auto-stopped transcript',
+    durationMs: 1500,
   } as Transcript)
+  let silenceCb: (() => void) | null = null
   return {
     start: start as FakeProvider['start'],
     stop: stop as FakeProvider['stop'],
     onPartial: vi.fn(),
     onError: vi.fn(),
+    onSilence: vi.fn((cb: () => void) => {
+      silenceCb = cb
+    }) as VoiceProvider['onSilence'],
+    fireSilence: () => silenceCb?.(),
     capabilities: caps,
   }
 }
@@ -1161,6 +1168,101 @@ describe('useCheckinMachine — Fix E auto-progress', () => {
     })
     await waitFor(() => {
       expect(result.current.state.kind).toBe('listening')
+    })
+  })
+})
+
+describe('useCheckinMachine — Fix F.1 silence VAD ownership', () => {
+  it('silence VAD: provider fires onSilence → hook stops + dispatches PROVIDER_STOPPED', async () => {
+    const provider = makeFakeProvider()
+    const { result } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined)),
+    )
+    // Drive idle → listening via the auto-progress path.
+    act(() => {
+      result.current.dispatch({
+        type: 'START_GREETING',
+        text: 'Hi.',
+        variantKey: 'first-ever',
+      })
+    })
+    act(() => {
+      result.current.dispatch({ type: 'GREETING_PLAYED' })
+    })
+    await waitFor(() => {
+      expect(provider.start).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('listening')
+    })
+
+    // Fire silence VAD via the captured listener.
+    act(() => {
+      provider.fireSilence()
+    })
+    await waitFor(() => {
+      expect(provider.stop).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('processing')
+    })
+    // The transcript from the fake stop() resolution should have been
+    // dispatched into the reducer via PROVIDER_STOPPED.
+    if (result.current.state.kind === 'processing') {
+      expect(result.current.state.transcript.text).toBe(
+        'auto-stopped transcript',
+      )
+    }
+  })
+
+  it('silence-then-tap: a tap after silence does not fire a second stop()', async () => {
+    const provider = makeFakeProvider()
+    // Pin stop() so PROVIDER_STOPPED only dispatches when we resolve it,
+    // letting us send the late TAP_ORB while the reducer is still in
+    // `listening`.
+    let resolveStop!: (t: Transcript) => void
+    ;(provider.stop as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      () =>
+        new Promise<Transcript>((resolve) => {
+          resolveStop = resolve
+        }),
+    )
+    const { result } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined)),
+    )
+    act(() => {
+      result.current.dispatch({
+        type: 'START_GREETING',
+        text: 'Hi.',
+        variantKey: 'first-ever',
+      })
+    })
+    act(() => {
+      result.current.dispatch({ type: 'GREETING_PLAYED' })
+    })
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('listening')
+    })
+
+    act(() => {
+      provider.fireSilence()
+    })
+    await waitFor(() => {
+      expect(provider.stop).toHaveBeenCalledTimes(1)
+    })
+
+    // Late tap arrives while stop() is still in flight — guard swallows.
+    act(() => {
+      result.current.dispatch({ type: 'TAP_ORB' })
+    })
+    expect(provider.stop).toHaveBeenCalledTimes(1)
+
+    // Resolve stop() — reducer transitions normally.
+    act(() => {
+      resolveStop({ text: 'late', durationMs: 1 } as Transcript)
+    })
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('processing')
     })
   })
 })

@@ -52,6 +52,7 @@ function makeFakeStream(): { stream: MediaStream; tracks: FakeTrack[] } {
 
 interface FakeRecorderHandle extends SarvamRecorderLike {
   emit: (chunk: Uint8Array) => void
+  fireSilence: () => void
   startCalls: number
   stopCalls: number
   startRejectsWith?: unknown
@@ -59,9 +60,13 @@ interface FakeRecorderHandle extends SarvamRecorderLike {
 
 function makeFakeRecorder(): FakeRecorderHandle {
   let listener: ((c: Uint8Array) => void) | null = null
+  let silenceListener: (() => void) | null = null
   const handle: FakeRecorderHandle = {
     onChunk(cb) {
       listener = cb
+    },
+    onSilenceDetected(cb) {
+      silenceListener = cb
     },
     async start() {
       handle.startCalls++
@@ -74,6 +79,9 @@ function makeFakeRecorder(): FakeRecorderHandle {
     },
     emit(chunk) {
       listener?.(chunk)
+    },
+    fireSilence() {
+      silenceListener?.()
     },
     startCalls: 0,
     stopCalls: 0,
@@ -307,6 +315,36 @@ describe('SarvamAdapter — start() (US-V.B.2)', () => {
     expect(Array.from(body)).toEqual([
       0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,
     ])
+  })
+
+  it('forwards onSilence to listeners in buffered mode — Fix F.1', async () => {
+    const { stream } = makeFakeStream()
+    const recorder = makeFakeRecorder()
+    const ctrl = makeStreamingResponse()
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(ctrl.response) as unknown as typeof fetch
+
+    const a = new SarvamAdapter({
+      language_code: 'en-IN',
+      getUserMediaImpl: vi.fn().mockResolvedValue(stream),
+      recorderFactory: () => recorder,
+      fetchImpl,
+    })
+    const silenceCb = vi.fn()
+    a.onSilence(silenceCb)
+    await a.start()
+
+    recorder.fireSilence()
+    expect(silenceCb).toHaveBeenCalledTimes(1)
+    // Adapter must NOT auto-stop the recorder — hook owns stop policy.
+    expect(recorder.stopCalls).toBe(0)
+    // No fetch yet either — buffered mode only POSTs from stop().
+    expect(fetchImpl).not.toHaveBeenCalled()
+
+    // Second silence on the same turn is swallowed by silenceFired.
+    recorder.fireSilence()
+    expect(silenceCb).toHaveBeenCalledTimes(1)
   })
 })
 

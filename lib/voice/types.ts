@@ -64,6 +64,14 @@ export interface VoiceProvider {
   stop(): Promise<Transcript>
   onPartial(cb: (partial: string) => void): void
   onError(cb: (err: VoiceError) => void): void
+  /**
+   * Optional. Adapter fires this when its source detects trailing
+   * silence after speech (Sarvam: 6 chunks at <0.01 RMS after first
+   * crossing 0.02 — ≈1.5s). The hook subscribes and calls `stop()` so
+   * the reducer transitions via the same `PROVIDER_STOPPED` path as a
+   * manual tap. Adapters without VAD (web-speech) omit this. Fix F.1.
+   */
+  onSilence?(cb: () => void): void
   capabilities: VoiceCapabilities
 }
 
