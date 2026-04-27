@@ -291,3 +291,97 @@ describe('SarvamRecorder — worklet helper', () => {
     expect(url.length).toBeGreaterThan(0)
   })
 })
+
+// --- Silence VAD ----------------------------------------------------------
+//
+// The recorder's silence VAD watches RMS energy over each emitted 16kHz
+// PCM chunk. Once it has heard a "loud" chunk (RMS ≥ 0.02), it counts
+// consecutive "silent" chunks (RMS < 0.01). At 6 trailing silent chunks
+// (the SILENCE_TRAILING_CHUNKS default — 1.5 s at 250 ms cadence) it
+// fires `onSilenceDetected` exactly once, never again for the same turn.
+
+/** A 4000-sample chunk of constant amplitude `amp` in [0, 1]. */
+function loudChunk(amp: number): Float32Array {
+  const f = new Float32Array(4000)
+  for (let i = 0; i < f.length; i++) f[i] = amp
+  return f
+}
+
+/** A 4000-sample silent chunk (all zeros). */
+function silentChunk(): Float32Array {
+  return new Float32Array(4000)
+}
+
+describe('SarvamRecorder — silence VAD', () => {
+  it('does not fire silence when never spoken', () => {
+    const r = new SarvamRecorder({
+      stream: makeStream(),
+      timesliceMs: 250,
+      audioContextCtor: FakeAudioContext as unknown as typeof AudioContext,
+    })
+    let silenceFires = 0
+    r.onSilenceDetected(() => silenceFires++)
+    // 10 silent chunks — well past SILENCE_TRAILING_CHUNKS — but no
+    // speech ever heard, so the VAD must stay quiet.
+    for (let i = 0; i < 10; i++) {
+      r.feedSamples(silentChunk(), 16000)
+    }
+    expect(silenceFires).toBe(0)
+  })
+
+  it('fires onSilenceDetected after speech then 6 trailing silent chunks', () => {
+    const r = new SarvamRecorder({
+      stream: makeStream(),
+      timesliceMs: 250,
+      audioContextCtor: FakeAudioContext as unknown as typeof AudioContext,
+    })
+    let silenceFires = 0
+    r.onSilenceDetected(() => silenceFires++)
+
+    // 1 loud chunk (amplitude 0.5 → RMS 0.5 ≫ 0.02 threshold).
+    r.feedSamples(loudChunk(0.5), 16000)
+    // 5 silent chunks: not yet at the trailing-silence threshold.
+    for (let i = 0; i < 5; i++) r.feedSamples(silentChunk(), 16000)
+    expect(silenceFires).toBe(0)
+    // 6th silent chunk crosses the threshold.
+    r.feedSamples(silentChunk(), 16000)
+    expect(silenceFires).toBe(1)
+  })
+
+  it('fires onSilenceDetected only once per turn', () => {
+    const r = new SarvamRecorder({
+      stream: makeStream(),
+      timesliceMs: 250,
+      audioContextCtor: FakeAudioContext as unknown as typeof AudioContext,
+    })
+    let silenceFires = 0
+    r.onSilenceDetected(() => silenceFires++)
+
+    r.feedSamples(loudChunk(0.5), 16000)
+    for (let i = 0; i < 10; i++) r.feedSamples(silentChunk(), 16000)
+    expect(silenceFires).toBe(1)
+  })
+
+  it('resets the silent-chunk counter when speech resumes mid-recording', () => {
+    const r = new SarvamRecorder({
+      stream: makeStream(),
+      timesliceMs: 250,
+      audioContextCtor: FakeAudioContext as unknown as typeof AudioContext,
+    })
+    let silenceFires = 0
+    r.onSilenceDetected(() => silenceFires++)
+
+    r.feedSamples(loudChunk(0.5), 16000)
+    // 5 silent chunks (almost there).
+    for (let i = 0; i < 5; i++) r.feedSamples(silentChunk(), 16000)
+    // A loud chunk in the middle resets the counter — simulates a brief
+    // pause mid-thought, NOT end of turn.
+    r.feedSamples(loudChunk(0.5), 16000)
+    // 5 more silent chunks → still under threshold from the reset point.
+    for (let i = 0; i < 5; i++) r.feedSamples(silentChunk(), 16000)
+    expect(silenceFires).toBe(0)
+    // 6th silent chunk after the reset → fires.
+    r.feedSamples(silentChunk(), 16000)
+    expect(silenceFires).toBe(1)
+  })
+})

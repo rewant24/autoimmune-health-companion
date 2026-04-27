@@ -9,6 +9,25 @@
 
 ---
 
+## 2026-04-27 — Voice C1 fix-pass (ADR-027): streaming-with-buffered-fallback + client-side silence VAD + state-machine cold greeting + StopButton
+
+**Related ADR:** ADR-027 (new) builds on ADR-026 (Sarvam streaming STT + TTS + multi-turn dialog).
+
+**What changed.** Six structural fixes to make Voice C1 actually work end-to-end:
+
+1. `SarvamAdapter` switches between streaming POST (HTTPS, `duplex: 'half'`, fires fetch on `start()`) and buffered POST (HTTP, fires fetch on `stop()`) via a new `streamingMode: 'auto' | 'streaming' | 'buffered'` option. Default `'auto'` resolves on `window.location.protocol`. Live partials only fire on Vercel deploys (HTTP/2+); local `next dev` (HTTP/1.1) still works in buffered mode without partials.
+2. `SarvamRecorder` adds RMS-based silence detection — `onSilenceDetected(cb)` fires once when the user stops speaking. Constants exported: `SPEECH_RMS_THRESHOLD = 0.02`, `SILENCE_RMS_THRESHOLD = 0.01`, `SILENCE_TRAILING_CHUNKS = 6` (1.5s at 250ms cadence). Adapter wires this to its own `stop()`.
+3. State machine adds `idle-greeting` + `idle-ready` states and `START_GREETING` / `GREETING_PLAYED` / `GREETING_FAILED` events. Page dispatches `START_GREETING` on mount when TTS is available so the cold-mount greeting plays without the user needing to tap first.
+4. `SpokenOpener` accepts an optional `autoSpeak` prop (default `true`); page passes `false` so the page-level greeting effect owns playback (avoids double-fire).
+5. New `<StopButton>` component mounted during `listening` + `listening-answer` ("Tap when done"). `transientCopyFor()` echoes `"I heard: '<transcript>'"` during `processing` + `extracting` + `extracting-answer` so users see what landed before extraction.
+6. Capability flags `{ partials: true, vad: true }` are now truthful end-to-end on Vercel.
+
+**Why.** Voice C1 shipped to a Vercel preview but smoke testing surfaced two bugs: (1) opener never auto-played on `/check-in` mount, (2) live transcript dictation never appeared (locally OR on preview). Both traced to pre-existing structural issues, not regressions. The buffered-POST commit was the right call when Chrome rejected streaming on HTTP/1.1, but it killed live partials wholesale. Fixing it required threading streaming-vs-buffered through the adapter without breaking local dev.
+
+**What did NOT change.** ADR-026 (provider choice + multi-turn dialog architecture) is unchanged. The server-side streaming bridge (`lib/voice/sarvam-stt-server.ts`) and SSE response pipeline (`app/api/transcribe/route.ts`) were already streaming-correct — only the client adapter and page-level greeting flow needed fixes.
+
+---
+
 ## 2026-04-26 — App shell: persistent BottomNav mounted via per-route layouts (no route-group rename)
 
 **Related ADR:** ADR-023 (post-save terminal route) — the auto-dismiss target shifts from `/` to `/journey/memory` to close the contribute → see-it-back loop.

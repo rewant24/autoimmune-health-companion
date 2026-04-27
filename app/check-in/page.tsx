@@ -73,6 +73,7 @@ import { SpokenOpener } from '@/components/check-in/SpokenOpener'
 import { Day1Tutorial } from '@/components/check-in/Day1Tutorial'
 import { MilestoneCelebration } from '@/components/check-in/MilestoneCelebration'
 import { SwitchToTapsButton } from '@/components/check-in/SwitchToTapsButton'
+import { StopButton } from '@/components/check-in/StopButton'
 import { selectOpener } from '@/lib/saha/opener-engine'
 import { selectCloser } from '@/lib/saha/closer-engine'
 import {
@@ -438,6 +439,31 @@ export default function CheckinPage({
     getOpener: getOpenerForGrant,
   })
 
+  // Voice C1 fix-pass — cold-mount greeting trigger.
+  // Dispatch START_GREETING exactly once per page lifetime when:
+  //   - state is `idle` (the cold mount entry point)
+  //   - TTS is available (otherwise the greeting won't be heard and we
+  //     leave the user in `idle` so SpokenOpener still renders the text)
+  //   - openerSelection has resolved (always non-empty in practice; the
+  //     guard avoids race conditions on the very first render where
+  //     continuityState may still be the FALLBACK)
+  // The flag is a ref so the effect doesn't re-fire if the user RESETs
+  // back to idle later — once they've heard the greeting in this session
+  // they don't need to hear it again.
+  const coldGreetingDispatchedRef = useRef(false)
+  useEffect(() => {
+    if (coldGreetingDispatchedRef.current) return
+    if (state.kind !== 'idle') return
+    if (!ttsAvailable) return
+    if (!openerSelection.text) return
+    coldGreetingDispatchedRef.current = true
+    dispatch({
+      type: 'START_GREETING',
+      text: openerSelection.text,
+      variantKey: openerSelection.key,
+    })
+  }, [state.kind, ttsAvailable, openerSelection, dispatch])
+
   // 1. Drain save-later queue once on mount. Retries reuse the original
   //    `clientRequestId` so any item the server already saw is a no-op.
   useEffect(() => {
@@ -603,6 +629,29 @@ export default function CheckinPage({
       tts.cancel()
     }
   }, [state.kind, state.kind === 'speaking-opener' ? state.text : '', tts, dispatch])
+
+  // 3a-greeting. Cold-mount greeting playback (Voice C1 fix-pass). Mirrors
+  //     3a but for the new `idle-greeting` state — fires on entry, dispatches
+  //     GREETING_PLAYED on resolve / GREETING_FAILED on reject. Both routes
+  //     land in `idle-ready` per the reducer; the user then taps the orb
+  //     to start listening.
+  useEffect(() => {
+    if (state.kind !== 'idle-greeting') return
+    let cancelled = false
+    const text = state.text
+    void tts.speak(text).then(
+      () => {
+        if (!cancelled) dispatch({ type: 'GREETING_PLAYED' })
+      },
+      () => {
+        if (!cancelled) dispatch({ type: 'GREETING_FAILED' })
+      },
+    )
+    return () => {
+      cancelled = true
+      tts.cancel()
+    }
+  }, [state.kind, state.kind === 'idle-greeting' ? state.text : '', tts, dispatch])
 
   // 3b. Speaking-question TTS playback for each follow-up turn.
   useEffect(() => {
@@ -957,11 +1006,22 @@ export default function CheckinPage({
   const showBailButton = isVoiceDialogState(state)
   return (
     <ScreenShell>
-      {state.kind === 'idle' ? (
+      {state.kind === 'idle' ||
+      state.kind === 'idle-greeting' ||
+      state.kind === 'idle-ready' ? (
         <header className="flex flex-col gap-3">
           <SpokenOpener
-            text={openerSelection.text}
-            variantKey={openerSelection.key}
+            text={
+              state.kind === 'idle' ? openerSelection.text : state.text
+            }
+            variantKey={
+              state.kind === 'idle' ? openerSelection.key : state.variantKey
+            }
+            // When TTS is available the page-level greeting effect owns
+            // playback (idle → idle-greeting → idle-ready). Disable
+            // SpokenOpener's internal auto-speak so the same utterance
+            // doesn't fire twice and cancel itself.
+            autoSpeak={!ttsAvailable}
           />
           <p className="text-base text-zinc-600 dark:text-zinc-400">
             Tap the orb and tell me in your own words.
@@ -997,6 +1057,16 @@ export default function CheckinPage({
       >
         {transientCopyFor(state)}
       </p>
+
+      {state.kind === 'listening' || state.kind === 'listening-answer' ? (
+        // Voice C1 fix-pass: explicit "Tap when done" button. Same
+        // intent as a second orb tap (the hook intercepts TAP_ORB from
+        // listening + listening-answer and calls provider.stop()), but
+        // visible. The recorder's silence VAD also triggers stop()
+        // automatically after trailing silence; this button is the
+        // deterministic fallback for noisy environments.
+        <StopButton onStop={() => dispatch({ type: 'TAP_ORB' })} />
+      ) : null}
 
       {showBailButton ? (
         <SwitchToTapsButton
@@ -1056,10 +1126,22 @@ function transientCopyFor(state: State): string {
       return state.partial || 'I\u2019m listening.'
     case 'listening-answer':
       return state.partial || 'I\u2019m listening.'
+    // Voice C1 fix-pass: echo back what we heard during the brief
+    // post-stop window so the user has feedback that their speech
+    // landed before extraction kicks in. Falls back to "Thinking..."
+    // when the transcript is empty (no-speech, empty STT).
     case 'processing':
+      return state.transcript.text
+        ? `I heard: \u201C${state.transcript.text}\u201D`
+        : 'Thinking...'
     case 'extracting':
+      return state.transcript.text
+        ? `I heard: \u201C${state.transcript.text}\u201D`
+        : 'Thinking...'
     case 'extracting-answer':
-      return 'Thinking...'
+      return state.answerTranscript.text
+        ? `I heard: \u201C${state.answerTranscript.text}\u201D`
+        : 'Thinking...'
     case 'requesting-permission':
       return 'Asking for the mic...'
     case 'speaking-opener':

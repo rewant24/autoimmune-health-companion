@@ -27,6 +27,32 @@
  */
 export type SarvamChunkListener = (chunk: Uint8Array) => void
 
+/**
+ * Fires once when the recorder has heard speech and then trailing
+ * silence long enough to call the turn over. The adapter wires this
+ * to its own `stop()` so the user doesn't have to tap a second time.
+ */
+export type SarvamSilenceListener = () => void
+
+/**
+ * Silence-VAD tuning constants. See `docs/features/voice-cycle-1-plan.md`
+ * for rationale.
+ *
+ * - `SPEECH_RMS_THRESHOLD` — a chunk's normalised RMS energy must
+ *   exceed this for the recorder to count as "the user has started
+ *   speaking". Below this, leading silence is ignored.
+ * - `SILENCE_RMS_THRESHOLD` — once speech has been heard, a chunk
+ *   below this counts as silent. The asymmetric thresholds (speech
+ *   stricter than silence) avoid borderline-energy chunks bouncing
+ *   the state machine.
+ * - `SILENCE_TRAILING_CHUNKS` — the number of consecutive silent
+ *   chunks required to declare the turn over. At the default 250 ms
+ *   chunk cadence this is 1.5 s of silence.
+ */
+export const SPEECH_RMS_THRESHOLD = 0.02
+export const SILENCE_RMS_THRESHOLD = 0.01
+export const SILENCE_TRAILING_CHUNKS = 6
+
 export interface SarvamRecorderOptions {
   /** Source mic stream from `navigator.mediaDevices.getUserMedia`. */
   stream: MediaStream
@@ -75,6 +101,12 @@ export class SarvamRecorder {
   private worklet: AudioWorkletNode | ScriptProcessorNode | null = null
 
   private chunkListeners: SarvamChunkListener[] = []
+  private silenceListeners: SarvamSilenceListener[] = []
+
+  /** Silence VAD state. */
+  private hasHeardSpeech = false
+  private consecutiveSilentChunks = 0
+  private silenceFired = false
 
   /** Float samples pending downsample, accumulated across worklet ticks. */
   private inputBuffer: Float32Array[] = []
@@ -120,6 +152,10 @@ export class SarvamRecorder {
 
   onChunk(cb: SarvamChunkListener): void {
     this.chunkListeners.push(cb)
+  }
+
+  onSilenceDetected(cb: SarvamSilenceListener): void {
+    this.silenceListeners.push(cb)
   }
 
   async start(): Promise<void> {
@@ -283,8 +319,50 @@ export class SarvamRecorder {
     out.set(this.outputBuffer.subarray(0, this.samplesPerChunk))
     const bytes = new Uint8Array(out.buffer, out.byteOffset, out.byteLength)
     this.outputSamples = 0
+
+    // Silence VAD: compute RMS over the chunk's int16 samples,
+    // normalised to [-1, 1] by dividing by 0x8000. Track whether the
+    // user has begun speaking so leading silence doesn't auto-stop a
+    // turn that hasn't started.
+    this.updateSilenceVad(out)
+
     for (const cb of this.chunkListeners) {
       cb(bytes)
+    }
+  }
+
+  private updateSilenceVad(samples: Int16Array): void {
+    if (this.silenceFired) return
+    let sumSquares = 0
+    for (let i = 0; i < samples.length; i++) {
+      const s = samples[i] / 0x8000
+      sumSquares += s * s
+    }
+    const rms = Math.sqrt(sumSquares / samples.length)
+
+    if (!this.hasHeardSpeech) {
+      if (rms >= SPEECH_RMS_THRESHOLD) {
+        this.hasHeardSpeech = true
+        this.consecutiveSilentChunks = 0
+      }
+      return
+    }
+
+    if (rms < SILENCE_RMS_THRESHOLD) {
+      this.consecutiveSilentChunks++
+      if (this.consecutiveSilentChunks >= SILENCE_TRAILING_CHUNKS) {
+        this.silenceFired = true
+        for (const cb of this.silenceListeners) {
+          try {
+            cb()
+          } catch {
+            // listener errors are non-fatal — keep emitting chunks
+          }
+        }
+      }
+    } else {
+      // Any non-silent chunk resets the trailing-silence counter.
+      this.consecutiveSilentChunks = 0
     }
   }
 
@@ -333,6 +411,7 @@ export class SarvamRecorder {
     this.source = null
     this.context = null
     this.chunkListeners = []
+    this.silenceListeners = []
   }
 }
 

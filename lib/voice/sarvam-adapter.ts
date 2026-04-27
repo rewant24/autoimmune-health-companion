@@ -9,9 +9,10 @@
  *
  *   getUserMedia → MediaStream
  *      → SarvamRecorder (WebAudio downsample to 16 kHz mono PCM s16le)
- *      → ReadableStream<Uint8Array>
+ *      → ReadableStream<Uint8Array>  (streaming mode)
+ *        OR Uint8Array buffer        (buffered mode — local HTTP/1.1)
  *      → fetch('/api/transcribe?lang=<code>',
- *              { method: 'POST', body: stream, duplex: 'half' })
+ *              { method: 'POST', body: stream|buffer, duplex: 'half' (streaming only) })
  *      → response body (text/event-stream)
  *      → SSE parser
  *      → onPartial(text) | resolve final transcript | typed VoiceError
@@ -24,6 +25,22 @@
  * `language_code` is mandatory in the constructor (no default
  * fallback). It flows through to the route via the `?lang=…` query
  * param and on to Sarvam as `'language-code'`.
+ *
+ * **Streaming vs buffered:** Chrome rejects streaming request bodies
+ * (`fetch` with a `ReadableStream` body and `duplex: 'half'`) on
+ * HTTP/1.1 — there is no localhost exception. Vercel deploys are
+ * HTTP/2+ so streaming works there; `next dev` is HTTP/1.1 so
+ * streaming fails. The adapter picks a mode at start():
+ *   - `streamingMode: 'streaming'` → fire fetch on start(), enqueue
+ *     each PCM chunk to the request stream as recorder emits it,
+ *     close the stream on stop(). Server emits SSE partials in real
+ *     time → live word-by-word UI.
+ *   - `streamingMode: 'buffered'` → buffer chunks during recording,
+ *     fire one POST at stop() with the concatenated body. Server
+ *     processes and returns the SSE final frame; no live partials.
+ *   - `streamingMode: 'auto'` (default) → streaming if
+ *     `window.location.protocol === 'https:'` (Vercel deploys, HTTPS
+ *     localhost dev with --experimental-https), buffered otherwise.
  */
 
 import { SarvamRecorder } from './sarvam-recorder'
@@ -33,6 +50,9 @@ import type {
   VoiceError,
   VoiceProvider,
 } from './types'
+
+/** Mode resolution at start(). See class doc-comment. */
+export type SarvamUploadMode = 'auto' | 'streaming' | 'buffered'
 
 /** Constructor args. `language_code` is mandatory (e.g. `en-IN`, `hi-IN`). */
 export interface SarvamAdapterOptions {
@@ -64,6 +84,13 @@ export interface SarvamAdapterOptions {
    * Override the AbortController constructor for tests.
    */
   abortControllerCtor?: typeof AbortController
+  /**
+   * Upload mode. `'auto'` (default) picks streaming on HTTPS,
+   * buffered on HTTP. Tests usually pin `'buffered'` so jsdom (which
+   * has no streaming support) doesn't complicate request-body
+   * assertions; the streaming path has its own test file.
+   */
+  streamingMode?: SarvamUploadMode
 }
 
 /**
@@ -73,6 +100,7 @@ export interface SarvamAdapterOptions {
  */
 export interface SarvamRecorderLike {
   onChunk(cb: (chunk: Uint8Array) => void): void
+  onSilenceDetected?(cb: () => void): void
   start(): Promise<void>
   stop(): Promise<void>
 }
@@ -94,6 +122,7 @@ export class SarvamAdapter implements VoiceProvider {
   ) => Promise<MediaStream>
   private readonly recorderFactory: (stream: MediaStream) => SarvamRecorderLike
   private readonly abortControllerCtor: typeof AbortController
+  private readonly streamingModeOpt: SarvamUploadMode
 
   private partialListeners: Array<(partial: string) => void> = []
   private errorListeners: Array<(err: VoiceError) => void> = []
@@ -103,17 +132,22 @@ export class SarvamAdapter implements VoiceProvider {
   private uploadController: AbortController | null = null
   private responseReader: ReadableStreamDefaultReader<Uint8Array> | null = null
   private fetchPromise: Promise<Response> | null = null
+
   /**
-   * Buffered PCM chunks captured between start() and stop(). Cycle 1
-   * uses a buffered upload (single POST on stop) rather than a streaming
-   * request body because Chrome requires HTTP/2 or HTTP/3 for streaming
-   * uploads — there is no localhost exception, so the streaming variant
-   * fails with `TypeError: Failed to fetch` against `next dev`. Response
-   * streaming still works on HTTP/1.1, so the SSE reply path is
-   * unchanged. See `lib/voice/sarvam-adapter.ts` history if reverting.
+   * Buffered mode: PCM chunks accumulate here during recording, get
+   * concatenated and POSTed once on stop().
    */
   private pcmChunks: Uint8Array[] = []
   private pcmByteLength = 0
+
+  /**
+   * Streaming mode: chunks are pushed into this writer as they arrive
+   * from the recorder; `stop()` closes the writer to signal end-of-audio
+   * to the server.
+   */
+  private bodyWriter: WritableStreamDefaultWriter<Uint8Array> | null = null
+  /** Resolved at start() — `'streaming'` or `'buffered'`. */
+  private resolvedMode: 'streaming' | 'buffered' = 'buffered'
 
   private startedAt = 0
   private latestPartial = ''
@@ -130,6 +164,9 @@ export class SarvamAdapter implements VoiceProvider {
   private started = false
   private stopped = false
 
+  /** Registered once the recorder is wired in start(); cleared on resetTurnState. */
+  private silenceFired = false
+
   constructor(opts: SarvamAdapterOptions) {
     if (
       typeof opts?.language_code !== 'string' ||
@@ -139,7 +176,7 @@ export class SarvamAdapter implements VoiceProvider {
         'SarvamAdapter: language_code is required (got empty or non-string).',
       )
     }
-    this.language_code = opts.language_code
+    this.language_code = opts.language_code.trim()
     this.endpoint = opts.endpoint ?? '/api/transcribe'
     this.fetchImpl =
       opts.fetchImpl ??
@@ -166,6 +203,7 @@ export class SarvamAdapter implements VoiceProvider {
       opts.recorderFactory ??
       ((stream: MediaStream) => new SarvamRecorder({ stream, timesliceMs: 250 }))
     this.abortControllerCtor = opts.abortControllerCtor ?? AbortController
+    this.streamingModeOpt = opts.streamingMode ?? 'auto'
   }
 
   onPartial(cb: (partial: string) => void): void {
@@ -187,6 +225,7 @@ export class SarvamAdapter implements VoiceProvider {
     }
     this.started = true
     this.startedAt = Date.now()
+    this.resolvedMode = this.resolveMode()
 
     // Pre-arm the final-settled promise BEFORE any awaits. The hook
     // re-arms start() for the answer turn while the reducer is already
@@ -215,9 +254,7 @@ export class SarvamAdapter implements VoiceProvider {
     }
     this.mediaStream = stream
 
-    // 2. Build the recorder — chunks accumulate in `pcmChunks` until
-    //    stop() flushes them as a single buffered POST. (See class
-    //    field comment for the HTTP/2 / streaming-upload reason.)
+    // 2. Build the recorder.
     let recorder: SarvamRecorderLike
     try {
       recorder = this.recorderFactory(stream)
@@ -237,11 +274,76 @@ export class SarvamAdapter implements VoiceProvider {
     }
     this.recorder = recorder
 
-    recorder.onChunk((chunk) => {
-      if (this.stopped) return
-      this.pcmChunks.push(chunk)
-      this.pcmByteLength += chunk.byteLength
-    })
+    // 3. Wire chunk + silence listeners.
+    if (this.resolvedMode === 'streaming') {
+      // Streaming mode: open the request stream + fire fetch BEFORE the
+      // first chunk arrives so the upload is hot-pipelined.
+      const ts = new TransformStream<Uint8Array, Uint8Array>()
+      this.bodyWriter = ts.writable.getWriter()
+
+      recorder.onChunk((chunk) => {
+        if (this.stopped) return
+        // Fire-and-forget; backpressure is acceptable, dropping a
+        // chunk is not — but TransformStream's default queue handles
+        // it for typical bitrates (32 KB/s).
+        this.bodyWriter?.write(chunk).catch(() => undefined)
+      })
+
+      this.uploadController = new this.abortControllerCtor()
+      const url = `${this.endpoint}?lang=${encodeURIComponent(this.language_code)}`
+      try {
+        this.fetchPromise = this.fetchImpl(url, {
+          method: 'POST',
+          body: ts.readable,
+          signal: this.uploadController.signal,
+          headers: { 'Content-Type': 'audio/wav' },
+          // `duplex: 'half'` is required by the spec when the body is
+          // a stream. TS lib.dom is stale on this; cast through unknown.
+          duplex: 'half',
+        } as unknown as RequestInit)
+      } catch (e) {
+        // Synchronous throw is rare but defensive. Treat as network err.
+        const err: VoiceError = {
+          kind: 'network',
+          message:
+            e instanceof Error
+              ? e.message
+              : 'SarvamAdapter: streaming fetch threw synchronously',
+        }
+        this.finalSettled?.reject(err)
+        this.finalSettled = null
+        this.cleanupAfterFailure()
+        this.emitError(err)
+        throw err
+      }
+      // Drain the SSE response in the background; rejections route
+      // through handleResponseFailure into finalSettled.reject.
+      this.consumeResponse(this.fetchPromise).catch((err) => {
+        this.handleResponseFailure(err)
+      })
+    } else {
+      // Buffered mode: chunks pile up; stop() will fire one POST.
+      recorder.onChunk((chunk) => {
+        if (this.stopped) return
+        this.pcmChunks.push(chunk)
+        this.pcmByteLength += chunk.byteLength
+      })
+    }
+
+    // Silence VAD wiring (Phase 2) — fires once when the recorder
+    // detects trailing silence after speech. Adapter triggers stop()
+    // so the upload (or upload completion in streaming mode) finalises.
+    if (typeof recorder.onSilenceDetected === 'function') {
+      recorder.onSilenceDetected(() => {
+        if (this.silenceFired || this.stopped) return
+        this.silenceFired = true
+        // Schedule on a microtask so the recorder's emit loop completes
+        // the current chunk before we pull the rug.
+        Promise.resolve()
+          .then(() => this.stop())
+          .catch(() => undefined)
+      })
+    }
 
     try {
       await recorder.start()
@@ -274,7 +376,7 @@ export class SarvamAdapter implements VoiceProvider {
     this.stopped = true
 
     // Stop the recorder first so any partial in-flight buffer flushes
-    // its trailing chunk into our buffer.
+    // its trailing chunk into our buffer (buffered) or stream (streaming).
     try {
       await this.recorder?.stop()
     } catch {
@@ -287,28 +389,38 @@ export class SarvamAdapter implements VoiceProvider {
     // mic indicator lit while we wait.
     this.releaseMicTracks()
 
-    // Concatenate buffered PCM and POST as a single (non-streaming)
-    // request body. Chrome requires HTTP/2+ for streaming request
-    // bodies and there is no localhost exception, so this buffered
-    // path is what works against `next dev` (HTTP/1.1).
-    const body = concatChunks(this.pcmChunks, this.pcmByteLength)
-    this.pcmChunks = []
-    this.pcmByteLength = 0
+    if (this.resolvedMode === 'streaming') {
+      // Close the body writer — server gets EOF on request body,
+      // pumps last chunks to Sarvam, and emits the SSE `final` frame.
+      const writer = this.bodyWriter
+      this.bodyWriter = null
+      try {
+        await writer?.close()
+      } catch {
+        // Already closed / errored — ignore; SSE consumer handles final.
+      }
+    } else {
+      // Buffered mode: concatenate and POST once. Chrome requires
+      // HTTP/2+ for streaming bodies and there is no localhost
+      // exception, so this is what works against `next dev` (HTTP/1.1).
+      const body = concatChunks(this.pcmChunks, this.pcmByteLength)
+      this.pcmChunks = []
+      this.pcmByteLength = 0
 
-    this.uploadController = new this.abortControllerCtor()
-    const url = `${this.endpoint}?lang=${encodeURIComponent(this.language_code)}`
-    this.fetchPromise = this.fetchImpl(url, {
-      method: 'POST',
-      body,
-      signal: this.uploadController.signal,
-      headers: { 'Content-Type': 'audio/wav' },
-    } as RequestInit)
+      this.uploadController = new this.abortControllerCtor()
+      const url = `${this.endpoint}?lang=${encodeURIComponent(this.language_code)}`
+      this.fetchPromise = this.fetchImpl(url, {
+        method: 'POST',
+        body,
+        signal: this.uploadController.signal,
+        headers: { 'Content-Type': 'audio/wav' },
+      } as RequestInit)
 
-    // Drain the SSE response in the background; rejections route
-    // through handleResponseFailure into finalSettled.reject.
-    this.consumeResponse(this.fetchPromise).catch((err) => {
-      this.handleResponseFailure(err)
-    })
+      // Drain SSE in background.
+      this.consumeResponse(this.fetchPromise).catch((err) => {
+        this.handleResponseFailure(err)
+      })
+    }
 
     if (!this.finalPromise) {
       const err: VoiceError = {
@@ -333,6 +445,26 @@ export class SarvamAdapter implements VoiceProvider {
     )
   }
 
+  /**
+   * Decide streaming vs buffered for this turn. `'auto'` checks the
+   * page protocol — HTTPS implies HTTP/2+ on every modern browser
+   * (Vercel deploys, localhost with --experimental-https). HTTP
+   * (plain `next dev`) cannot do streaming uploads in Chrome.
+   */
+  private resolveMode(): 'streaming' | 'buffered' {
+    if (this.streamingModeOpt === 'streaming') return 'streaming'
+    if (this.streamingModeOpt === 'buffered') return 'buffered'
+    // 'auto'
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.location !== 'undefined' &&
+      window.location.protocol === 'https:'
+    ) {
+      return 'streaming'
+    }
+    return 'buffered'
+  }
+
   /** Reset turn-scoped state but keep listeners — see stop() for context. */
   private resetTurnState(): void {
     this.started = false
@@ -341,6 +473,7 @@ export class SarvamAdapter implements VoiceProvider {
     this.uploadController = null
     this.responseReader = null
     this.fetchPromise = null
+    this.bodyWriter = null
     this.pcmChunks = []
     this.pcmByteLength = 0
     this.startedAt = 0
@@ -349,6 +482,7 @@ export class SarvamAdapter implements VoiceProvider {
     this.errored = null
     this.finalSettled = null
     this.finalPromise = null
+    this.silenceFired = false
   }
 
   // --- Internals ----------------------------------------------------------
@@ -536,6 +670,12 @@ export class SarvamAdapter implements VoiceProvider {
     } catch {
       // ignore
     }
+    try {
+      this.bodyWriter?.abort()
+    } catch {
+      // ignore
+    }
+    this.bodyWriter = null
     this.pcmChunks = []
     this.pcmByteLength = 0
     this.recorder?.stop().catch(() => undefined)
@@ -549,6 +689,7 @@ export class SarvamAdapter implements VoiceProvider {
     this.releaseMicTracks()
     this.recorder = null
     this.uploadController = null
+    this.bodyWriter = null
     this.pcmChunks = []
     this.pcmByteLength = 0
     // Allow callers to retry via a fresh start() after a failure.

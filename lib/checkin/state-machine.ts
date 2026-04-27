@@ -41,6 +41,16 @@ export type SaveFailedError = { kind: 'save-failed'; message?: string }
 
 export type State =
   | { kind: 'idle' }
+  // Voice C1 fix-pass: cold-mount greeting plays the opener BEFORE
+  // permission is requested. `idle-greeting` is entered on mount when
+  // TTS is available; `idle-ready` is the resting state after the
+  // greeting plays (or is dismissed) — the user must tap the orb to
+  // begin the listening turn. This decouples opener playback from the
+  // TAP_ORB → requesting-permission gate so users hear "How are you
+  // feeling today?" automatically without losing the explicit consent
+  // step before the mic activates.
+  | { kind: 'idle-greeting'; text: string; variantKey: OpenerVariantKey }
+  | { kind: 'idle-ready'; text: string; variantKey: OpenerVariantKey }
   | { kind: 'requesting-permission' }
   | { kind: 'listening'; partial: string }
   | { kind: 'processing'; transcript: Transcript }
@@ -197,6 +207,18 @@ export type Event =
   // the union members + no-op cases; Wave 2 implements transitions.
   | { type: 'OPENER_PLAYED' }
   | { type: 'OPENER_FAILED' }
+  // Voice C1 fix-pass: cold-mount greeting events. Page dispatches
+  // START_GREETING on mount when TTS is available; the TTS effect
+  // dispatches GREETING_PLAYED on resolve, GREETING_FAILED on reject
+  // (autoplay block, voice synth missing). Both routes land in
+  // `idle-ready`; the user then taps the orb to begin listening.
+  | {
+      type: 'START_GREETING'
+      text: string
+      variantKey: OpenerVariantKey
+    }
+  | { type: 'GREETING_PLAYED' }
+  | { type: 'GREETING_FAILED' }
   // ASK_QUESTION carries the question text + an optional `seed`. The seed
   // is required when transitioning from `extracting` (the reducer has no
   // metrics/missing/declined to inherit from that state). When dispatched
@@ -240,6 +262,35 @@ export function reducer(state: State, event: Event): State {
 
   switch (state.kind) {
     case 'idle': {
+      if (event.type === 'TAP_ORB') return { kind: 'requesting-permission' }
+      if (event.type === 'START_GREETING') {
+        return {
+          kind: 'idle-greeting',
+          text: event.text,
+          variantKey: event.variantKey,
+        }
+      }
+      return state
+    }
+    case 'idle-greeting': {
+      // TAP_ORB during greeting cancels TTS (page-level effect handles
+      // tts.cancel()) and goes straight to permission request — lets an
+      // impatient user skip the spoken opener.
+      if (event.type === 'TAP_ORB') {
+        return { kind: 'requesting-permission' }
+      }
+      // Both played + failed land in idle-ready: the user has read or
+      // heard the opener and now controls when listening starts.
+      if (event.type === 'GREETING_PLAYED' || event.type === 'GREETING_FAILED') {
+        return {
+          kind: 'idle-ready',
+          text: state.text,
+          variantKey: state.variantKey,
+        }
+      }
+      return state
+    }
+    case 'idle-ready': {
       if (event.type === 'TAP_ORB') return { kind: 'requesting-permission' }
       return state
     }
@@ -630,6 +681,8 @@ export type OrbVisualState = 'idle' | 'listening' | 'processing' | 'error'
 export function toOrbState(state: State): OrbVisualState {
   switch (state.kind) {
     case 'idle':
+    case 'idle-greeting':
+    case 'idle-ready':
       return 'idle'
     case 'listening':
     case 'listening-answer':
@@ -765,15 +818,23 @@ export function useCheckinMachine(
 
     // Intent interception for TAP_ORB — fire side effects, then dispatch.
     if (event.type === 'TAP_ORB') {
-      if (current.kind === 'idle') {
+      if (
+        current.kind === 'idle' ||
+        current.kind === 'idle-greeting' ||
+        current.kind === 'idle-ready'
+      ) {
+        // Voice C1 fix-pass: idle-greeting and idle-ready are the new
+        // post-mount cold-start states; TAP_ORB from any of them kicks
+        // listening. The opener payload is only attached when starting
+        // from cold `idle` (no greeting yet); after idle-greeting/idle-ready
+        // the user has already heard or skipped the opener and a second
+        // play would be jarring.
+        const fromCold = current.kind === 'idle'
         dispatch({ type: 'TAP_ORB' })
-        // Kick off provider.start; resolve → PERMISSION_GRANTED (with the
-        // optional opener payload so the reducer can route into
-        // speaking-opener for the conversational dialog).
         providerRef.current
           .start()
           .then(() => {
-            const opener = optionsRef.current?.getOpener?.()
+            const opener = fromCold ? optionsRef.current?.getOpener?.() : undefined
             if (opener) {
               dispatch({ type: 'PERMISSION_GRANTED', opener })
             } else {

@@ -43,6 +43,15 @@ export interface SpokenOpenerProps {
    * cold-start, streak-N, re-entry, etc.
    */
   variantKey: string
+  /**
+   * Whether to auto-speak on mount + variant change. Defaults to `true`
+   * to preserve the standalone-component behaviour. The check-in page
+   * passes `false` so its state-machine-driven greeting effect owns
+   * the cold-mount TTS — without this opt-out the greeting would fire
+   * twice (once from this component, once from the page) and the
+   * second call would cancel the first.
+   */
+  autoSpeak?: boolean
 }
 
 function readTtsDisabled(): boolean {
@@ -74,6 +83,7 @@ function prefersReducedMotion(): boolean {
 export function SpokenOpener({
   text,
   variantKey,
+  autoSpeak = true,
 }: SpokenOpenerProps): React.JSX.Element {
   const ttsRef = useRef<TtsProvider | null>(null)
   if (ttsRef.current === null) ttsRef.current = getTtsProvider()
@@ -106,7 +116,10 @@ export function SpokenOpener({
   )
 
   // Auto-speak on mount and whenever the opener variant changes.
+  // Skip when the parent has taken over playback by passing
+  // `autoSpeak={false}` — see prop docstring.
   useEffect(() => {
+    if (!autoSpeak) return
     if (!available) return
     if (prefersReducedMotion()) return
     if (readTtsDisabled()) return
@@ -114,7 +127,7 @@ export function SpokenOpener({
     return () => {
       ttsRef.current?.cancel()
     }
-  }, [available, speak, text, variantKey])
+  }, [autoSpeak, available, speak, text, variantKey])
 
   const startLongPress = useCallback(() => {
     longPressFired.current = false

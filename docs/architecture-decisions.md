@@ -500,3 +500,41 @@ Resolvers picked by env: `VOICE_PROVIDER=sarvam` (STT), `VOICE_TTS_PROVIDER=sarv
 - Option C (full duplex / barge-in): out of scope for cycle 1.
 
 **Supersedes:** ADR-018 on the deferral. ADR-018 stays in the record as the point-in-time rationale; ADR-026 is the active decision.
+
+## ADR-027 — Voice C1 fix-pass: streaming-with-buffered-fallback upload + client-side silence VAD + state-machine-driven cold greeting
+
+**Date:** 2026-04-27
+**Status:** Accepted
+
+**Context.** Voice C1 shipped end-to-end on a Vercel preview but failed two smoke checks: (1) the opener "How are you feeling today?" never auto-played on `/check-in` mount, and (2) live word-by-word transcript dictation never appeared on either local dev or the deployed preview. Tracing both bugs revealed pre-existing structural issues, not regressions:
+
+- The state machine's `speaking-opener` state was gated on `TAP_ORB → requesting-permission → PERMISSION_GRANTED`, so on cold mount the opener TTS never fired without an orb tap.
+- A prior commit had switched `SarvamAdapter` from streaming POST to buffered-POST-on-stop because Chrome rejects streaming request bodies on HTTP/1.1 (the `next dev` default). The buffered path POSTs the entire audio blob in one shot at `stop()`, so SSE `partial` frames are never received during recording — the `partials: true` capability flag was a lie.
+- The recorder had no client-side voice-activity detection, so the only path to `stop()` was a second orb tap. Users didn't reliably discover this. The `vad: true` capability was also a lie.
+- After `stop()`, the transcript flowed straight into metric extraction with no intermediate "I heard …" feedback frame.
+
+**Decision.** Six structural fixes, shipped as a single fix-pass on `feat/voice-sarvam`:
+
+1. **Streaming-with-buffered-fallback upload.** `SarvamAdapter` gains a `streamingMode: 'auto' | 'streaming' | 'buffered'` option. `'auto'` (default) selects streaming on HTTPS (`window.location.protocol === 'https:'`) and buffered otherwise. Streaming opens a `TransformStream`, fires `fetch(..., { body: stream, duplex: 'half' })` synchronously in `start()`, pipes recorder chunks to the writer as they arrive, and closes the writer on `stop()`. Buffered keeps the prior concat-and-POST-on-stop behaviour so local `next dev` (HTTP/1.1) still smoke-tests the data path. **Trade-off: live partials only fire on Vercel deploys.** Tests default to buffered (jsdom http: protocol) so the existing 26-test contract is preserved; new `tests/voice/sarvam-adapter-streaming.test.ts` pins the streaming mode explicitly.
+
+2. **Client-side silence VAD.** `SarvamRecorder` exposes `onSilenceDetected(cb)` and tracks RMS over each emitted PCM chunk. Once a chunk exceeds `SPEECH_RMS_THRESHOLD = 0.02` the recorder begins counting consecutive chunks below `SILENCE_RMS_THRESHOLD = 0.01`; at `SILENCE_TRAILING_CHUNKS = 6` (1.5s at 250ms cadence) the listener fires once. Asymmetric thresholds avoid borderline-energy chunks bouncing the state. `SarvamAdapter` wires this to its own `stop()` so the user doesn't need a second tap.
+
+3. **State-machine-driven cold greeting.** Two new states added: `idle-greeting` (TTS playing, no mic) and `idle-ready` (post-greeting, awaiting orb tap). Three new events: `START_GREETING`, `GREETING_PLAYED`, `GREETING_FAILED`. The page dispatches `START_GREETING` on mount when `ttsAvailable && state.kind === 'idle' && openerSelection.text`. A `coldGreetingDispatchedRef` ensures it fires once per page lifetime. Cleanup cancels TTS on state transition. `TAP_ORB` from `idle-greeting` skips the remaining greeting and jumps to `requesting-permission`. The hook treats `idle`, `idle-greeting`, and `idle-ready` identically for `TAP_ORB` listening kickoff but only attaches an opener payload to `PERMISSION_GRANTED` when starting from cold `idle` (avoiding double-opener after a greeting was already heard).
+
+4. **`SpokenOpener.autoSpeak` opt-out.** New optional prop (default `true`) lets the page suppress the component's internal auto-speak so the page-level greeting effect owns playback. Without this, mounting the component in `idle` would fire `tts.speak()` once, and the immediate `START_GREETING` dispatch would unmount it (running `tts.cancel()`) and the `idle-greeting` effect would speak again — wasteful and visibly stuttering.
+
+5. **StopButton + heard-transcript echo.** New `<StopButton>` component (mirrors the `SwitchToTapsButton` pattern) renders during `listening` + `listening-answer` with a "Tap when done" affordance. `transientCopyFor()` now echoes `"I heard: '<transcript>'"` during `processing`, `extracting`, and `extracting-answer` so the user has visible feedback that their speech landed before extraction kicks in.
+
+6. **Honest capability flags.** With (1) and (2) in place, `SarvamAdapter.capabilities = { partials: true, vad: true }` is now truthful end-to-end on Vercel deploys. Local dev (buffered) returns the same flags but partials simply don't fire — the page handles partials being absent fine.
+
+**Consequences.**
+- Pros: cold-mount voice greeting works (Bug 1 fixed); live word-by-word transcript renders on Vercel (Bug 2 fixed); silence auto-stop ends the chicken-and-egg "tap to start, tap to stop, but I never showed you the second tap" UX trap; the production capability flags don't lie.
+- Cons: streaming/buffered split means live partials are gated on the deployment target. We lose live-partials in local dev; that's the price of the Chrome HTTP/1.1 streaming-body restriction. Documented; if it ever bites we ship `next dev --experimental-https` as the fix.
+- Risks: silence VAD thresholds are tuned for headset-quality input; loud rooms may never auto-stop. The visible Stop button is the safety net. Real-world tuning will likely need a follow-up.
+
+**Alternatives considered.**
+- Server-side VAD only (Sarvam's own VAD signal): blocked — there's no live socket for the server to send the signal back over. Buffered mode means a single upload-then-process round-trip with no intermediate signalling.
+- Auto-play opener as a one-tap-to-greet button: rejected for v1 — a passive cold-mount greeting is the desired UX. The button-fallback pattern is documented as a backup if browser autoplay blocks fire too often during real-world testing.
+- Re-using `speaking-opener` for cold mount: rejected — `speaking-opener` is gated on permission grant by design (the dialog version follows a `PERMISSION_GRANTED(opener)` payload). Decoupling cold greeting from permission is exactly the bug we're fixing.
+
+**Supersedes / amends:** none. ADR-026 stays the source of truth for the voice provider choice; ADR-027 documents the implementation refinements that made C1 actually work end-to-end.
