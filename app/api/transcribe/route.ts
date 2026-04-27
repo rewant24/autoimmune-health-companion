@@ -402,8 +402,12 @@ export async function POST(request: Request): Promise<Response> {
     Connection: 'keep-alive',
     'X-Voice-Bytes': String(bytesProxied),
     'X-Voice-Duration-Ms': '0',
-    // Reference cap-hit flags so older lint rules don't flag the closures
-    // — these are real values consumed by the SSE error frames above.
+    // X-Voice-* are cost-telemetry response headers — observability hooks
+    // for the Sarvam-spend dashboard, not load-bearing for the client.
+    // `Cap-Hit` flips to '1' if either the byte cap (5 MB) or the
+    // duration cap (90 s) tripped during this stream. The SSE `final` /
+    // `error` frames carry the canonical end-of-session totals; these
+    // headers exist for proxies / log scrapers that don't parse SSE.
     'X-Voice-Cap-Hit': durationCapHit || byteCapHit ? '1' : '0',
   })
 

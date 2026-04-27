@@ -22,6 +22,7 @@ import {
   isTtsAvailable,
   resetVoiceCacheForTests,
 } from '@/lib/voice/web-speech-tts-adapter'
+import type { TtsProvider } from '@/lib/voice/types'
 
 // --- Fake `SpeechSynthesisUtterance` --------------------------------------
 
@@ -230,6 +231,24 @@ describe('createTtsAdapter — speak()', () => {
     resetVoiceCacheForTests()
     const tts = createTtsAdapter()
     await expect(tts.speak('silent')).resolves.toBeUndefined()
+  })
+})
+
+describe('createTtsAdapter — TtsProvider contract', () => {
+  // Compile-time contract test: if the Web Speech adapter ever drifts
+  // out of `TtsProvider` shape, this assignment fails `tsc`. Mirrors the
+  // structural test in tests/voice/sarvam-tts-adapter.test.ts so both
+  // implementations of `TtsProvider` are pinned the same way.
+  it('the returned adapter satisfies TtsProvider', () => {
+    installFakeSynthesis()
+    try {
+      const tts: TtsProvider = createTtsAdapter()
+      expect(typeof tts.speak).toBe('function')
+      expect(typeof tts.cancel).toBe('function')
+      expect(typeof tts.isAvailable).toBe('function')
+    } finally {
+      clearSynthesis()
+    }
   })
 })
 

@@ -67,12 +67,16 @@ export class SarvamTtsAdapter implements TtsProvider {
   private pending: PendingSession | null = null
 
   constructor(opts: SarvamTtsAdapterOptions) {
-    if (!opts || typeof opts.language_code !== 'string' || opts.language_code.length === 0) {
+    if (
+      !opts ||
+      typeof opts.language_code !== 'string' ||
+      opts.language_code.trim().length === 0
+    ) {
       throw new Error('SarvamTtsAdapter: `language_code` is required')
     }
-    this.language_code = opts.language_code
-    if (typeof opts.voice === 'string' && opts.voice.length > 0) {
-      this.voice = opts.voice
+    this.language_code = opts.language_code.trim()
+    if (typeof opts.voice === 'string' && opts.voice.trim().length > 0) {
+      this.voice = opts.voice.trim()
     }
   }
 

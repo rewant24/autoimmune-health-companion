@@ -44,7 +44,9 @@ const DEFAULT_LANGUAGE_CODE = 'en-IN'
 // `NEXT_PUBLIC_*` variable out by hand below — do NOT refactor back into
 // a `readEnv(name)` helper.
 function safeEnv(value: string | undefined): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
 }
 
 // --- STT ------------------------------------------------------------------
