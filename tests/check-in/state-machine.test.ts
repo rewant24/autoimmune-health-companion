@@ -10,12 +10,19 @@
  *   - stray events are ignored (state unchanged)
  */
 
-import { describe, expect, it } from 'vitest'
-import type { Transcript, VoiceError } from '@/lib/voice/types'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import type {
+  Transcript,
+  VoiceCapabilities,
+  VoiceError,
+  VoiceProvider,
+} from '@/lib/voice/types'
 import {
   initialState,
   reducer,
   toOrbState,
+  useCheckinMachine,
   type State,
 } from '@/lib/checkin/state-machine'
 
@@ -68,8 +75,10 @@ describe('reducer: idle-greeting / idle-ready transitions (Voice C1 fix-pass)', 
     variantKey: 'first-ever' as const,
   }
 
-  it('GREETING_PLAYED moves idle-greeting → idle-ready (carries text + variant)', () => {
-    expect(reducer(greeting, { type: 'GREETING_PLAYED' })).toEqual(ready)
+  it('GREETING_PLAYED moves idle-greeting → requesting-permission (Fix E auto-progress, ADR-026)', () => {
+    expect(reducer(greeting, { type: 'GREETING_PLAYED' })).toEqual({
+      kind: 'requesting-permission',
+    })
   })
 
   it('GREETING_FAILED moves idle-greeting → idle-ready with greetingBlocked: true (Fix C — page surfaces the autoplay-blocked cue)', () => {
@@ -79,12 +88,9 @@ describe('reducer: idle-greeting / idle-ready transitions (Voice C1 fix-pass)', 
     })
   })
 
-  it('GREETING_PLAYED does not set greetingBlocked (natural cold-start path)', () => {
+  it('GREETING_PLAYED produces a clean requesting-permission with no extra fields', () => {
     const result = reducer(greeting, { type: 'GREETING_PLAYED' })
-    expect(result.kind).toBe('idle-ready')
-    if (result.kind === 'idle-ready') {
-      expect(result.greetingBlocked).toBeUndefined()
-    }
+    expect(result).toEqual({ kind: 'requesting-permission' })
   })
 
   it('TAP_ORB during idle-greeting jumps to requesting-permission (skip the greeting)', () => {
@@ -1028,5 +1034,133 @@ describe('reducer: voice C1 dialog states (Wave 2 transitions)', () => {
       { type: 'CLOSER_PLAYED' },
     ]
     expect(events).toHaveLength(8)
+  })
+})
+
+// --- Fix E hook tests ------------------------------------------------------
+
+interface FakeProvider extends VoiceProvider {
+  start: VoiceProvider['start'] & { mock: { calls: unknown[][] } }
+  stop: VoiceProvider['stop'] & { mock: { calls: unknown[][] } }
+}
+
+function makeFakeProvider(): FakeProvider {
+  const caps = {
+    streaming: false,
+    interim: false,
+  } as unknown as VoiceCapabilities
+  const start = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
+  const stop = vi.fn<() => Promise<Transcript>>().mockResolvedValue({
+    text: '',
+    durationMs: 0,
+  } as Transcript)
+  return {
+    start: start as FakeProvider['start'],
+    stop: stop as FakeProvider['stop'],
+    onPartial: vi.fn(),
+    onError: vi.fn(),
+    capabilities: caps,
+  }
+}
+
+describe('useCheckinMachine — Fix E auto-progress', () => {
+  it('fires provider.start() on idle-greeting → requesting-permission (auto-progress)', async () => {
+    const provider = makeFakeProvider()
+    const { result } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined)),
+    )
+
+    act(() => {
+      result.current.dispatch({
+        type: 'START_GREETING',
+        text: 'Hi.',
+        variantKey: 'first-ever',
+      })
+    })
+    expect(provider.start).not.toHaveBeenCalled()
+
+    act(() => {
+      result.current.dispatch({ type: 'GREETING_PLAYED' })
+    })
+
+    await waitFor(() => {
+      expect(provider.start).toHaveBeenCalledTimes(1)
+    })
+    // After start() resolves, the effect dispatches a payload-less
+    // PERMISSION_GRANTED → reducer drops into freeform listening
+    // (opener was already spoken so we don't replay it).
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('listening')
+    })
+  })
+
+  it('cold TAP_ORB from idle still attaches opener payload (regression for priorStateRef)', async () => {
+    const provider = makeFakeProvider()
+    const getOpener = vi.fn(() => ({
+      text: 'Hi there.',
+      variantKey: 'first-ever' as const,
+    }))
+    const { result } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined), {
+        getOpener,
+      }),
+    )
+
+    act(() => {
+      result.current.dispatch({ type: 'TAP_ORB' })
+    })
+
+    await waitFor(() => {
+      expect(provider.start).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('speaking-opener')
+    })
+    expect(getOpener).toHaveBeenCalled()
+  })
+
+  it('does not double-fire start() on cold tap (interceptor + effect must not both call start)', async () => {
+    const provider = makeFakeProvider()
+    const { result } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined)),
+    )
+    act(() => {
+      result.current.dispatch({ type: 'TAP_ORB' })
+    })
+    await waitFor(() => {
+      expect(provider.start).toHaveBeenCalledTimes(1)
+    })
+    // Allow the requesting-permission effect to run if it's going to.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(provider.start).toHaveBeenCalledTimes(1)
+  })
+
+  it('idle-ready TAP_ORB (greetingBlocked path) fires start() via effect', async () => {
+    const provider = makeFakeProvider()
+    const { result } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined)),
+    )
+    act(() => {
+      result.current.dispatch({
+        type: 'START_GREETING',
+        text: 'Hi.',
+        variantKey: 'first-ever',
+      })
+    })
+    act(() => {
+      result.current.dispatch({ type: 'GREETING_FAILED' })
+    })
+    expect(result.current.state.kind).toBe('idle-ready')
+    expect(provider.start).not.toHaveBeenCalled()
+
+    act(() => {
+      result.current.dispatch({ type: 'TAP_ORB' })
+    })
+    await waitFor(() => {
+      expect(provider.start).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('listening')
+    })
   })
 })

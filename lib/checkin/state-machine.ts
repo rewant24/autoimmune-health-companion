@@ -290,16 +290,14 @@ export function reducer(state: State, event: Event): State {
       if (event.type === 'TAP_ORB') {
         return { kind: 'requesting-permission' }
       }
-      // Both played + failed land in idle-ready: the user has read or
-      // heard the opener and now controls when listening starts. The
-      // FAILED route carries `greetingBlocked: true` so the page can
-      // surface a "Tap to hear" cue near the speaker icon (Fix C).
+      // Fix E (ADR-026): conversational mode flows opener → listening
+      // without a tap. GREETING_PLAYED auto-progresses straight to
+      // requesting-permission; the hook's requesting-permission effect
+      // fires provider.start() so the mic prompt appears. GREETING_FAILED
+      // keeps the manual gate (Fix C cue) so the user can read+tap when
+      // Chrome blocked autoplay.
       if (event.type === 'GREETING_PLAYED') {
-        return {
-          kind: 'idle-ready',
-          text: state.text,
-          variantKey: state.variantKey,
-        }
+        return { kind: 'requesting-permission' }
       }
       if (event.type === 'GREETING_FAILED') {
         return {
@@ -787,6 +785,16 @@ export function useCheckinMachine(
   const onSaveRef = useRef(onSave)
   const stateRef = useRef(state)
   const optionsRef = useRef(options)
+  // Fix E: track the prior state.kind so the requesting-permission
+  // auto-progress effect can distinguish two callers:
+  //   - cold tap (idle → requesting-permission): the TAP_ORB
+  //     interceptor already fires provider.start() and owns the
+  //     opener payload. The effect must skip.
+  //   - auto-progress (idle-greeting → requesting-permission via
+  //     GREETING_PLAYED) and idle-ready tap (idle-ready →
+  //     requesting-permission via TAP_ORB on the autoplay-blocked
+  //     path): the effect fires provider.start() with no payload.
+  const priorStateRef = useRef<State['kind']>(state.kind)
 
   useEffect(() => {
     providerRef.current = provider
@@ -834,28 +842,64 @@ export function useCheckinMachine(
     // question so depending on it correctly fires once per turn.
   }, [state.kind, state.kind === 'listening-answer' ? state.metric : null])
 
+  // Fix E: auto-fire provider.start() when the reducer enters
+  // `requesting-permission` from `idle-greeting` (auto-progress on
+  // GREETING_PLAYED) or `idle-ready` (manual tap on the
+  // autoplay-blocked path). The cold-tap path (prior === 'idle')
+  // is handled by the wrappedDispatch interceptor below, which
+  // owns the opener payload — this effect skips it.
+  useEffect(() => {
+    if (state.kind !== 'requesting-permission') {
+      priorStateRef.current = state.kind
+      return
+    }
+    const prior = priorStateRef.current
+    priorStateRef.current = state.kind
+    // Cold-tap: interceptor already fired start() with the opener.
+    if (prior === 'idle') return
+    // Any other prior is a no-op (defensive guard against future
+    // transitions we haven't designed for).
+    if (prior !== 'idle-greeting' && prior !== 'idle-ready') return
+    let cancelled = false
+    providerRef.current
+      .start()
+      .then(() => {
+        if (cancelled) return
+        // Opener was already spoken (idle-greeting → played) or read
+        // (idle-ready GREETING_FAILED path) — drop into freeform
+        // listening with no opener payload.
+        dispatch({ type: 'PERMISSION_GRANTED' })
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        const ve = normaliseVoiceError(err)
+        if (ve.kind === 'permission-denied') {
+          dispatch({ type: 'PERMISSION_DENIED' })
+        } else {
+          dispatch({ type: 'VOICE_ERROR', error: ve })
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [state.kind])
+
   const wrappedDispatch = (event: Event): void => {
     const current = stateRef.current
 
     // Intent interception for TAP_ORB — fire side effects, then dispatch.
     if (event.type === 'TAP_ORB') {
-      if (
-        current.kind === 'idle' ||
-        current.kind === 'idle-greeting' ||
-        current.kind === 'idle-ready'
-      ) {
-        // Voice C1 fix-pass: idle-greeting and idle-ready are the new
-        // post-mount cold-start states; TAP_ORB from any of them kicks
-        // listening. The opener payload is only attached when starting
-        // from cold `idle` (no greeting yet); after idle-greeting/idle-ready
-        // the user has already heard or skipped the opener and a second
-        // play would be jarring.
-        const fromCold = current.kind === 'idle'
+      if (current.kind === 'idle') {
+        // Cold-tap path: opener payload is computed here so the reducer
+        // routes through `speaking-opener` after permission is granted.
+        // priorStateRef will read 'idle' when the requesting-permission
+        // effect runs, signalling that the interceptor already owns
+        // this start() — the effect skips.
         dispatch({ type: 'TAP_ORB' })
         providerRef.current
           .start()
           .then(() => {
-            const opener = fromCold ? optionsRef.current?.getOpener?.() : undefined
+            const opener = optionsRef.current?.getOpener?.()
             if (opener) {
               dispatch({ type: 'PERMISSION_GRANTED', opener })
             } else {
@@ -870,6 +914,20 @@ export function useCheckinMachine(
               dispatch({ type: 'VOICE_ERROR', error: ve })
             }
           })
+        return
+      }
+      if (
+        current.kind === 'idle-greeting' ||
+        current.kind === 'idle-ready'
+      ) {
+        // The user has already heard (idle-ready) or is hearing
+        // (idle-greeting) the opener — no payload to attach. Dispatch
+        // TAP_ORB; the requesting-permission effect above owns the
+        // provider.start() side effect for these paths so the
+        // auto-progress (GREETING_PLAYED) and tap paths share one
+        // code path. Page-level effect cancels TTS on the
+        // idle-greeting → requesting-permission transition.
+        dispatch({ type: 'TAP_ORB' })
         return
       }
       if (current.kind === 'listening' || current.kind === 'listening-answer') {
