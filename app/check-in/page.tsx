@@ -252,11 +252,22 @@ export default function CheckinPage({
   // diverge between SSR and the client's first render. SSR + first paint
   // see `null` (no name → name-less opener); the post-mount swap to the
   // real value is a single re-render.
+  //
+  // `profileResolved` flips true at the end of this same post-mount effect
+  // and is required by the cold-mount greeting dispatcher below. Without
+  // it, the cold-greeting effect runs in the SAME effect-flush as this one
+  // (state setters from useEffects don't re-render until the whole flush
+  // finishes), snapshots the still-null `profileName`, and locks its
+  // fire-once ref against the name-less opener. The user then hears
+  // "Hey — glad you're here…" instead of "Hey {name} — …" even though
+  // the on-screen text re-renders correctly with the name.
   const [profileName, setProfileName] = useState<string | null>(null)
+  const [profileResolved, setProfileResolved] = useState(false)
   useEffect(() => {
     setUserId(getOrCreateTestUserId())
     setTodayIso(todayIsoDate())
     setProfileName(readProfile()?.name ?? null)
+    setProfileResolved(true)
   }, [])
 
   const continuityQuery = useQuery(
@@ -468,13 +479,18 @@ export default function CheckinPage({
     if (state.kind !== 'idle') return
     if (!ttsAvailable) return
     if (!openerSelection.text) return
+    // Gate on profileResolved so the post-mount profile-name read lands
+    // BEFORE we snapshot opener text. Otherwise the fire-once ref locks
+    // against the SSR-default name-less opener and the user hears
+    // "Hey — glad you're here…" instead of "Hey {name} — …".
+    if (!profileResolved) return
     coldGreetingDispatchedRef.current = true
     dispatch({
       type: 'START_GREETING',
       text: openerSelection.text,
       variantKey: openerSelection.key,
     })
-  }, [state.kind, ttsAvailable, openerSelection, dispatch])
+  }, [state.kind, ttsAvailable, openerSelection, profileResolved, dispatch])
 
   // 1. Drain save-later queue once on mount. Retries reuse the original
   //    `clientRequestId` so any item the server already saw is a no-op.
