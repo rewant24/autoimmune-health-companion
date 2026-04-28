@@ -245,7 +245,7 @@ describe('POST /api/transcribe', () => {
     expect(finals[0]?.bytes).toBe(12)
   })
 
-  it('forwards each request body chunk to Sarvam.transcribe as base64 WAV', async () => {
+  it('forwards each request body chunk to Sarvam.transcribe as base64 PCM s16le', async () => {
     const { POST } = await import('@/app/api/transcribe/route')
     const chunks = [new Uint8Array([0xaa, 0xbb]), new Uint8Array([0xcc, 0xdd])]
     const req = buildStreamingRequest(
@@ -257,11 +257,37 @@ describe('POST /api/transcribe', () => {
     expect(fakeState.socket).not.toBeNull()
     const sock = fakeState.socket!
     expect(sock.sentChunks).toHaveLength(2)
-    expect(sock.sentChunks[0]?.encoding).toBe('audio/wav')
+    expect(sock.sentChunks[0]?.encoding).toBe('audio/pcm_s16le')
     expect(sock.sentChunks[0]?.sample_rate).toBe(16000)
     // Base64 of 0xaa 0xbb is "qrs="; 0xcc 0xdd is "zN0=".
     expect(sock.sentChunks[0]?.audio).toBe('qrs=')
     expect(sock.sentChunks[1]?.audio).toBe('zN0=')
+  })
+
+  it('forwards audio as pcm_s16le, not wav, to Sarvam', async () => {
+    // Bug 1 (HAR diagnosis 2026-04-28): the recorder produces raw PCM s16le
+    // bytes; we previously labelled them audio/wav and told Sarvam to
+    // decode WAV, so it found no RIFF header and emitted zero transcripts.
+    // Tell Sarvam the truth: pcm_s16le on connect AND on each chunk.
+    const { POST } = await import('@/app/api/transcribe/route')
+    const req = buildStreamingRequest(
+      'http://localhost/api/transcribe?lang=en-IN',
+      [new Uint8Array([0x00, 0x01, 0x00, 0x01])],
+      { contentType: 'audio/pcm' },
+    )
+    const res = await POST(req)
+    // Drain the SSE so the route finishes and connectArgs is recorded.
+    await readResponseText(res)
+
+    expect(fakeState.connectArgs).toMatchObject({
+      input_audio_codec: 'pcm_s16le',
+      sample_rate: '16000',
+    })
+    // The per-chunk `encoding` flows through `socket.transcribe`.
+    expect(fakeState.socket?.sentChunks[0]).toMatchObject({
+      encoding: 'audio/pcm_s16le',
+      sample_rate: 16000,
+    })
   })
 
   it('forwards the lang query param into the Sarvam connect args', async () => {

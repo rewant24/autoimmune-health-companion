@@ -30,8 +30,15 @@
  * the route module graph.
  */
 
-/** Codec we send to Sarvam — picked by the pre-flight spike (PCM/WAV only). */
-export const SARVAM_STT_AUDIO_CODEC = 'wav' as const
+/**
+ * Codec we send to Sarvam.
+ *
+ * Cycle 1 fix (Bug 1, HAR diagnosed 2026-04-28): the recorder produces raw
+ * PCM s16le 16 kHz mono — never a real WAV. We previously labelled it `wav`,
+ * which made Sarvam look for a RIFF header that wasn't there and emit zero
+ * transcripts on every call. Truth-in-labelling: `pcm_s16le`.
+ */
+export const SARVAM_STT_AUDIO_CODEC = 'pcm_s16le' as const
 
 /** Sample rate we capture + send. */
 export const SARVAM_STT_SAMPLE_RATE = 16000 as const

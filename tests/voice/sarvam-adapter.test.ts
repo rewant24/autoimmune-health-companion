@@ -317,6 +317,40 @@ describe('SarvamAdapter — start() (US-V.B.2)', () => {
     ])
   })
 
+  it('POSTs with Content-Type audio/pcm in buffered mode (Bug 1 fix)', async () => {
+    // Bug 1 (HAR diagnosis 2026-04-28): the recorder produces raw PCM
+    // s16le and we previously labelled it `audio/wav`. Sarvam couldn't
+    // decode the missing RIFF header and emitted zero transcripts.
+    // Truth-in-labelling: the buffered upload is `audio/pcm`.
+    const { stream } = makeFakeStream()
+    const recorder = makeFakeRecorder()
+
+    let postedHeaders: HeadersInit | undefined
+    const ctrl = makeStreamingResponse()
+    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      postedHeaders = init?.headers
+      return ctrl.response
+    }) as unknown as typeof fetch
+
+    const a = new SarvamAdapter({
+      language_code: 'en-IN',
+      getUserMediaImpl: vi.fn().mockResolvedValue(stream),
+      recorderFactory: () => recorder,
+      fetchImpl,
+    })
+    await a.start()
+    recorder.emit(new Uint8Array([0x00, 0x01, 0x00, 0x01]))
+    setTimeout(() => {
+      ctrl.push('event: final\ndata: {"text":"hi","durationMs":1000}\n\n')
+      ctrl.end()
+    }, 0)
+    await a.stop()
+
+    expect(postedHeaders).toBeDefined()
+    const headers = postedHeaders as Record<string, string>
+    expect(headers['Content-Type']).toBe('audio/pcm')
+  })
+
   it('forwards onSilence to listeners in buffered mode — Fix F.1', async () => {
     const { stream } = makeFakeStream()
     const recorder = makeFakeRecorder()
