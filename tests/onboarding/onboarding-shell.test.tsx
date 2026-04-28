@@ -17,15 +17,17 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const pushSpy = vi.fn()
+// Stable router object so `useEffect` deps don't churn each render.
+const mockRouter = {
+  push: pushSpy,
+  replace: vi.fn(),
+  back: vi.fn(),
+  forward: vi.fn(),
+  refresh: vi.fn(),
+  prefetch: vi.fn(),
+}
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: pushSpy,
-    replace: vi.fn(),
-    back: vi.fn(),
-    forward: vi.fn(),
-    refresh: vi.fn(),
-    prefetch: vi.fn(),
-  }),
+  useRouter: () => mockRouter,
   usePathname: () => '/onboarding/1',
   useSearchParams: () => new URLSearchParams(),
   redirect: vi.fn((url: string) => {
@@ -125,12 +127,12 @@ describe('<OnboardingScreen1 /> — Onboarding.US-1', () => {
 describe('<OnboardingScreen2 /> — Onboarding.US-2', () => {
   beforeEach(() => pushSpy.mockReset())
 
-  it('renders the locked headline from scoping § Onboarding Screen 2', () => {
+  it('renders the Saha-voice headline (R1 rewrite)', () => {
     render(<OnboardingScreen2 />)
     // Use a substring + flexible matcher to avoid em-dash brittleness.
     expect(
       screen.getByRole('heading', { level: 1 }).textContent ?? '',
-    ).toMatch(/A digital friend for the day-to-day/i)
+    ).toMatch(/Living with autoimmune asks a lot of memory/i)
   })
 
   it('renders the placeholder body copy', () => {

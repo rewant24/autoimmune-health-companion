@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Geist_Mono, Inter, Inter_Tight } from "next/font/google";
 import "./globals.css";
 import { ConvexClientProvider } from "./ConvexClientProvider";
@@ -29,6 +29,12 @@ export const metadata: Metadata = {
   title: "Saha — a voice-first health companion for autoimmune patients",
   description:
     "A voice-first health companion for people living with autoimmune conditions. So your next doctor visit starts with data, not memory.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

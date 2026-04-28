@@ -8,16 +8,16 @@
  * Locked decisions:
  *   - Brand voice = "endurance + together," NOT "gentle / soft / calm."
  *     Sanskrit सह — to endure, with.
- *   - Pulls `name` from `readProfile()`. Falls back to a graceful default
- *     ("here") if name is null (e.g. user landed on /welcome directly without
- *     completing Setup B — direct-link guard upstream redirects, but this
- *     fallback keeps the screen renderable rather than crashing).
+ *   - Pulls `name` from `readProfile()`. Falls back to an unnamed greeting
+ *     when name is null (direct-link guards upstream redirect, but this
+ *     keeps the screen renderable rather than crashing).
  *   - Single CTA "Open my home page" → /home.
  *   - Marks `markOnboarded()` on mount so future visits to / show
  *     "Open your home page" instead of "Get started."
  *   - Welcome IS the welcome moment (Q7) — no email send, no toast.
  *
- * Copy is placeholder pending Rewant; tagged TODO(rewant-copy).
+ * Copy resolved during the cycle fix-pass (R1 drafts approved by Rewant);
+ * the eyebrow surfaces the सह anchor without leaning on "gentle."
  */
 
 import { useEffect, useState } from 'react'
@@ -52,10 +52,10 @@ export function WelcomeScreen(): React.JSX.Element {
           background: 'var(--bg-elevated)',
         }}
       >
-        <p className="type-label">Welcome to Saha</p>
+        {/* R1 final: surface the सह anchor as the eyebrow — endurance +
+            together, not "Welcome to Saha." */}
+        <p className="type-label">Saha · सह</p>
 
-        {/* TODO(rewant-copy): final greeting wording — must read in the
-            "endurance + together" voice, not "gentle / soft / calm." */}
         <h1
           className="mt-4"
           style={{
@@ -80,14 +80,13 @@ export function WelcomeScreen(): React.JSX.Element {
           )}
         </h1>
 
-        {/* TODO(rewant-copy): supporting line — keep the सह = endure + with
-            framing visible without leaning on "gentle." */}
+        {/* R1 final supporting line — endure + with, no "gentle." */}
         <p
           className="type-body mt-6"
           style={{ color: 'var(--ink-muted)' }}
         >
-          I&apos;ll hold the days you can&apos;t, and walk beside the days you
-          can. We&apos;ll begin with one quiet check-in.
+          I&apos;ll hold the days that blur, and walk beside the ones that
+          don&apos;t. We start with one check-in.
         </p>
 
         <div className="mt-10">

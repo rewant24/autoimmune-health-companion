@@ -18,15 +18,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const replaceSpy = vi.fn()
 let mockPathname = '/home'
+// Stabilize the mocked router across renders. Returning a fresh object on
+// every `useRouter()` call would invalidate any `useEffect` dep on `router`
+// every render and (when the effect calls `setState` with an object) loop
+// forever. Same pattern as the setup tests.
+const mockRouter = {
+  push: vi.fn(),
+  replace: replaceSpy,
+  back: vi.fn(),
+  forward: vi.fn(),
+  refresh: vi.fn(),
+  prefetch: vi.fn(),
+}
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: vi.fn(),
-    replace: replaceSpy,
-    back: vi.fn(),
-    forward: vi.fn(),
-    refresh: vi.fn(),
-    prefetch: vi.fn(),
-  }),
+  useRouter: () => mockRouter,
   usePathname: () => mockPathname,
 }))
 
@@ -129,15 +134,17 @@ describe('/home page', () => {
     expect(screen.queryByTestId('home-page')).not.toBeInTheDocument()
   })
 
-  it('renders MedsSetupNudgeCard with aria-disabled="true"', async () => {
+  it('MedsSetupNudgeCard is non-interactive (no link, no button)', async () => {
+    // R3 review #10: aria-disabled is meaningful only on interactive widgets;
+    // applying it to a non-interactive landmark is a misuse. The card's
+    // "disabled" state is communicated visually (opacity) and structurally
+    // (zero focusable children).
     seedProfile({ name: 'Asha', onboarded: true })
     render(<HomePage />)
     await waitFor(() =>
       expect(screen.getByTestId('home-page')).toBeInTheDocument(),
     )
     const card = screen.getByTestId('meds-setup-nudge')
-    expect(card.getAttribute('aria-disabled')).toBe('true')
-    // Disabled card has no link or button inside it.
     expect(card.querySelector('a')).toBeNull()
     expect(card.querySelector('button')).toBeNull()
   })
