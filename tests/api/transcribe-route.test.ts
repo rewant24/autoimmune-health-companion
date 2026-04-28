@@ -257,7 +257,11 @@ describe('POST /api/transcribe', () => {
     expect(fakeState.socket).not.toBeNull()
     const sock = fakeState.socket!
     expect(sock.sentChunks).toHaveLength(2)
-    expect(sock.sentChunks[0]?.encoding).toBe('audio/pcm_s16le')
+    // Sarvam's per-chunk `encoding` is a Pydantic enum gated to
+    // 'audio/wav' only, even when input_audio_codec is pcm_s16le —
+    // discovered live 2026-04-28 (HAR Bug 1 retry). Don't template
+    // from SARVAM_STT_AUDIO_CODEC here.
+    expect(sock.sentChunks[0]?.encoding).toBe('audio/wav')
     expect(sock.sentChunks[0]?.sample_rate).toBe(16000)
     // Base64 of 0xaa 0xbb is "qrs="; 0xcc 0xdd is "zN0=".
     expect(sock.sentChunks[0]?.audio).toBe('qrs=')
@@ -284,8 +288,11 @@ describe('POST /api/transcribe', () => {
       sample_rate: '16000',
     })
     // The per-chunk `encoding` flows through `socket.transcribe`.
+    // Sarvam's enum is gated to 'audio/wav' regardless of codec
+    // (HAR Bug 1 retry, 2026-04-28). `input_audio_codec` does the
+    // real decoder work; `encoding` is a vestigial label.
     expect(fakeState.socket?.sentChunks[0]).toMatchObject({
-      encoding: 'audio/pcm_s16le',
+      encoding: 'audio/wav',
       sample_rate: 16000,
     })
   })

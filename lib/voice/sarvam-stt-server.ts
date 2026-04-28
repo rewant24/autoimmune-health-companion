@@ -214,7 +214,16 @@ export async function connectSarvamStt(
         socket.transcribe({
           audio,
           sample_rate: SARVAM_STT_SAMPLE_RATE,
-          encoding: `audio/${SARVAM_STT_AUDIO_CODEC}`,
+          // Sarvam's per-chunk `encoding` field is a Pydantic enum gated
+          // to literally `'audio/wav'` only, even when
+          // `input_audio_codec` is `pcm_s16le`. Discovered live on
+          // 2026-04-28 (HAR Bug 1 retry): the server returned
+          //   "Pipeline error: ... Input should be 'audio/wav' ...
+          //    [type=enum, input_value='audio/pcm_s16le', ...]"
+          // `input_audio_codec` is the load-bearing decoder hint;
+          // `encoding` is a vestigial label. Hard-code to satisfy the
+          // enum. Do NOT template from SARVAM_STT_AUDIO_CODEC here.
+          encoding: 'audio/wav',
         })
         return true
       } catch (err) {
