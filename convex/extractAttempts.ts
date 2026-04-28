@@ -109,3 +109,34 @@ export const incrementAndCheck = mutation({
     );
   },
 });
+
+/**
+ * Dev helper: delete the `(userId, date)` row so the cost-guard counter
+ * resets to zero before the next call. Used to recover a smoke session
+ * after the daily cap has been burned by prior testing without waiting
+ * for the device-local-time date boundary. Narrow contract — no bulk
+ * delete, no userId-only sweep.
+ */
+export const resetForUserOnDate = mutation({
+  args: {
+    userId: v.string(),
+    date: v.string(),
+  },
+  returns: v.object({
+    deleted: v.boolean(),
+    priorCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("extractAttempts")
+      .withIndex("by_user_date", (q) =>
+        q.eq("userId", args.userId).eq("date", args.date),
+      )
+      .unique();
+    if (existing === null) {
+      return { deleted: false, priorCount: 0 };
+    }
+    await ctx.db.delete(existing._id);
+    return { deleted: true, priorCount: existing.count };
+  },
+});
