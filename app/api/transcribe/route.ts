@@ -47,14 +47,9 @@ import {
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-/**
- * Content-Types we accept on the request body. V.B sends `audio/pcm`
- * post-Bug-1 (HAR 2026-04-28); `audio/wav` is kept on the allowlist for one
- * cycle to avoid a hard cutover if any client lags behind.
- */
+/** Content-Types we accept on the request body. V.B sends `audio/wav`. */
 const ACCEPTED_CONTENT_TYPES = new Set([
-  'audio/pcm',
-  'audio/wav', // legacy, kept for one cycle to avoid a hard cutover
+  'audio/wav',
   'audio/webm',
   'audio/ogg',
 ])

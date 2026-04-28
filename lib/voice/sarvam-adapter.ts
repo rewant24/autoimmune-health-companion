@@ -19,10 +19,13 @@
  *
  * Sarvam's streaming STT does NOT accept WebM/Opus at the protocol
  * layer — only `wav` / `pcm_s16le` / `pcm_l16` / `pcm_raw`. The
- * recorder always emits raw PCM s16le; post-Bug-1 (HAR 2026-04-28)
- * the adapter labels it `audio/pcm` and the server forwards it as
- * `input_audio_codec: 'pcm_s16le'`. The `audio/wav` label was a
- * spike-time mistake — see `docs/voice-c1-bug-1-transcription-fix-plan.md`.
+ * recorder emits raw PCM s16le; post-Bug-1 (HAR 2026-04-28) the
+ * buffered branch prepends a 44-byte RIFF/WAVE header to make the
+ * bytes a real WAV file before POST, since Sarvam's `pcm_s16le`
+ * codec is type-accepted but silently fails to decode raw PCM.
+ * Streaming branch still ships raw PCM — only used on Vercel HTTP/2;
+ * deferred to a follow-up cycle (next dev forces buffered anyway).
+ * See `docs/voice-c1-bug-1-transcription-fix-plan.md`.
  *
  * `language_code` is mandatory in the constructor (no default
  * fallback). It flows through to the route via the `?lang=…` query
@@ -322,10 +325,7 @@ export class SarvamAdapter implements VoiceProvider {
           method: 'POST',
           body: ts.readable,
           signal: this.uploadController.signal,
-          // Bug 1 (HAR 2026-04-28): the recorder produces raw PCM s16le,
-          // not WAV. Server now accepts `audio/pcm` and tells Sarvam
-          // `input_audio_codec: 'pcm_s16le'`.
-          headers: { 'Content-Type': 'audio/pcm' },
+          headers: { 'Content-Type': 'audio/wav' },
           // `duplex: 'half'` is required by the spec when the body is
           // a stream. TS lib.dom is stale on this; cast through unknown.
           duplex: 'half',
@@ -466,10 +466,7 @@ export class SarvamAdapter implements VoiceProvider {
         method: 'POST',
         body,
         signal: this.uploadController.signal,
-        // Bug 1 (HAR 2026-04-28): truth-in-labelling — buffered upload is
-        // raw PCM s16le, not a WAV file. See sarvam-stt-server.ts for the
-        // matching server-side `input_audio_codec: 'pcm_s16le'`.
-        headers: { 'Content-Type': 'audio/pcm' },
+        headers: { 'Content-Type': 'audio/wav' },
       } as RequestInit)
 
       // Drain SSE in background.

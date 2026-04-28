@@ -33,12 +33,15 @@
 /**
  * Codec we send to Sarvam.
  *
- * Cycle 1 fix (Bug 1, HAR diagnosed 2026-04-28): the recorder produces raw
- * PCM s16le 16 kHz mono — never a real WAV. We previously labelled it `wav`,
- * which made Sarvam look for a RIFF header that wasn't there and emit zero
- * transcripts on every call. Truth-in-labelling: `pcm_s16le`.
+ * Stays `'wav'` because Sarvam's `pcm_s16le` codec is accepted by the SDK
+ * type system but silently fails to decode raw PCM bytes (HAR-confirmed
+ * 2026-04-28: `text:""` on every `final`, no partials, no errors). The
+ * adapter prepends a real 44-byte RIFF/WAVE header to the buffered PCM
+ * before POST, so the bytes Sarvam sees ARE a valid WAV file. See
+ * `docs/voice-c1-bug-1-transcription-fix-plan.md` for the full A→B
+ * pivot history.
  */
-export const SARVAM_STT_AUDIO_CODEC = 'pcm_s16le' as const
+export const SARVAM_STT_AUDIO_CODEC = 'wav' as const
 
 /** Sample rate we capture + send. */
 export const SARVAM_STT_SAMPLE_RATE = 16000 as const

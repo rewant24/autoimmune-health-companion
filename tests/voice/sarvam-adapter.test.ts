@@ -317,11 +317,11 @@ describe('SarvamAdapter — start() (US-V.B.2)', () => {
     ])
   })
 
-  it('POSTs with Content-Type audio/pcm in buffered mode (Bug 1 fix)', async () => {
-    // Bug 1 (HAR diagnosis 2026-04-28): the recorder produces raw PCM
-    // s16le and we previously labelled it `audio/wav`. Sarvam couldn't
-    // decode the missing RIFF header and emitted zero transcripts.
-    // Truth-in-labelling: the buffered upload is `audio/pcm`.
+  it('POSTs with Content-Type audio/wav in buffered mode', async () => {
+    // Bug 1 retry (HAR 2026-04-28): pivoted from audio/pcm back to
+    // audio/wav after Sarvam silently failed to decode raw PCM. The
+    // adapter now prepends a real RIFF/WAVE header so the body is a
+    // valid WAV file; see "prepends a WAV header" test below.
     const { stream } = makeFakeStream()
     const recorder = makeFakeRecorder()
 
@@ -348,7 +348,7 @@ describe('SarvamAdapter — start() (US-V.B.2)', () => {
 
     expect(postedHeaders).toBeDefined()
     const headers = postedHeaders as Record<string, string>
-    expect(headers['Content-Type']).toBe('audio/pcm')
+    expect(headers['Content-Type']).toBe('audio/wav')
   })
 
   it('forwards onSilence to listeners in buffered mode — Fix F.1', async () => {

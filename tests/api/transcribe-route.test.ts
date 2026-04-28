@@ -245,7 +245,7 @@ describe('POST /api/transcribe', () => {
     expect(finals[0]?.bytes).toBe(12)
   })
 
-  it('forwards each request body chunk to Sarvam.transcribe as base64 PCM s16le', async () => {
+  it('forwards each request body chunk to Sarvam.transcribe as base64 WAV', async () => {
     const { POST } = await import('@/app/api/transcribe/route')
     const chunks = [new Uint8Array([0xaa, 0xbb]), new Uint8Array([0xcc, 0xdd])]
     const req = buildStreamingRequest(
@@ -257,10 +257,6 @@ describe('POST /api/transcribe', () => {
     expect(fakeState.socket).not.toBeNull()
     const sock = fakeState.socket!
     expect(sock.sentChunks).toHaveLength(2)
-    // Sarvam's per-chunk `encoding` is a Pydantic enum gated to
-    // 'audio/wav' only, even when input_audio_codec is pcm_s16le —
-    // discovered live 2026-04-28 (HAR Bug 1 retry). Don't template
-    // from SARVAM_STT_AUDIO_CODEC here.
     expect(sock.sentChunks[0]?.encoding).toBe('audio/wav')
     expect(sock.sentChunks[0]?.sample_rate).toBe(16000)
     // Base64 of 0xaa 0xbb is "qrs="; 0xcc 0xdd is "zN0=".
@@ -268,29 +264,28 @@ describe('POST /api/transcribe', () => {
     expect(sock.sentChunks[1]?.audio).toBe('zN0=')
   })
 
-  it('forwards audio as pcm_s16le, not wav, to Sarvam', async () => {
-    // Bug 1 (HAR diagnosis 2026-04-28): the recorder produces raw PCM s16le
-    // bytes; we previously labelled them audio/wav and told Sarvam to
-    // decode WAV, so it found no RIFF header and emitted zero transcripts.
-    // Tell Sarvam the truth: pcm_s16le on connect AND on each chunk.
+  it('forwards connect args with input_audio_codec=wav (Bug 1 pivot)', async () => {
+    // Bug 1 retry (HAR 2026-04-28): tried input_audio_codec='pcm_s16le'
+    // -- accepted by Sarvam's SDK type system but silently fails to
+    // decode raw PCM bytes (text:'' on every final, no partials).
+    // Pivoted to Option B: input_audio_codec stays 'wav' and the
+    // adapter prepends a 44-byte RIFF/WAVE header so the bytes ARE a
+    // valid WAV file. This test pins the wire shape on the server
+    // side; adapter-side WAV-wrapping is asserted in the adapter test.
     const { POST } = await import('@/app/api/transcribe/route')
     const req = buildStreamingRequest(
       'http://localhost/api/transcribe?lang=en-IN',
       [new Uint8Array([0x00, 0x01, 0x00, 0x01])],
-      { contentType: 'audio/pcm' },
     )
     const res = await POST(req)
     // Drain the SSE so the route finishes and connectArgs is recorded.
     await readResponseText(res)
 
     expect(fakeState.connectArgs).toMatchObject({
-      input_audio_codec: 'pcm_s16le',
+      input_audio_codec: 'wav',
       sample_rate: '16000',
     })
-    // The per-chunk `encoding` flows through `socket.transcribe`.
-    // Sarvam's enum is gated to 'audio/wav' regardless of codec
-    // (HAR Bug 1 retry, 2026-04-28). `input_audio_codec` does the
-    // real decoder work; `encoding` is a vestigial label.
+    // Per-chunk encoding is gated to 'audio/wav' by Sarvam's enum.
     expect(fakeState.socket?.sentChunks[0]).toMatchObject({
       encoding: 'audio/wav',
       sample_rate: 16000,
