@@ -49,6 +49,7 @@
  */
 
 import { SarvamRecorder } from './sarvam-recorder'
+import { writeWavHeader } from './wav-header'
 import type {
   Transcript,
   VoiceCapabilities,
@@ -307,6 +308,14 @@ export class SarvamAdapter implements VoiceProvider {
     if (this.resolvedMode === 'streaming') {
       // Streaming mode: open the request stream + fire fetch BEFORE the
       // first chunk arrives so the upload is hot-pipelined.
+      //
+      // TODO(voice c1 bug 1): streaming branch still posts raw PCM chunks
+      // labelled audio/wav — Sarvam will reject these the same way it
+      // rejected the buffered path before the WAV-header fix. We only
+      // exercise the buffered branch in dev/local-smoke (no HTTP/2),
+      // so this is dormant today. Before re-enabling streaming on
+      // Vercel (HTTP/2+) we need to either (a) prepend a streaming
+      // WAV header chunk or (b) switch the streaming codec server-side.
       const ts = new TransformStream<Uint8Array, Uint8Array>()
       this.bodyWriter = ts.writable.getWriter()
 
@@ -456,9 +465,23 @@ export class SarvamAdapter implements VoiceProvider {
       // Buffered mode: concatenate and POST once. Chrome requires
       // HTTP/2+ for streaming bodies and there is no localhost
       // exception, so this is what works against `next dev` (HTTP/1.1).
-      const body = concatChunks(this.pcmChunks, this.pcmByteLength)
+      const pcm = concatChunks(this.pcmChunks, this.pcmByteLength)
       this.pcmChunks = []
       this.pcmByteLength = 0
+
+      // Bug 1 Option B (HAR 2026-04-28): prepend a real RIFF/WAVE
+      // header so Sarvam decodes a valid WAV file. Without the header
+      // Sarvam's STT silently emits zero transcript events even though
+      // the SDK accepts `input_audio_codec='pcm_s16le'`. See
+      // `lib/voice/wav-header.ts` for the byte layout.
+      const header = writeWavHeader(pcm.byteLength, {
+        sampleRate: 16000,
+        channels: 1,
+        bitsPerSample: 16,
+      })
+      const body = new Uint8Array(header.byteLength + pcm.byteLength)
+      body.set(header, 0)
+      body.set(pcm, header.byteLength)
 
       this.uploadController = new this.abortControllerCtor()
       const url = `${this.endpoint}?lang=${encodeURIComponent(this.language_code)}`

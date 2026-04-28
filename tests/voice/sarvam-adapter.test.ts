@@ -312,9 +312,58 @@ describe('SarvamAdapter — start() (US-V.B.2)', () => {
     expect(postedBody).not.toBeNull()
     expect(postedBody).toBeInstanceOf(Uint8Array)
     const body = postedBody as unknown as Uint8Array
-    expect(Array.from(body)).toEqual([
+    // Body is now {44-byte WAV header}{concatenated PCM}. Header
+    // contents are asserted in their own dedicated test below; here
+    // we just verify the PCM payload is concatenated in order at the
+    // expected offset.
+    expect(body.byteLength).toBe(44 + 8)
+    expect(Array.from(body.slice(44))).toEqual([
       0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,
     ])
+  })
+
+  it('prepends a 44-byte RIFF/WAVE header to buffered PCM in stop() (Bug 1 Option B)', async () => {
+    // Bug 1 Option B (HAR 2026-04-28): Sarvam's pcm_s16le codec is
+    // type-accepted but silently fails to decode raw PCM. We keep
+    // input_audio_codec='wav' and prepend a real WAV header so the
+    // bytes ARE a valid WAV file end-to-end.
+    const { stream } = makeFakeStream()
+    const recorder = makeFakeRecorder()
+
+    let postedBody: BodyInit | null = null
+    const ctrl = makeStreamingResponse()
+    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      postedBody = (init?.body as BodyInit) ?? null
+      return ctrl.response
+    }) as unknown as typeof fetch
+
+    const a = new SarvamAdapter({
+      language_code: 'en-IN',
+      getUserMediaImpl: vi.fn().mockResolvedValue(stream),
+      recorderFactory: () => recorder,
+      fetchImpl,
+    })
+    await a.start()
+    // 4 bytes of fake PCM s16le.
+    recorder.emit(new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd]))
+    setTimeout(() => {
+      ctrl.push('event: final\ndata: {"text":"hi","durationMs":1000}\n\n')
+      ctrl.end()
+    }, 0)
+    await a.stop()
+
+    expect(postedBody).toBeInstanceOf(Uint8Array)
+    const body = postedBody as unknown as Uint8Array
+    // 44-byte header + 4 PCM bytes
+    expect(body.byteLength).toBe(44 + 4)
+    // RIFF magic at offset 0, WAVE at offset 8
+    expect(String.fromCharCode(...body.slice(0, 4))).toBe('RIFF')
+    expect(String.fromCharCode(...body.slice(8, 12))).toBe('WAVE')
+    // data sub-chunk length field at offset 40 = pcmByteLength
+    const view = new DataView(body.buffer, body.byteOffset, body.byteLength)
+    expect(view.getUint32(40, true)).toBe(4)
+    // PCM bytes follow at offset 44
+    expect(Array.from(body.slice(44))).toEqual([0xaa, 0xbb, 0xcc, 0xdd])
   })
 
   it('POSTs with Content-Type audio/wav in buffered mode', async () => {
