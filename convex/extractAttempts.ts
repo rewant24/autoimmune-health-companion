@@ -14,7 +14,7 @@
  * the structural shape — no runtime effect.
  */
 import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { internalMutation, mutation } from "./_generated/server";
 
 /** Locked daily attempt cap per ADR-020. The 6th call returns 429. */
 export const DAILY_CAP = 5;
@@ -116,8 +116,15 @@ export const incrementAndCheck = mutation({
  * after the daily cap has been burned by prior testing without waiting
  * for the device-local-time date boundary. Narrow contract — no bulk
  * delete, no userId-only sweep.
+ *
+ * Exposed as `internalMutation` so it is NOT a public Convex endpoint
+ * (no client SDK or direct HTTP access). Still callable from the CLI
+ * via `npx convex run extractAttempts:resetForUserOnDate '{...}'`
+ * because the CLI authenticates with the deploy key. This preserves
+ * ADR-020's hard 5/day cap as a real ceiling on prod — only platform
+ * admins can clear rows.
  */
-export const resetForUserOnDate = mutation({
+export const resetForUserOnDate = internalMutation({
   args: {
     userId: v.string(),
     date: v.string(),
