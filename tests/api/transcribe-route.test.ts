@@ -1,22 +1,22 @@
 /**
- * Tests for `app/api/transcribe/route.ts` — the Vercel HTTP-streaming
- * proxy that bridges browser MediaRecorder output to Sarvam streaming
- * STT and pipes partials back as Server-Sent Events.
+ * Tests for `app/api/transcribe/route.ts` — the REST-batch proxy that
+ * replaces the streaming-WebSocket proxy post-Bug-1. The route now
+ * buffers the request body, calls Sarvam's REST endpoint via
+ * `lib/voice/sarvam-stt-rest.ts`, and emits one SSE `final` frame (or
+ * one `error` frame) back to the browser.
  *
- * Strategy: mock `sarvamai` with a controllable `FakeSocket` so we can
- * drive partial / error / close events deterministically without any
- * network. The mock is registered before any import of the route or its
- * server-side helper.
+ * Strategy: vi.mock the REST module so we can drive arbitrary
+ * transcribeBatch outcomes (success / SarvamRestError / non-Sarvam
+ * throw) without touching the network. The route under test still
+ * imports the SarvamRestError class for the mapping, so the mock keeps
+ * the real class export.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReadableStream as NodeReadableStream } from 'node:stream/web'
 
-// jsdom env doesn't expose web streams globally. Pin them to `globalThis`
-// so both the test helpers and the route handler (running under the same
-// VM context) see the same constructor — otherwise the route's
-// `request.body.getReader()` operates on an instance the body doesn't
-// know about.
+// jsdom env doesn't expose web streams globally. Pin them to globalThis
+// so both the test helpers and the route handler see the same constructor.
 if (typeof globalThis.ReadableStream === 'undefined') {
   ;(globalThis as unknown as {
     ReadableStream: typeof NodeReadableStream
@@ -24,83 +24,130 @@ if (typeof globalThis.ReadableStream === 'undefined') {
 }
 
 // ----------------------------------------------------------------------
-// Mock `sarvamai` — must be hoisted by Vitest before route imports it.
+// Mock `@/lib/voice/sarvam-stt-rest` — must be hoisted before route imports.
 // ----------------------------------------------------------------------
 
-interface FakeSocketEventHandlers {
-  message?: (msg: unknown) => void
-  error?: (err: Error) => void
-  close?: () => void
-  open?: () => void
+interface BatchOutcomeOk {
+  kind: 'ok'
+  transcript: string
+  detectedLanguageCode?: string | null
+  requestId?: string | null
 }
-
-class FakeSocket {
-  public closed = false
-  public flushCalls = 0
-  public sentChunks: { audio: string; sample_rate?: number; encoding?: string }[] =
-    []
-  private handlers: FakeSocketEventHandlers = {}
-  on<T extends keyof FakeSocketEventHandlers>(
-    event: T,
-    cb: FakeSocketEventHandlers[T],
-  ): void {
-    this.handlers[event] = cb
-  }
-  transcribe(params: {
-    audio: string
-    sample_rate?: number
-    encoding?: string
-  }): void {
-    if (this.closed) throw new Error('socket closed')
-    this.sentChunks.push(params)
-  }
-  flush(): void {
-    this.flushCalls += 1
-  }
-  close(): void {
-    if (this.closed) return
-    this.closed = true
-    this.handlers.close?.()
-  }
-  emitMessage(msg: unknown): void {
-    this.handlers.message?.(msg)
-  }
-  emitError(err: Error): void {
-    this.handlers.error?.(err)
-  }
-  emitClose(): void {
-    if (this.closed) return
-    this.closed = true
-    this.handlers.close?.()
-  }
+interface BatchOutcomeRestError {
+  kind: 'rest-error'
+  code:
+    | 'voice.provider_unconfigured'
+    | 'voice.network'
+    | 'voice.session_too_long'
+    | 'voice.session_too_large'
+    | 'voice.unprocessable'
+    | 'voice.aborted'
+  message: string
 }
+interface BatchOutcomeThrow {
+  kind: 'throw'
+  err: Error
+}
+interface BatchOutcomeAbortAware {
+  kind: 'abort-aware'
+  /** ms to wait before resolving. If signal aborts during the wait, throw a SarvamRestError('voice.aborted'). */
+  delayMs: number
+  /** What to return if no abort. */
+  transcript: string
+}
+type BatchOutcome =
+  | BatchOutcomeOk
+  | BatchOutcomeRestError
+  | BatchOutcomeThrow
+  | BatchOutcomeAbortAware
 
 const fakeState: {
-  socket: FakeSocket | null
-  connectArgs: unknown
-  connectShouldThrow: Error | null
-} = { socket: null, connectArgs: null, connectShouldThrow: null }
+  outcome: BatchOutcome
+  lastCall: {
+    audio: Uint8Array
+    languageCode: string
+    signal?: AbortSignal
+  } | null
+  apiKey: string | null
+} = {
+  outcome: { kind: 'ok', transcript: '' },
+  lastCall: null,
+  apiKey: 'test-key-do-not-leak',
+}
 
-vi.mock('sarvamai', () => {
+vi.mock('@/lib/voice/sarvam-stt-rest', async () => {
+  // Bring the real SarvamRestError class through; the route uses
+  // `instanceof` to branch on it, and re-implementing it would diverge.
+  const actual = await vi.importActual<
+    typeof import('@/lib/voice/sarvam-stt-rest')
+  >('@/lib/voice/sarvam-stt-rest')
   return {
-    SarvamAIClient: class MockSarvamAIClient {
-      constructor(_opts: { apiSubscriptionKey: string }) {
-        // no-op
-      }
-      speechToTextStreaming = {
-        connect: async (args: unknown) => {
-          fakeState.connectArgs = args
-          if (fakeState.connectShouldThrow !== null) {
-            const err = fakeState.connectShouldThrow
-            fakeState.connectShouldThrow = null
-            throw err
+    ...actual,
+    readSarvamApiKey: () => fakeState.apiKey,
+    transcribeBatch: vi.fn(
+      async (opts: {
+        audio: Uint8Array
+        languageCode: string
+        signal?: AbortSignal
+      }) => {
+        fakeState.lastCall = {
+          audio: opts.audio,
+          languageCode: opts.languageCode,
+          signal: opts.signal,
+        }
+        const outcome = fakeState.outcome
+        switch (outcome.kind) {
+          case 'ok':
+            return {
+              transcript: outcome.transcript,
+              requestId: outcome.requestId ?? null,
+              detectedLanguageCode: outcome.detectedLanguageCode ?? null,
+            }
+          case 'rest-error':
+            throw new actual.SarvamRestError(outcome.code, outcome.message)
+          case 'throw':
+            throw outcome.err
+          case 'abort-aware': {
+            // Resolve after delayMs OR throw 'voice.aborted' if signalled.
+            await new Promise<void>((resolve, reject) => {
+              const timer = setTimeout(() => {
+                resolve()
+              }, outcome.delayMs)
+              if (opts.signal) {
+                if (opts.signal.aborted) {
+                  clearTimeout(timer)
+                  reject(
+                    new actual.SarvamRestError(
+                      'voice.aborted',
+                      'Sarvam request aborted.',
+                    ),
+                  )
+                  return
+                }
+                opts.signal.addEventListener(
+                  'abort',
+                  () => {
+                    clearTimeout(timer)
+                    reject(
+                      new actual.SarvamRestError(
+                        'voice.aborted',
+                        'Sarvam request aborted.',
+                      ),
+                    )
+                  },
+                  { once: true },
+                )
+              }
+            })
+            return {
+              transcript: outcome.transcript,
+              requestId: null,
+              detectedLanguageCode: null,
+            }
           }
-          const socket = new FakeSocket()
-          fakeState.socket = socket
-          return socket
-        },
-      }
-    },
+        }
+      },
+    ),
   }
 })
 
@@ -108,25 +155,32 @@ vi.mock('sarvamai', () => {
 // Helpers
 // ----------------------------------------------------------------------
 
-/** Build a Request with a streaming body of the given chunks. */
-function buildStreamingRequest(
+function buildRequest(
   url: string,
-  chunks: Uint8Array[],
+  body: Uint8Array | Uint8Array[] | null,
   opts: {
     contentType?: string
     abortController?: AbortController
-    holdOpenMs?: number
   } = {},
 ): Request {
-  const { contentType = 'audio/wav', abortController, holdOpenMs = 0 } = opts
-  const body = new ReadableStream<Uint8Array>({
+  const { contentType = 'audio/wav', abortController } = opts
+  if (body === null) {
+    return new Request(url, {
+      method: 'POST',
+      headers: { 'Content-Type': contentType },
+      signal: abortController?.signal,
+    })
+  }
+  // Always wrap in a ReadableStream so request.body is a stream we can
+  // pump via getReader(). Passing Uint8Array directly to `body:` works at
+  // the Request level but the test runtime's `request.body` getter
+  // surfaces it as an empty stream.
+  const chunks = body instanceof Uint8Array ? [body] : body
+  const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       for (const c of chunks) {
-        controller.enqueue(c)
-        await new Promise((r) => setTimeout(r, 1))
-      }
-      if (holdOpenMs > 0) {
-        await new Promise((r) => setTimeout(r, holdOpenMs))
+        if (c.byteLength > 0) controller.enqueue(c)
+        await new Promise((r) => setTimeout(r, 0))
       }
       controller.close()
     },
@@ -134,14 +188,13 @@ function buildStreamingRequest(
   return new Request(url, {
     method: 'POST',
     headers: { 'Content-Type': contentType },
-    body: body as unknown as BodyInit,
+    body: stream as unknown as BodyInit,
     signal: abortController?.signal,
-    // @ts-expect-error duplex is required by Node fetch for streaming bodies
+    // @ts-expect-error duplex required for streaming bodies under Node fetch
     duplex: 'half',
   })
 }
 
-/** Drain a Response body to text. */
 async function readResponseText(res: Response): Promise<string> {
   if (res.body === null) return ''
   const reader = res.body.getReader()
@@ -156,7 +209,6 @@ async function readResponseText(res: Response): Promise<string> {
   return out
 }
 
-/** Parse SSE `data: <json>` lines into objects (drops empty lines). */
 function parseSseEvents(raw: string): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = []
   for (const line of raw.split('\n')) {
@@ -166,168 +218,99 @@ function parseSseEvents(raw: string): Record<string, unknown>[] {
     try {
       out.push(JSON.parse(json) as Record<string, unknown>)
     } catch {
-      // Ignore malformed lines (shouldn't happen — we author the writer).
+      // Ignore — we author the writer.
     }
   }
   return out
 }
 
 // ----------------------------------------------------------------------
-// Tests — Story V.A.1 (POST route + SSE happy path + runtime declaration)
+// Tests
 // ----------------------------------------------------------------------
 
-describe('POST /api/transcribe', () => {
+describe('POST /api/transcribe (REST batch)', () => {
   beforeEach(() => {
     vi.resetModules()
-    fakeState.socket = null
-    fakeState.connectArgs = null
-    fakeState.connectShouldThrow = null
-    process.env.SARVAM_API_KEY = 'test-key-do-not-leak'
+    fakeState.outcome = { kind: 'ok', transcript: '' }
+    fakeState.lastCall = null
+    fakeState.apiKey = 'test-key-do-not-leak'
   })
 
   afterEach(() => {
-    delete process.env.SARVAM_API_KEY
+    // No-op: fakeState is reset in beforeEach.
   })
 
-  it('streams partials as SSE then a final on body close (happy path)', async () => {
+  // --------------------------------------------------------------------
+  // Happy path
+  // --------------------------------------------------------------------
+
+  it('emits a single SSE final frame with the transcript on success', async () => {
+    fakeState.outcome = {
+      kind: 'ok',
+      transcript: 'hello there friend',
+      requestId: 'req_abc',
+      detectedLanguageCode: 'en-IN',
+    }
     const { POST } = await import('@/app/api/transcribe/route')
-    const chunks = [
-      new Uint8Array([1, 2, 3, 4]),
-      new Uint8Array([5, 6, 7, 8]),
-      new Uint8Array([9, 10, 11, 12]),
-    ]
-    const req = buildStreamingRequest(
-      'http://localhost/api/transcribe',
-      chunks,
+    const audio = new Uint8Array(64).fill(0x10)
+    const res = await POST(
+      buildRequest('http://localhost/api/transcribe?lang=en-IN', audio),
     )
-    const res = await POST(req)
+
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toMatch(/^text\/event-stream/)
-
-    // Drive partials from the fake socket as soon as it's open. The route's
-    // reader loop awaits ~1ms per chunk so we have time to interleave.
-    const interleave = (async () => {
-      while (fakeState.socket === null) {
-        await new Promise((r) => setTimeout(r, 1))
-      }
-      const sock = fakeState.socket
-      sock.emitMessage({
-        type: 'data',
-        data: { request_id: 'r', transcript: 'hello' },
-      })
-      await new Promise((r) => setTimeout(r, 2))
-      sock.emitMessage({
-        type: 'data',
-        data: { request_id: 'r', transcript: 'hello there' },
-      })
-      await new Promise((r) => setTimeout(r, 2))
-      sock.emitMessage({
-        type: 'data',
-        data: { request_id: 'r', transcript: 'hello there friend' },
-      })
-    })()
-
-    const text = await readResponseText(res)
-    await interleave
-
-    const events = parseSseEvents(text)
-    const partials = events.filter((e) => e.type === 'partial')
-    const finals = events.filter((e) => e.type === 'final')
-
-    expect(partials.map((e) => e.text)).toEqual([
-      'hello',
-      'hello there',
-      'hello there friend',
-    ])
-    expect(finals).toHaveLength(1)
-    expect(finals[0]?.text).toBe('hello there friend')
-    expect(typeof finals[0]?.durationMs).toBe('number')
-    expect(finals[0]?.bytes).toBe(12)
-  })
-
-  it('forwards each request body chunk to Sarvam.transcribe as base64 WAV', async () => {
-    const { POST } = await import('@/app/api/transcribe/route')
-    const chunks = [new Uint8Array([0xaa, 0xbb]), new Uint8Array([0xcc, 0xdd])]
-    const req = buildStreamingRequest(
-      'http://localhost/api/transcribe',
-      chunks,
-    )
-    const res = await POST(req)
-    await readResponseText(res)
-    expect(fakeState.socket).not.toBeNull()
-    const sock = fakeState.socket!
-    expect(sock.sentChunks).toHaveLength(2)
-    expect(sock.sentChunks[0]?.encoding).toBe('audio/wav')
-    expect(sock.sentChunks[0]?.sample_rate).toBe(16000)
-    // Base64 of 0xaa 0xbb is "qrs="; 0xcc 0xdd is "zN0=".
-    expect(sock.sentChunks[0]?.audio).toBe('qrs=')
-    expect(sock.sentChunks[1]?.audio).toBe('zN0=')
-  })
-
-  it('forwards connect args with input_audio_codec=wav (Bug 1 pivot)', async () => {
-    // Bug 1 retry (HAR 2026-04-28): tried input_audio_codec='pcm_s16le'
-    // -- accepted by Sarvam's SDK type system but silently fails to
-    // decode raw PCM bytes (text:'' on every final, no partials).
-    // Pivoted to Option B: input_audio_codec stays 'wav' and the
-    // adapter prepends a 44-byte RIFF/WAVE header so the bytes ARE a
-    // valid WAV file. This test pins the wire shape on the server
-    // side; adapter-side WAV-wrapping is asserted in the adapter test.
-    const { POST } = await import('@/app/api/transcribe/route')
-    const req = buildStreamingRequest(
-      'http://localhost/api/transcribe?lang=en-IN',
-      [new Uint8Array([0x00, 0x01, 0x00, 0x01])],
-    )
-    const res = await POST(req)
-    // Drain the SSE so the route finishes and connectArgs is recorded.
-    await readResponseText(res)
-
-    expect(fakeState.connectArgs).toMatchObject({
-      input_audio_codec: 'wav',
-      sample_rate: '16000',
+    const events = parseSseEvents(await readResponseText(res))
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      type: 'final',
+      text: 'hello there friend',
+      bytes: 64,
     })
-    // Per-chunk encoding is gated to 'audio/wav' by Sarvam's enum.
-    expect(fakeState.socket?.sentChunks[0]).toMatchObject({
-      encoding: 'audio/wav',
-      sample_rate: 16000,
-    })
+    expect(typeof events[0]!.durationMs).toBe('number')
   })
 
-  it('forwards the lang query param into the Sarvam connect args', async () => {
+  it('forwards the lang query param to transcribeBatch', async () => {
+    fakeState.outcome = { kind: 'ok', transcript: '' }
     const { POST } = await import('@/app/api/transcribe/route')
-    const req = buildStreamingRequest(
-      'http://localhost/api/transcribe?lang=hi-IN',
-      [new Uint8Array([1])],
+    await readResponseText(
+      await POST(
+        buildRequest(
+          'http://localhost/api/transcribe?lang=hi-IN',
+          new Uint8Array([1, 2, 3, 4]),
+        ),
+      ),
     )
-    const res = await POST(req)
-    await readResponseText(res)
-    const args = fakeState.connectArgs as { 'language-code'?: string } | null
-    expect(args?.['language-code']).toBe('hi-IN')
+    expect(fakeState.lastCall?.languageCode).toBe('hi-IN')
   })
 
-  it('emits an SSE error frame when Sarvam emits an error message', async () => {
+  it('defaults lang to en-IN when the query param is omitted', async () => {
+    fakeState.outcome = { kind: 'ok', transcript: '' }
     const { POST } = await import('@/app/api/transcribe/route')
-    const req = buildStreamingRequest(
-      'http://localhost/api/transcribe',
-      [new Uint8Array([1, 2])],
-      { holdOpenMs: 30 },
+    await readResponseText(
+      await POST(
+        buildRequest(
+          'http://localhost/api/transcribe',
+          new Uint8Array([1, 2, 3, 4]),
+        ),
+      ),
     )
-    const res = await POST(req)
-    const interleave = (async () => {
-      while (fakeState.socket === null) {
-        await new Promise((r) => setTimeout(r, 1))
-      }
-      fakeState.socket.emitMessage({
-        type: 'error',
-        data: { error: 'upstream blew up' },
-      })
-    })()
-    const text = await readResponseText(res)
-    await interleave
-    const events = parseSseEvents(text)
-    const errors = events.filter((e) => e.type === 'error')
-    expect(errors.length).toBeGreaterThanOrEqual(1)
-    expect(errors[0]?.kind).toBe('voice.network')
-    expect(errors[0]?.message).toBe('upstream blew up')
+    expect(fakeState.lastCall?.languageCode).toBe('en-IN')
+  })
+
+  it('passes the buffered request body bytes through to transcribeBatch', async () => {
+    fakeState.outcome = { kind: 'ok', transcript: '' }
+    const { POST } = await import('@/app/api/transcribe/route')
+    const chunks = [
+      new Uint8Array([0xaa, 0xbb]),
+      new Uint8Array([0xcc, 0xdd]),
+      new Uint8Array([0xee, 0xff]),
+    ]
+    await readResponseText(
+      await POST(buildRequest('http://localhost/api/transcribe', chunks)),
+    )
+    expect(fakeState.lastCall?.audio).toEqual(
+      new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]),
+    )
   })
 
   it('declares runtime = nodejs and dynamic = force-dynamic', async () => {
@@ -337,62 +320,27 @@ describe('POST /api/transcribe', () => {
   })
 
   // --------------------------------------------------------------------
-  // Story V.A.2 — SARVAM_API_KEY handling (server-only, no leakage)
+  // Provider config + content-type guards
   // --------------------------------------------------------------------
 
   it('returns 503 voice.provider_unconfigured when SARVAM_API_KEY is missing', async () => {
-    delete process.env.SARVAM_API_KEY
+    fakeState.apiKey = null
     const { POST } = await import('@/app/api/transcribe/route')
-    const req = buildStreamingRequest(
-      'http://localhost/api/transcribe',
-      [new Uint8Array([1, 2, 3])],
+    const res = await POST(
+      buildRequest(
+        'http://localhost/api/transcribe',
+        new Uint8Array([1, 2, 3]),
+      ),
     )
-    const res = await POST(req)
     expect(res.status).toBe(503)
     const body = (await res.json()) as { error: { code: string } }
     expect(body.error.code).toBe('voice.provider_unconfigured')
-    // Sanity: we never echo whatever value was set into the body.
     const text = JSON.stringify(body)
     expect(text).not.toContain('test-key-do-not-leak')
   })
 
-  it('returns 502 voice.connect_failed when Sarvam connect throws', async () => {
-    fakeState.connectShouldThrow = new Error('upstream unavailable')
-    const { POST } = await import('@/app/api/transcribe/route')
-    const req = buildStreamingRequest(
-      'http://localhost/api/transcribe',
-      [new Uint8Array([1, 2, 3])],
-    )
-    const res = await POST(req)
-    expect(res.status).toBe(502)
-    const body = (await res.json()) as { error: { code: string } }
-    expect(body.error.code).toBe('voice.connect_failed')
-  })
-
-  it('never echoes the SARVAM_API_KEY in any response body or header (negative regression)', async () => {
-    process.env.SARVAM_API_KEY = 'super-secret-key-12345'
-    fakeState.connectShouldThrow = new Error('boom')
-    const { POST } = await import('@/app/api/transcribe/route')
-    const req = buildStreamingRequest(
-      'http://localhost/api/transcribe',
-      [new Uint8Array([1])],
-    )
-    const res = await POST(req)
-    const body = await res.text()
-    expect(body).not.toContain('super-secret-key-12345')
-    for (const [, value] of res.headers.entries()) {
-      expect(value).not.toContain('super-secret-key-12345')
-    }
-  })
-
-  // --------------------------------------------------------------------
-  // Story V.A.3 — cost + abuse guards (Content-Type, byte cap, duration
-  // cap, X-Voice-* response headers)
-  // --------------------------------------------------------------------
-
   it('returns 415 when Content-Type is missing or not an accepted audio type', async () => {
     const { POST } = await import('@/app/api/transcribe/route')
-    // Missing Content-Type entirely.
     const reqA = new Request('http://localhost/api/transcribe', {
       method: 'POST',
       body: 'x',
@@ -402,7 +350,6 @@ describe('POST /api/transcribe', () => {
     const bodyA = (await resA.json()) as { error: { code: string } }
     expect(bodyA.error.code).toBe('voice.bad_content_type')
 
-    // Wrong Content-Type.
     const reqB = new Request('http://localhost/api/transcribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -413,137 +360,181 @@ describe('POST /api/transcribe', () => {
   })
 
   it('accepts each of audio/wav, audio/webm, audio/ogg', async () => {
+    fakeState.outcome = { kind: 'ok', transcript: '' }
     const { POST } = await import('@/app/api/transcribe/route')
     for (const ct of ['audio/wav', 'audio/webm', 'audio/ogg']) {
-      const req = buildStreamingRequest(
-        'http://localhost/api/transcribe',
-        [new Uint8Array([1, 2, 3])],
-        { contentType: ct },
+      const res = await POST(
+        buildRequest(
+          'http://localhost/api/transcribe',
+          new Uint8Array([1, 2, 3]),
+          { contentType: ct },
+        ),
       )
-      const res = await POST(req)
       expect(res.status).toBe(200)
-      // Drain so the stream finishes and the fake socket cleans up.
       await readResponseText(res)
-      fakeState.socket = null
     }
   })
 
-  it('emits voice.session_too_large and closes when audio bytes exceed 5MB', async () => {
+  it('never echoes the SARVAM_API_KEY in any response body or header', async () => {
+    fakeState.apiKey = 'super-secret-key-12345'
+    fakeState.outcome = {
+      kind: 'rest-error',
+      code: 'voice.network',
+      message: 'boom',
+    }
     const { POST } = await import('@/app/api/transcribe/route')
-    // 6 MB total in 4 chunks of 1.5 MB each.
-    const big = new Uint8Array(1.5 * 1024 * 1024)
-    const chunks = [big, big, big, big]
-    const req = buildStreamingRequest(
-      'http://localhost/api/transcribe',
-      chunks,
+    const res = await POST(
+      buildRequest('http://localhost/api/transcribe', new Uint8Array([1, 2])),
     )
-    const res = await POST(req)
-    const text = await readResponseText(res)
-    const events = parseSseEvents(text)
-    const errors = events.filter(
-      (e) => e.kind === 'voice.session_too_large',
-    )
-    expect(errors).toHaveLength(1)
-    expect(fakeState.socket?.closed).toBe(true)
+    const body = await readResponseText(res)
+    expect(body).not.toContain('super-secret-key-12345')
+    for (const [, value] of res.headers.entries()) {
+      expect(value).not.toContain('super-secret-key-12345')
+    }
   })
 
-  it('emits voice.session_too_long and closes when the 90s cap fires', async () => {
+  // --------------------------------------------------------------------
+  // Cost + abuse guards
+  // --------------------------------------------------------------------
+
+  it('emits voice.session_too_large and stops reading when audio bytes exceed the cap', async () => {
+    fakeState.outcome = { kind: 'ok', transcript: 'should not run' }
+    const { MAX_AUDIO_BYTES, POST } = await import('@/app/api/transcribe/route')
+    // 1.5x the cap, in three chunks.
+    const half = new Uint8Array(MAX_AUDIO_BYTES)
+    const tail = new Uint8Array(Math.floor(MAX_AUDIO_BYTES / 2))
+    const res = await POST(
+      buildRequest('http://localhost/api/transcribe', [half, tail]),
+    )
+    const events = parseSseEvents(await readResponseText(res))
+    const errors = events.filter((e) => e.kind === 'voice.session_too_large')
+    expect(errors).toHaveLength(1)
+    // Sarvam should never have been called when the cap fires first.
+    expect(fakeState.lastCall).toBeNull()
+    expect(res.headers.get('X-Voice-Cap-Hit')).toBe('1')
+  })
+
+  it('emits voice.session_too_long when the duration cap fires', async () => {
+    fakeState.outcome = {
+      kind: 'abort-aware',
+      delayMs: 60_000,
+      transcript: 'should never reach here',
+    }
     vi.useFakeTimers()
     try {
-      const { POST } = await import('@/app/api/transcribe/route')
-      // Body that never closes — let the cap timer be the trigger.
-      const body = new ReadableStream<Uint8Array>({
-        start() {
-          // Never enqueue, never close.
-        },
-      })
-      const req = new Request('http://localhost/api/transcribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'audio/wav' },
-        body: body as unknown as BodyInit,
-        // @ts-expect-error duplex required by Node fetch for streaming bodies
-        duplex: 'half',
-      })
-      const resPromise = POST(req)
-      // Let the connect microtask resolve before advancing the clock.
-      await vi.advanceTimersByTimeAsync(0)
-      const res = await resPromise
-      // Push past the 90s cap.
-      await vi.advanceTimersByTimeAsync(91_000)
-      // Allow flush / finalize tasks to drain.
-      await vi.advanceTimersByTimeAsync(500)
-      // We can't easily drain the stream under fake timers without
-      // deadlocking on the body promise — assert via the fake socket and
-      // then drain under real timers.
-      expect(fakeState.socket?.closed).toBe(true)
-      vi.useRealTimers()
-      const text = await readResponseText(res)
-      const events = parseSseEvents(text)
-      const tooLong = events.filter(
-        (e) => e.kind === 'voice.session_too_long',
+      const { POST, MAX_DURATION_MS } = await import(
+        '@/app/api/transcribe/route'
       )
+      const resPromise = POST(
+        buildRequest(
+          'http://localhost/api/transcribe',
+          new Uint8Array([1, 2, 3, 4]),
+        ),
+      )
+      // Let the await chain advance into transcribeBatch.
+      await vi.advanceTimersByTimeAsync(0)
+      // Push past the duration cap. Our abort-aware mock rejects with
+      // SarvamRestError('voice.aborted'); the route remaps that to
+      // voice.session_too_long because abortController.signal.aborted is true.
+      await vi.advanceTimersByTimeAsync(MAX_DURATION_MS + 100)
+      vi.useRealTimers()
+      const res = await resPromise
+      const events = parseSseEvents(await readResponseText(res))
+      const tooLong = events.filter((e) => e.kind === 'voice.session_too_long')
       expect(tooLong).toHaveLength(1)
+      expect(res.headers.get('X-Voice-Cap-Hit')).toBe('1')
     } finally {
       vi.useRealTimers()
     }
   })
 
-  // --------------------------------------------------------------------
-  // Story V.A.4 — abort handling (request.signal -> Sarvam socket close)
-  // --------------------------------------------------------------------
-
-  it('closes the upstream Sarvam socket when the client aborts', async () => {
-    const { POST } = await import('@/app/api/transcribe/route')
-    const ac = new AbortController()
-    // Body that hangs open so abort is the only trigger.
-    const body = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(new Uint8Array([1, 2, 3]))
-        // Never close.
-      },
-    })
-    const req = new Request('http://localhost/api/transcribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'audio/wav' },
-      body: body as unknown as BodyInit,
-      signal: ac.signal,
-      // @ts-expect-error duplex required for streaming bodies
-      duplex: 'half',
-    })
-    const res = await POST(req)
-    // Wait until the route has registered its abort listener (after the
-    // connect microtask + stream start).
-    await new Promise((r) => setTimeout(r, 20))
-    ac.abort()
-    // Drain so the controller's close runs.
-    const text = await readResponseText(res)
-    expect(fakeState.socket?.closed).toBe(true)
-    const events = parseSseEvents(text)
-    const aborts = events.filter((e) => e.kind === 'voice.aborted')
-    expect(aborts.length).toBeGreaterThanOrEqual(1)
+  it('returns SSE error frames carrying the SarvamRestError code on upstream failure', async () => {
+    const cases: Array<{
+      code:
+        | 'voice.network'
+        | 'voice.unprocessable'
+        | 'voice.session_too_large'
+        | 'voice.provider_unconfigured'
+    }> = [
+      { code: 'voice.network' },
+      { code: 'voice.unprocessable' },
+      { code: 'voice.session_too_large' },
+      { code: 'voice.provider_unconfigured' },
+    ]
+    for (const { code } of cases) {
+      vi.resetModules()
+      fakeState.outcome = { kind: 'rest-error', code, message: 'mock' }
+      const { POST } = await import('@/app/api/transcribe/route')
+      const res = await POST(
+        buildRequest(
+          'http://localhost/api/transcribe',
+          new Uint8Array([1, 2, 3, 4]),
+        ),
+      )
+      const events = parseSseEvents(await readResponseText(res))
+      expect(events).toHaveLength(1)
+      expect(events[0]).toMatchObject({ type: 'error', kind: code })
+    }
   })
 
-  it('sets X-Voice-Bytes and X-Voice-Duration-Ms response headers', async () => {
+  it('emits voice.unprocessable on an empty body', async () => {
+    fakeState.outcome = { kind: 'ok', transcript: 'should not run' }
     const { POST } = await import('@/app/api/transcribe/route')
-    const req = buildStreamingRequest(
-      'http://localhost/api/transcribe',
-      [new Uint8Array([1, 2, 3])],
+    const res = await POST(
+      buildRequest('http://localhost/api/transcribe', new Uint8Array(0)),
     )
-    const res = await POST(req)
+    const events = parseSseEvents(await readResponseText(res))
+    expect(events[0]).toMatchObject({
+      type: 'error',
+      kind: 'voice.unprocessable',
+    })
+    expect(fakeState.lastCall).toBeNull()
+  })
+
+  it('sets X-Voice-Bytes, X-Voice-Duration-Ms, X-Voice-Cap-Hit response headers', async () => {
+    fakeState.outcome = { kind: 'ok', transcript: 'hi' }
+    const { POST } = await import('@/app/api/transcribe/route')
+    const res = await POST(
+      buildRequest(
+        'http://localhost/api/transcribe',
+        new Uint8Array([1, 2, 3, 4, 5]),
+      ),
+    )
+    expect(res.status).toBe(200)
+    expect(res.headers.get('X-Voice-Bytes')).toBe('5')
+    expect(res.headers.get('X-Voice-Cap-Hit')).toBe('0')
+    const dur = Number(res.headers.get('X-Voice-Duration-Ms'))
+    expect(Number.isFinite(dur)).toBe(true)
+    expect(dur).toBeGreaterThanOrEqual(0)
+    await readResponseText(res)
+  })
+
+  it('sets X-Voice-* on 503 short-circuit too', async () => {
+    fakeState.apiKey = null
+    const { POST } = await import('@/app/api/transcribe/route')
+    const res = await POST(
+      buildRequest('http://localhost/api/transcribe', new Uint8Array([1])),
+    )
+    expect(res.status).toBe(503)
     expect(res.headers.get('X-Voice-Bytes')).toBe('0')
     expect(res.headers.get('X-Voice-Duration-Ms')).toBe('0')
-    await readResponseText(res)
-    // Non-200 short-circuits also set them.
-    delete process.env.SARVAM_API_KEY
-    vi.resetModules()
-    const { POST: POST2 } = await import('@/app/api/transcribe/route')
-    const req2 = buildStreamingRequest(
-      'http://localhost/api/transcribe',
-      [new Uint8Array([1])],
+    expect(res.headers.get('X-Voice-Cap-Hit')).toBe('0')
+  })
+
+  // --------------------------------------------------------------------
+  // Non-Sarvam throws inside transcribeBatch are remapped to voice.network
+  // --------------------------------------------------------------------
+
+  it('maps an unexpected non-Sarvam throw to a voice.network SSE error', async () => {
+    fakeState.outcome = { kind: 'throw', err: new Error('rogue') }
+    const { POST } = await import('@/app/api/transcribe/route')
+    const res = await POST(
+      buildRequest(
+        'http://localhost/api/transcribe',
+        new Uint8Array([1, 2, 3]),
+      ),
     )
-    const res2 = await POST2(req2)
-    expect(res2.status).toBe(503)
-    expect(res2.headers.get('X-Voice-Bytes')).toBe('0')
-    expect(res2.headers.get('X-Voice-Duration-Ms')).toBe('0')
+    const events = parseSseEvents(await readResponseText(res))
+    expect(events[0]).toMatchObject({ type: 'error', kind: 'voice.network' })
   })
 })

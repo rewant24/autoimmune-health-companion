@@ -538,3 +538,29 @@ Resolvers picked by env: `VOICE_PROVIDER=sarvam` (STT), `VOICE_TTS_PROVIDER=sarv
 - Re-using `speaking-opener` for cold mount: rejected — `speaking-opener` is gated on permission grant by design (the dialog version follows a `PERMISSION_GRANTED(opener)` payload). Decoupling cold greeting from permission is exactly the bug we're fixing.
 
 **Supersedes / amends:** none. ADR-026 stays the source of truth for the voice provider choice; ADR-027 documents the implementation refinements that made C1 actually work end-to-end.
+
+## ADR-028 — Voice C1 STT transport: pivot from Sarvam streaming WS to REST batch
+
+**Date:** 2026-04-28
+**Status:** Accepted
+
+**Context.** Bug 1 — every voice check-in returned `{ type:"final", text:"", durationMs:~260 }` with no partial frames. Two earlier fix attempts failed:
+- **Option A (codec swap, `pcm_s16le`)** — Sarvam's SDK accepts the value but silently fails to decode raw PCM bytes. Same empty-final.
+- **Option B (prepend a 44-byte WAV header so the bytes are a real WAV file)** — same symptom. The HAR shows `final.bytes ≈ 696 KB` (~22 s of audio at 16 kHz mono 16-bit) but `text=""`. Recorder validation (objective Node.js analysis of the captured WAV) confirms the audio is fine: valid header, RMS=0.041, peak=0.31, real voice activity, no clipping/DC offset. The audio is good; the protocol path is the bug.
+
+Walking the SDK source confirmed the root cause: Sarvam's streaming WS is **VAD-segmented**. The `flush_signal=true` query param is required for `socket.flush()` to actually trigger a final transcript; the SDK type system does not surface it. `transcribe()` enqueues an audio frame, but without `flush_signal=true` the server waits for VAD-detected silence to emit anything. Our adapter buffers the entire utterance client-side and POSTs it as one frame in <50 ms, so VAD never trips. We then force-close the socket 250 ms later and Sarvam emits zero events. The streaming WS protocol is designed for real-time mic capture with continuous segmentation; our usage pattern is buffered upload, which is exactly what REST batch is for.
+
+**Decision.** Rip out the streaming-WS path and replace it with Sarvam's REST batch endpoint (`POST https://api.sarvam.ai/speech-to-text`, multipart form-data). New module `lib/voice/sarvam-stt-rest.ts` (`transcribeBatch`) does a thin direct `fetch` + `FormData` (file + model + mode + language_code) — no SDK indirection. The route (`app/api/transcribe/route.ts`) buffers the request body, calls `transcribeBatch`, and emits **one** SSE `final` frame back to the browser. The SSE wire shape is preserved for the adapter (still parses `data: {…}` envelopes) but no `partial` frames are ever emitted — REST batch is synchronous, so partials are conceptually impossible. Caps tightened: 1 MB / 30 s (down from 5 MB / 90 s) to match Sarvam's REST batch limits. WS module + tests deleted.
+
+**Consequences.**
+- Pros: Bug 1 closes (REST batch returns the transcript synchronously — no VAD/flush/timing race possible). Wire shape stable for the adapter (no client changes required). Fewer moving parts: one HTTP round-trip vs WebSocket connect → audio frames → flush → close → events. No more `flush_signal` / `vad_signals` query-param archaeology in our code.
+- Cons: live word-by-word partials are gone. ADR-027 had restored partials on Vercel HTTPS via streaming POST → streaming WS; that path is also removed here because it shared the same broken upstream. The check-in UX falls back to "show transcript on stop()" which is what local dev already had.
+- Risks: Sarvam's REST batch has a 30 s cap. Long check-ins past the cap surface as `voice.session_too_long`; ADR-027's silence VAD already triggers `stop()` well before that, so this is theoretical.
+
+**Alternatives considered.**
+- **Keep streaming WS, add `flush_signal=true` and `vad_signals=true` query params** — would likely close Bug 1 too, but keeps a streaming-segmentation protocol for a buffered-upload usage pattern. Two-way VAD signalling is over-engineering for "user finished talking, transcribe this one blob."
+- **Keep streaming WS, switch to chunked transcribe (split the buffered audio into N small `transcribe()` calls)** — H2 in the bug-1 history. Closer to Sarvam's intended usage but still requires `flush_signal=true`, fragile chunk-boundary assumptions, and three more sources of timing risk.
+- **Sarvam SDK's `Uploadable` REST helper** — adds an indirection awkward for a `Uint8Array` payload inside a Next.js route. Direct `fetch` + `FormData` is fewer moving parts and easier to test (single `fetchImpl` injection point).
+
+**Supersedes / amends:** ADR-026 still defines the provider choice (Sarvam STT). ADR-027 stays the record of the streaming-with-buffered-fallback adapter shape; the **upload transport** that ADR described is replaced by REST batch as of this ADR. The SarvamRecorder + silence VAD + state-machine cold greeting from ADR-027 are unchanged — only the server-side transport flips.
+

@@ -9,6 +9,26 @@
 
 ---
 
+## 2026-04-28 — Voice C1 STT transport: pivot from Sarvam streaming WS to REST batch (ADR-028)
+
+**Related ADR:** ADR-028 (new) replaces the **upload transport** half of ADR-027. ADR-026 (provider choice) and the rest of ADR-027 (silence VAD, cold greeting, StopButton, capability flags) are unchanged.
+
+**What changed.**
+1. New `lib/voice/sarvam-stt-rest.ts` — thin `transcribeBatch(opts)` that POSTs multipart form-data (file + model + mode + language_code) to `https://api.sarvam.ai/speech-to-text`. Direct `fetch` + `FormData`; no SDK indirection. Typed `SarvamRestError` covers `voice.{provider_unconfigured,network,session_too_long,session_too_large,unprocessable,aborted}`.
+2. `app/api/transcribe/route.ts` rewritten on top of the new module. Reads request body to a Uint8Array (with byte-cap streaming), calls `transcribeBatch`, emits **one** SSE `final` frame (or one `error` frame). Caps tightened to 1 MB / 30 s (down from 5 MB / 90 s) to match Sarvam's REST batch limits. `X-Voice-{Bytes,Duration-Ms,Cap-Hit}` headers preserved.
+3. `lib/voice/sarvam-stt-server.ts` (the streaming-WS bridge) and its testing surface removed. The streaming branch in `SarvamAdapter` (TransformStream → `fetch(..., { body: stream, duplex: 'half' })`) is now a no-op upstream-wise but kept in the adapter — buffered mode is what the route consumes today, and gutting the streaming branch is a separate concern.
+4. SSE wire shape is unchanged (the adapter still parses `data: {…}` envelopes via `drainSseEvents`) but `partial` frames are no longer emitted by this route. Sarvam's REST batch is synchronous; partials are conceptually impossible. The check-in page already handles the partials-absent case (it just renders the final transcript on `stop()`).
+
+**Why.** Bug 1 — every check-in returned `{type:"final", text:"", durationMs:~260}`. Two earlier fixes (Option A: codec swap, Option B: prepend WAV header) didn't move the needle. SDK-level walk of `node_modules/sarvamai` revealed the streaming WS is VAD-segmented and requires `flush_signal=true` as a query param for `socket.flush()` to actually fire — undocumented in the SDK type surface. Our usage pattern (buffer entire utterance client-side, POST as one frame, force-close 250 ms later) never trips Sarvam's VAD, so the server emits zero events. Recorder was independently verified clean (valid WAV, RMS=0.041, real voice activity profile) — the bug is in our protocol choice, not the audio. REST batch is the right tool for a buffered upload: synchronous request → synchronous transcript, no VAD/flush/timing race possible.
+
+**What did NOT change.** ADR-026 (Sarvam as the provider, multi-turn dialog architecture), the recorder + silence VAD (ADR-027 §2), the state-machine cold greeting + `idle-greeting`/`idle-ready` states (ADR-027 §3), the StopButton + heard-transcript echo (ADR-027 §5). The browser adapter's request shape (POST `audio/wav` body to `/api/transcribe?lang=…`, parse SSE response, dispatch on `type` field) is identical.
+
+**Tradeoff acknowledged.** Live word-by-word partials are gone. ADR-027 §1 had restored them on Vercel HTTPS (streaming POST → streaming WS); that path is collateral damage here because it shared the broken upstream. Restoring partials would require a streaming-friendly STT provider or a Sarvam streaming-WS path with `flush_signal=true` properly threaded — out of scope for closing Bug 1.
+
+**Validation.** 797/797 vitest, `tsc --noEmit` clean, `next build` green. New tests: `tests/voice/sarvam-stt-rest.test.ts` (17 tests covering happy path + 10 error mappings + the API-key reader). `tests/api/transcribe-route.test.ts` rewritten for the REST batch shape (16 tests).
+
+---
+
 ## 2026-04-27 — Voice C1 fix-pass (ADR-027): streaming-with-buffered-fallback + client-side silence VAD + state-machine cold greeting + StopButton
 
 **Related ADR:** ADR-027 (new) builds on ADR-026 (Sarvam streaming STT + TTS + multi-turn dialog).

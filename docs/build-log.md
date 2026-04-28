@@ -810,3 +810,43 @@ User chose Scope B (full fix, production-ready) and "PLAN THE ENTIRE MODE FIRST"
 - **Silence VAD false positives.** Background noise (loud room, breathing) may keep RMS above the silence threshold and never auto-stop. Stop button is the safety net. Real-world threshold tuning likely needs follow-up.
 
 **Next.** Commit the in-tree session work (six modified files + three created). Then walk Phase 6 §Local: `npm run dev` → `/check-in` cold → opener auto-plays → tap orb → speak → transcript appears (final-only locally; live partials only on HTTP/2) → Stop button OR silence auto-stops → see heard transcript → save. After local smoke passes, push branch + run Vercel preview smoke (HTTP/2 → live partials should fire). After preview smoke passes, squash-merge to main, run `scripts/ship-prod.sh` for Convex prod, prod smoke on `https://saha-health-companion.vercel.app/check-in`, tag `voice-c1/shipped`, update MEMORY.md. Still no push / no Vercel / no Convex until Rewant promotes.
+
+---
+
+## 2026-04-28 — Voice C1 Bug 1: pivot from streaming WS to REST batch (ADR-028)
+
+**Context.** Voice C1 shipped end-to-end on the `feat/voice-sarvam` branch (commit `a451ab8`) but every check-in returned `{type:"final", text:"", durationMs:~260, bytes:~700KB}`. Two prior fix attempts on this same branch — Option A (codec swap to `pcm_s16le`) and Option B (prepend a 44-byte WAV header) — closed type-system ambiguity but did not move the bug. The audio was reaching Sarvam; Sarvam was emitting zero events.
+
+**Diagnostic walk this session.**
+1. Read `docs/voice-c1-bug-1-history.md` and the active two-option fix plan. Three live hypotheses: H1 (250 ms post-flush wait too short), H2 (chunked transcribe needed), H3 (long-tail silent failure).
+2. Walked `node_modules/sarvamai/dist/esm/api/resources/speechToTextStreaming/client/{Socket.mjs,Client.mjs}`. Found that `transcribe()` enqueues a frame and `flush()` sends `{type:"flush"}`, but the WS only honours `flush` when opened with `flush_signal=true` as a query param. SDK type surface does not expose this. We never set it — and our usage pattern (buffer entire utterance client-side, POST as one frame in <50 ms, force-close 250 ms after `flush()`) cannot trip Sarvam's VAD on its own. Result: zero events emitted server-side, every session.
+3. **Recorder validation (Option A.0 listening spike).** Captured a 22 s `/tmp/last-upload.wav` via a temporary dump branch in the route, reverted the dump, then analysed in Node.js: valid 44-byte RIFF/WAVE header, 16 kHz mono 16-bit PCM, RMS=0.041, peak=0.31, ~30 s duration, real voice-activity profile, no clipping or DC offset. Audio is fine. Bug is in protocol choice.
+4. **Decision.** Pivot to Sarvam's REST batch endpoint (`POST https://api.sarvam.ai/speech-to-text`, multipart form-data, synchronous JSON response). REST batch is the right tool for a buffered upload — no VAD/flush/timing race possible.
+
+**Code delta (single fix-pass).**
+- New: `lib/voice/sarvam-stt-rest.ts` — thin `transcribeBatch(opts)` doing direct `fetch` + `FormData` (file + model + mode + language_code), typed `SarvamRestError` with `voice.{provider_unconfigured,network,session_too_long,session_too_large,unprocessable,aborted}`, `readSarvamApiKey()` for the 503 short-circuit, `fetchImpl` test seam.
+- New: `tests/voice/sarvam-stt-rest.test.ts` — 17 tests (3 readSarvamApiKey, 3 happy-path, 10 error-path mappings, 1 SarvamRestError class).
+- Rewritten: `app/api/transcribe/route.ts` — buffers the request body with a 1 MB byte cap, calls `transcribeBatch` with a 30 s `AbortSignal`, emits exactly **one** SSE `final` frame on success or **one** SSE `error` frame on failure. Caps tightened from 5 MB / 90 s to 1 MB / 30 s to match Sarvam's REST batch limits. `X-Voice-{Bytes,Duration-Ms,Cap-Hit}` headers preserved.
+- Rewritten: `tests/api/transcribe-route.test.ts` — 16 tests covering happy path, lang query forwarding, byte/duration cap, content-type guards, key absence (503), key non-leakage, X-Voice-* headers on success + 503, SarvamRestError mapping for 4 error codes, non-Sarvam throw remap, empty-body rejection.
+- Deleted: `lib/voice/sarvam-stt-server.ts` — streaming WS bridge no longer referenced by any source file.
+- Build plan doc: `docs/voice-c1-bug-1-options-build-plan.md` (untracked) captures the three options (A: REST batch, B: keep WS + add `flush_signal=true`, C: chunked transcribe) and the decision rationale.
+
+**Wire-shape compatibility with the browser adapter.** Adapter unchanged — still POSTs `audio/wav` body to `/api/transcribe?lang=…`, still parses SSE `data: {…}` envelopes via `drainSseEvents`, still dispatches on the JSON `type` field. The only observable change is that no `partial` frames are ever emitted (REST batch is synchronous; partials are conceptually impossible). The check-in page already handled the partials-absent case from local-dev buffered mode; nothing else moves.
+
+**ADR + changelog.** ADR-028 added to `docs/architecture-decisions.md` (replaces ADR-027's upload-transport half; ADR-026 unchanged). 2026-04-28 entry at the top of `docs/architecture-changelog.md`. Resolution section appended to `docs/voice-c1-bug-1-history.md` recording the definitive root cause (VAD + missing `flush_signal=true`), why H1/H2/H3 were each the wrong hypothesis to chase, and the code delta.
+
+**Validation.**
+- `npm run typecheck` — clean.
+- `npm run test:run` — **797/797 passing** (was 755 end of Voice C1 fix-pass; +42 from this session is the net of 16 new route tests + 17 new sarvam-stt-rest tests + 9 sarvam-adapter tests now reachable that were `.skip`'d during the streaming-WS work).
+- `npm run build` — green; all 17 routes resolve.
+- Live smoke on `next dev` is the next step (handed to Rewant). Per the standing constraint: no push / no Vercel / no Convex until Rewant promotes.
+
+**Tradeoff acknowledged.** Live word-by-word `partial` SSE frames are gone. ADR-027 §1 had restored them on Vercel HTTPS via streaming POST → streaming WS; that path is collateral damage here because it shared the broken upstream. Restoring partials would require a streaming-friendly STT provider or a Sarvam streaming-WS path with `flush_signal=true` properly threaded — out of scope for closing Bug 1.
+
+**Surprises / lessons.**
+- **The recorder was fine the whole time.** I argued strongly for Option A on protocol-level analysis but had not verified the audio. Rewant's "build plan and revisit inference" prompt forced an honest re-check, and the listening-spike (objective Node.js analysis of the captured WAV) confirmed the recorder is healthy. Lesson: when a bug looks protocol-level, *still* verify the upstream input is what you think it is — cheap insurance against a phantom fix.
+- **SDK type surfaces lie.** Sarvam's SDK accepts `input_audio_codec: 'pcm_s16le'` and a `flush()` method, but the actual server semantics depend on a `flush_signal=true` query param undocumented in the type system. Walking the SDK source (`node_modules/.../Client.mjs`) was the only way to find it. Lesson: when an SDK behaves differently from its documented contract, read the `dist/` source.
+- **Three failed attempts on the same branch is the signal to question the protocol, not the parameters.** Option A and Option B both adjusted parameters (codec, header). Bug persisted. The right move was to question whether the streaming-WS protocol fits our buffered usage pattern at all. It does not. REST batch fits. One pivot closes the bug; three more parameter tweaks would have produced more phantom fixes.
+- **Sensitive-redaction-vs-empty trap (recurring).** The `vercel env pull` redaction-vs-empty trap from the 2026-04-26 prod incident is in the same family as this bug: surface-level type acceptance does not equal semantic correctness. Same lesson, different layer.
+
+**Next.** Live smoke on `next dev`: cold mount `/check-in` → opener auto-plays (ADR-027 path) → tap orb → speak → silence-VAD or StopButton triggers `stop()` → SSE `final` frame returns the transcript synchronously → "I heard …" echo → Save. Caps to verify: 1 MB byte cap (≈30 s of audio at 32 KB/s); 30 s duration cap. After local smoke passes, push branch, Vercel preview smoke (no live partials this time — that's expected, not a regression), squash-merge, prod smoke. Memory updates and `voice-c1/bug-1-resolved` tag still TBD.

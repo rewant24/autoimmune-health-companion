@@ -425,5 +425,31 @@ bd5ff10 fix(voice): resume AudioContext on start to unblock PCM chunk flow      
 
 ---
 
+## Resolution (2026-04-28 evening) — Option C: pivot to Sarvam REST batch
+
+Closed by ADR-028. Neither H1, H2, nor H3 was the right hypothesis to chase — the streaming-WS protocol was the wrong tool for our usage pattern, and tweaking flush timing or chunk size on the wrong protocol would have produced more "phantom fixes."
+
+**Root cause (re-stated, definitive).** Sarvam's streaming WS is **VAD-segmented**. The SDK's `socket.flush()` only triggers a final transcript when the connection was opened with `flush_signal=true` as a query param — undocumented in the SDK type surface, only visible in `node_modules/sarvamai/dist/esm/api/resources/speechToTextStreaming/client/Client.mjs`. Our adapter buffers the entire utterance client-side and POSTs it as a single frame in <50 ms. With no `flush_signal=true`, the server waits for VAD-detected silence to emit anything; we then force-close the socket 250 ms later, so the server emits zero events. Result: every `final` carries `text=""`, regardless of audio quality, codec, or WAV-header presence.
+
+**Recorder validation.** Before pivoting, `/tmp/last-upload.wav` was analysed in Node.js: valid 44-byte RIFF/WAVE header, 16 kHz mono 16-bit, RMS=0.041, peak=0.31, real voice-activity profile, no clipping or DC offset. Audio is fine. Bug is in protocol choice.
+
+**Fix shipped.** REST batch endpoint (`POST https://api.sarvam.ai/speech-to-text`, multipart form-data) replaces the streaming WS bridge. Buffered upload → synchronous transcript → SSE `final` frame to the browser. No VAD, no flush, no timing race.
+
+**Code delta:**
+- New: `lib/voice/sarvam-stt-rest.ts` (`transcribeBatch` + `SarvamRestError`).
+- New: `tests/voice/sarvam-stt-rest.test.ts` (17 tests).
+- Rewritten: `app/api/transcribe/route.ts` (now buffer → REST → SSE).
+- Rewritten: `tests/api/transcribe-route.test.ts` (16 tests).
+- Deleted: `lib/voice/sarvam-stt-server.ts` (streaming WS bridge — no source code referenced it after the rewrite).
+- Tradeoff: live word-by-word `partial` SSE frames are gone (REST batch is synchronous; partials are conceptually impossible). ADR-027's silence VAD + StopButton remain — UX is "speak → silence-VAD or StopButton triggers stop() → transcript appears." The check-in page already handled the partials-absent path.
+- Caps tightened in the route: 1 MB / 30 s (down from 5 MB / 90 s) to match Sarvam REST limits.
+
+**Validation.** 797/797 vitest, `tsc --noEmit` clean, `next build` green. Live smoke on `next dev` is the next step (handed to Rewant).
+
+**Why neither H1, H2, nor H3 was the answer.** H1 (250 ms post-flush wait too short) would still have left `flush_signal=true` missing; tuning the wait would not have changed the outcome. H2 (chunked transcribe) is closer to Sarvam's intended streaming usage but would have layered chunk-boundary fragility on top of the same flush-signal gap. H3 (long-tail silent failure) would have surfaced *some* events for some sessions if the recorder were the issue; the symptom is universal, which is the tell that the protocol path is broken, not the audio. The right move was to question the protocol choice itself.
+
+---
+
 *Doc written 2026-04-28 PM by Claude (Opus 4) at Rewant's request,
-before starting a fresh chat for the next diagnostic step.*
+before starting a fresh chat for the next diagnostic step. Resolution
+section appended same evening.*
