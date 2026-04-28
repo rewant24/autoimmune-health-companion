@@ -29,11 +29,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import {
-  createTtsAdapter,
-  isTtsAvailable,
-  type TtsAdapter,
-} from '@/lib/voice/tts-adapter'
+import { getTtsProvider } from '@/lib/voice/provider'
+import type { TtsProvider } from '@/lib/voice/types'
 
 const TTS_DISABLED_KEY = 'saha.ttsDisabled'
 const LONG_PRESS_MS = 1000
@@ -46,6 +43,26 @@ export interface SpokenOpenerProps {
    * cold-start, streak-N, re-entry, etc.
    */
   variantKey: string
+  /**
+   * Whether to auto-speak on mount + variant change. Defaults to `true`
+   * to preserve the standalone-component behaviour. The check-in page
+   * passes `false` so its state-machine-driven greeting effect owns
+   * the cold-mount TTS — without this opt-out the greeting would fire
+   * twice (once from this component, once from the page) and the
+   * second call would cancel the first.
+   */
+  autoSpeak?: boolean
+  /**
+   * When true, draws attention to the speaker-icon button so the user
+   * notices it as the way to hear the greeting they missed. The
+   * check-in page passes this `true` from the `idle-ready` state when
+   * `greetingBlocked === true` (Chrome blocked `audio.play()` on
+   * cold-mount). Renders as a soft animated pulse ring around the
+   * button, or a static ring when `prefers-reduced-motion: reduce` is
+   * set. No-op when TTS isn't available (button is hidden anyway).
+   * Voice C1 Fix C.
+   */
+  highlightSpeaker?: boolean
 }
 
 function readTtsDisabled(): boolean {
@@ -77,13 +94,16 @@ function prefersReducedMotion(): boolean {
 export function SpokenOpener({
   text,
   variantKey,
+  autoSpeak = true,
+  highlightSpeaker = false,
 }: SpokenOpenerProps): React.JSX.Element {
-  const ttsRef = useRef<TtsAdapter | null>(null)
-  if (ttsRef.current === null) ttsRef.current = createTtsAdapter()
+  const ttsRef = useRef<TtsProvider | null>(null)
+  if (ttsRef.current === null) ttsRef.current = getTtsProvider()
 
-  // Capture availability once per mount — `isTtsAvailable` reads
-  // `globalThis.speechSynthesis`, which is stable across renders.
-  const available = useMemo(() => isTtsAvailable(), [])
+  // Capture availability once per mount — provider availability is stable
+  // across renders for both adapters (Web Speech reads
+  // `globalThis.speechSynthesis`; Sarvam always returns true).
+  const available = useMemo(() => ttsRef.current?.isAvailable() ?? false, [])
 
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFired = useRef(false)
@@ -108,7 +128,10 @@ export function SpokenOpener({
   )
 
   // Auto-speak on mount and whenever the opener variant changes.
+  // Skip when the parent has taken over playback by passing
+  // `autoSpeak={false}` — see prop docstring.
   useEffect(() => {
+    if (!autoSpeak) return
     if (!available) return
     if (prefersReducedMotion()) return
     if (readTtsDisabled()) return
@@ -116,7 +139,7 @@ export function SpokenOpener({
     return () => {
       ttsRef.current?.cancel()
     }
-  }, [available, speak, text, variantKey])
+  }, [autoSpeak, available, speak, text, variantKey])
 
   const startLongPress = useCallback(() => {
     longPressFired.current = false
@@ -170,7 +193,8 @@ export function SpokenOpener({
         {available ? (
           <button
             type="button"
-            aria-label="Replay"
+            aria-label={highlightSpeaker ? 'Tap to hear greeting' : 'Replay'}
+            data-highlight={highlightSpeaker ? 'true' : undefined}
             onPointerDown={startLongPress}
             onPointerUp={cancelLongPress}
             onPointerLeave={cancelLongPress}
@@ -181,7 +205,14 @@ export function SpokenOpener({
               'align-middle text-zinc-500 hover:bg-zinc-100 ' +
               'focus-visible:outline-none focus-visible:ring-2 ' +
               'focus-visible:ring-teal-400 focus-visible:ring-offset-2 ' +
-              'dark:hover:bg-zinc-800'
+              'dark:hover:bg-zinc-800' +
+              // Fix C — attention ring when greeting autoplay was blocked.
+              // Animate the pulse only when reduced-motion is NOT set;
+              // fall back to a static ring otherwise so the cue is still
+              // visible without motion.
+              (highlightSpeaker
+                ? ' ring-2 ring-teal-400 ring-offset-2 motion-safe:animate-pulse'
+                : '')
             }
           >
             <SpeakerGlyph />

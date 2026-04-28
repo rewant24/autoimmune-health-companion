@@ -47,3 +47,6 @@ next-env.d.ts
 
 # local backups (e.g. handbook.backup-YYYYMMDD-HHMMSS from doc migrations)
 handbook.backup-*/
+
+# spike artifacts (audio samples, scratch outputs from research spikes)
+docs/research/spike-out/

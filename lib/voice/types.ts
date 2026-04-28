@@ -64,10 +64,56 @@ export interface VoiceProvider {
   stop(): Promise<Transcript>
   onPartial(cb: (partial: string) => void): void
   onError(cb: (err: VoiceError) => void): void
+  /**
+   * Optional. Adapter fires this when its source detects trailing
+   * silence after speech (Sarvam: 6 chunks at <0.01 RMS after first
+   * crossing 0.02 — ≈1.5s). The hook subscribes and calls `stop()` so
+   * the reducer transitions via the same `PROVIDER_STOPPED` path as a
+   * manual tap. Adapters without VAD (web-speech) omit this. Fix F.1.
+   */
+  onSilence?(cb: () => void): void
   capabilities: VoiceCapabilities
 }
 
 /**
  * Env flag values recognised by the provider factory.
  */
-export type VoiceProviderName = 'web-speech' | 'openai-realtime'
+export type VoiceProviderName = 'web-speech' | 'openai-realtime' | 'sarvam'
+
+// --- TTS ------------------------------------------------------------------
+
+/**
+ * Per-call options for `TtsProvider.speak()`. Adapters interpret these as
+ * best-effort hints — providers may ignore values they cannot honour.
+ *
+ * `voice` is intentionally `unknown` at the interface boundary because the
+ * concrete shape differs by adapter (Web Speech: `SpeechSynthesisVoice`;
+ * Sarvam: a string speaker name). The UI does not pick voices in cycle 1.
+ */
+export interface TtsSpeakOptions {
+  rate?: number
+  pitch?: number
+  voice?: unknown
+}
+
+/**
+ * The TTS contract. Both Web Speech (browser `speechSynthesis`) and Sarvam
+ * (server-proxied audio stream) implement this.
+ *
+ *   const t = getTtsProvider()
+ *   if (t.isAvailable()) await t.speak('Hello.')
+ *
+ * `speak()` must resolve when playback ends and reject on a provider error;
+ * `cancel()` aborts any in-flight utterance synchronously and is safe to
+ * call when nothing is playing.
+ */
+export interface TtsProvider {
+  speak(text: string, opts?: TtsSpeakOptions): Promise<void>
+  cancel(): void
+  isAvailable(): boolean
+}
+
+/**
+ * Env flag values recognised by the TTS provider factory.
+ */
+export type TtsProviderName = 'web-speech' | 'sarvam'

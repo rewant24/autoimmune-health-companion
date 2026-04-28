@@ -9,6 +9,45 @@
 
 ---
 
+## 2026-04-28 — Voice C1 STT transport: pivot from Sarvam streaming WS to REST batch (ADR-028)
+
+**Related ADR:** ADR-028 (new) replaces the **upload transport** half of ADR-027. ADR-026 (provider choice) and the rest of ADR-027 (silence VAD, cold greeting, StopButton, capability flags) are unchanged.
+
+**What changed.**
+1. New `lib/voice/sarvam-stt-rest.ts` — thin `transcribeBatch(opts)` that POSTs multipart form-data (file + model + mode + language_code) to `https://api.sarvam.ai/speech-to-text`. Direct `fetch` + `FormData`; no SDK indirection. Typed `SarvamRestError` covers `voice.{provider_unconfigured,network,session_too_long,session_too_large,unprocessable,aborted}`.
+2. `app/api/transcribe/route.ts` rewritten on top of the new module. Reads request body to a Uint8Array (with byte-cap streaming), calls `transcribeBatch`, emits **one** SSE `final` frame (or one `error` frame). Caps tightened to 1 MB / 30 s (down from 5 MB / 90 s) to match Sarvam's REST batch limits. `X-Voice-{Bytes,Duration-Ms,Cap-Hit}` headers preserved.
+3. `lib/voice/sarvam-stt-server.ts` (the streaming-WS bridge) and its testing surface removed. The streaming branch in `SarvamAdapter` (TransformStream → `fetch(..., { body: stream, duplex: 'half' })`) is now a no-op upstream-wise but kept in the adapter — buffered mode is what the route consumes today, and gutting the streaming branch is a separate concern.
+4. SSE wire shape is unchanged (the adapter still parses `data: {…}` envelopes via `drainSseEvents`) but `partial` frames are no longer emitted by this route. Sarvam's REST batch is synchronous; partials are conceptually impossible. The check-in page already handles the partials-absent case (it just renders the final transcript on `stop()`).
+
+**Why.** Bug 1 — every check-in returned `{type:"final", text:"", durationMs:~260}`. Two earlier fixes (Option A: codec swap, Option B: prepend WAV header) didn't move the needle. SDK-level walk of `node_modules/sarvamai` revealed the streaming WS is VAD-segmented and requires `flush_signal=true` as a query param for `socket.flush()` to actually fire — undocumented in the SDK type surface. Our usage pattern (buffer entire utterance client-side, POST as one frame, force-close 250 ms later) never trips Sarvam's VAD, so the server emits zero events. Recorder was independently verified clean (valid WAV, RMS=0.041, real voice activity profile) — the bug is in our protocol choice, not the audio. REST batch is the right tool for a buffered upload: synchronous request → synchronous transcript, no VAD/flush/timing race possible.
+
+**What did NOT change.** ADR-026 (Sarvam as the provider, multi-turn dialog architecture), the recorder + silence VAD (ADR-027 §2), the state-machine cold greeting + `idle-greeting`/`idle-ready` states (ADR-027 §3), the StopButton + heard-transcript echo (ADR-027 §5). The browser adapter's request shape (POST `audio/wav` body to `/api/transcribe?lang=…`, parse SSE response, dispatch on `type` field) is identical.
+
+**Tradeoff acknowledged.** Live word-by-word partials are gone. ADR-027 §1 had restored them on Vercel HTTPS (streaming POST → streaming WS); that path is collateral damage here because it shared the broken upstream. Restoring partials would require a streaming-friendly STT provider or a Sarvam streaming-WS path with `flush_signal=true` properly threaded — out of scope for closing Bug 1.
+
+**Validation.** 797/797 vitest, `tsc --noEmit` clean, `next build` green. New tests: `tests/voice/sarvam-stt-rest.test.ts` (17 tests covering happy path + 10 error mappings + the API-key reader). `tests/api/transcribe-route.test.ts` rewritten for the REST batch shape (16 tests).
+
+---
+
+## 2026-04-27 — Voice C1 fix-pass (ADR-027): streaming-with-buffered-fallback + client-side silence VAD + state-machine cold greeting + StopButton
+
+**Related ADR:** ADR-027 (new) builds on ADR-026 (Sarvam streaming STT + TTS + multi-turn dialog).
+
+**What changed.** Six structural fixes to make Voice C1 actually work end-to-end:
+
+1. `SarvamAdapter` switches between streaming POST (HTTPS, `duplex: 'half'`, fires fetch on `start()`) and buffered POST (HTTP, fires fetch on `stop()`) via a new `streamingMode: 'auto' | 'streaming' | 'buffered'` option. Default `'auto'` resolves on `window.location.protocol`. Live partials only fire on Vercel deploys (HTTP/2+); local `next dev` (HTTP/1.1) still works in buffered mode without partials.
+2. `SarvamRecorder` adds RMS-based silence detection — `onSilenceDetected(cb)` fires once when the user stops speaking. Constants exported: `SPEECH_RMS_THRESHOLD = 0.02`, `SILENCE_RMS_THRESHOLD = 0.01`, `SILENCE_TRAILING_CHUNKS = 6` (1.5s at 250ms cadence). Adapter wires this to its own `stop()`.
+3. State machine adds `idle-greeting` + `idle-ready` states and `START_GREETING` / `GREETING_PLAYED` / `GREETING_FAILED` events. Page dispatches `START_GREETING` on mount when TTS is available so the cold-mount greeting plays without the user needing to tap first.
+4. `SpokenOpener` accepts an optional `autoSpeak` prop (default `true`); page passes `false` so the page-level greeting effect owns playback (avoids double-fire).
+5. New `<StopButton>` component mounted during `listening` + `listening-answer` ("Tap when done"). `transientCopyFor()` echoes `"I heard: '<transcript>'"` during `processing` + `extracting` + `extracting-answer` so users see what landed before extraction.
+6. Capability flags `{ partials: true, vad: true }` are now truthful end-to-end on Vercel.
+
+**Why.** Voice C1 shipped to a Vercel preview but smoke testing surfaced two bugs: (1) opener never auto-played on `/check-in` mount, (2) live transcript dictation never appeared (locally OR on preview). Both traced to pre-existing structural issues, not regressions. The buffered-POST commit was the right call when Chrome rejected streaming on HTTP/1.1, but it killed live partials wholesale. Fixing it required threading streaming-vs-buffered through the adapter without breaking local dev.
+
+**What did NOT change.** ADR-026 (provider choice + multi-turn dialog architecture) is unchanged. The server-side streaming bridge (`lib/voice/sarvam-stt-server.ts`) and SSE response pipeline (`app/api/transcribe/route.ts`) were already streaming-correct — only the client adapter and page-level greeting flow needed fixes.
+
+---
+
 ## 2026-04-26 — App shell: persistent BottomNav mounted via per-route layouts (no route-group rename)
 
 **Related ADR:** ADR-023 (post-save terminal route) — the auto-dismiss target shifts from `/` to `/journey/memory` to close the contribute → see-it-back loop.
@@ -24,6 +63,29 @@
 **Side effect: `MemoryTab` bottom padding bumped.** From `pb-[max(1rem,env(safe-area-inset-bottom))]` to `pb-[max(6rem,calc(env(safe-area-inset-bottom)+5rem))]`. Without it, the last event row scrolls under the now-fixed bottom nav.
 
 **Shipped via PR rewant24/autoimmune-health-companion#6 → squash-merge `c0b5b28`.** The PR also bundled the entire onboarding-shell wave-1 work (welcome + 5 onboarding screens + 4 setup steps + `/home` + 5-pillar `BottomNav` + locked profile seam) because the unification branch was cut from `feat/onboarding-shell-build` rather than `main`. For deadline-driven work this was the correct call (one merge, two cycles to prod); for normal cadence, branch from `main` to keep PRs scoped to one architectural change.
+
+---
+
+## 2026-04-26 — Voice C1 pre-flight: Sarvam streaming STT + TTS + multi-turn dialog (ADR-026 supersedes ADR-018)
+
+**Scope.** Pre-flight Task 0 of the voice C1 cycle (`docs/features/voice-cycle-1-plan.md`). Lays the seam for four parallel build chunks (V.A STT route, V.B STT adapter, V.C TTS route + adapter, V.D follow-up engine) without merging any wave-1 implementation yet. Branch: `feat/voice-sarvam`. Tagged `voice-c1/pre-flight-done`.
+
+- **Decision flip.** ADR-018 deferred Sarvam to post-MVP because three blockers were unresolved: streaming endpoint URL, key handling, server-side proxy path. All three now resolved (`sarvamai` JS SDK + long-lived `api-subscription-key` server-only + Vercel HTTP-streaming proxy). Adds **ADR-026** marking Sarvam as the production voice provider for both STT and TTS, with multi-turn conversational dialog and a single "Switch to taps" bail-out (B3).
+- **Sarvam audio-format spikes (run 2026-04-26 against the production key).**
+  - **STT streaming codec is PCM/WAV only** — confirmed authoritatively by the SDK's own `SpeechToTextStreamingInputAudioCodec` enum (`wav`, `pcm_s16le`, `pcm_l16`, `pcm_raw`). WebM/Opus is **not** accepted at the protocol level. V.B will ship a WebAudio 16kHz s16le resampler in `lib/voice/sarvam-recorder.ts`. Wire-level smoke (silent 500ms WAV via `socket.transcribe(...)`) confirmed clean handshake at 320 ms with code-1000 close.
+  - **TTS REST returns base64-encoded WAV** (`{ request_id, audios: [base64String] }`, default 24 kHz, RIFF header confirmed across 6 voices). Streaming endpoint is `bulbul:v2`-only and unlocks no quality we don't already get from REST + the same v2 voices. V.C will ship a Blob-URL playback path — no `MediaSource`, no WebAudio decode.
+  - **Voice picked:** `anushka` on `bulbul:v2`. Fastest in-class (1099 ms full response on the opener line), v2's documented default for `en-IN` female, well-tuned. v3 voices were 200–600 ms slower with no audible payoff for short opener copy.
+- **Seam extensions (production code, no transitions yet).**
+  - `lib/voice/types.ts`: `VoiceProviderName` widened to `'web-speech' | 'openai-realtime' | 'sarvam'`; new `TtsProvider` interface + `TtsProviderName = 'web-speech' | 'sarvam'` + `TtsSpeakOptions`.
+  - `lib/voice/provider.ts`: `resolveVoiceProviderName` accepts `'sarvam'`; new `resolveTtsProviderName` + `getTtsProvider`. Both factories throw `NotImplementedError` for `sarvam` until V.B/V.C land.
+  - `lib/voice/web-speech-tts-adapter.ts`: split out from the legacy `tts-adapter.ts`, which is now a re-export shim so existing call sites keep working.
+  - `lib/checkin/state-machine.ts`: 5 new union members (`speaking-opener`, `speaking-question`, `listening-answer`, `extracting-answer`, `speaking-closer`) and 8 new events (`OPENER_PLAYED`, `OPENER_FAILED`, `ASK_QUESTION`, `QUESTION_PLAYED`, `ANSWER_TRANSCRIBED`, `ANSWER_EXTRACTED`, `BAIL_TO_TAPS`, `CLOSER_PLAYED`) — no-op reducer cases only, Wave 2 wires real transitions per the protocol in the cycle plan.
+- **Test coverage.** Vitest 455/455, tsc clean, `next build` clean. Includes new no-op reducer tests for each of the 5 new state cases + `BAIL_TO_TAPS` invariance + an `Event`-union compile-check for the 8 new event types, plus `resolveTtsProviderName`/`getTtsProvider` factory tests + `NotImplementedError` assertions for both `sarvam` paths.
+- **Env scaffolding.** `.env.local.example` now lists `SARVAM_API_KEY`, `VOICE_PROVIDER`, `VOICE_TTS_PROVIDER` (default `web-speech`), and optional `SARVAM_TTS_SPEAKER` / `SARVAM_TTS_MODEL` overrides for A/B-testing the TTS voice without redeploying. Real key is in `.env.local` (gitignored). Spike audio fixtures live under `docs/research/spike-out/` (gitignored).
+
+**Why now.** Pre-flight tagging ahead of the parked-onboarding cycle so the voice branch is in a known-good resume point: the seam is ready, format decisions are real (not guessed), and Wave 1 can dispatch with concrete adapter targets. Onboarding still ships first per the locked 6-cycle plan; voice C1 resumes from `voice-c1/pre-flight-done` once onboarding is in.
+
+**Related.** Adds ADR-026. Supersedes ADR-018.
 
 ---
 

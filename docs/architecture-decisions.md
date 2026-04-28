@@ -286,8 +286,10 @@
 
 ## ADR-018 — Voice provider for MVP: Web Speech only; Sarvam AI deferred post-MVP
 
+> **Superseded by [ADR-026](#adr-026--voice-provider-for-production-sarvam-ai-streaming-stt--tts--multi-turn-dialog) as of 2026-04-26.** Body retained as the point-in-time rationale for the deferral.
+
 **Date:** 2026-04-25
-**Status:** accepted
+**Status:** superseded by ADR-026
 
 **Context.** Earlier scoping flagged Sarvam AI (`saarika:v2.5` / `saaras:v3`) as the multilingual voice path (12–23 Indic languages including `en-IN`). REST contract was confirmed but the streaming endpoint URL was not located, API-key handling was unscoped, and no server-side proxy path was designed. Building Sarvam now would expand F01 C2 scope and pull schedule into voice provider work that the MVP feature set doesn't strictly require.
 
@@ -467,3 +469,98 @@ The exception remains bounded: future content changes to any recorded ADR still 
 - **Sanskrit "with" only (e.g. *Saath*, *Saha* as just *with*).** Rejected as a concept (the word still works as the product name): "with" alone is warm but doesn't honor what autoimmune actually demands. The point isn't just companionship — it's enduring something hard, together.
 - **Hindi *Sahna* / endurance-only framing.** Rejected: *Sahna* is the verb form ("to bear, to endure") and reads more clinical / weighty than सह; also loses the "with" half of the meaning entirely. Saha keeps both meanings live in one syllable.
 - **Hold the *Saumya* name and adjust copy to lean into resilience instead.** Rejected: copy can't fix a name that softens the experience. The name is the load-bearing word; better to swap once now than to keep over-explaining the gentleness.
+
+## ADR-026 — Voice provider for production: Sarvam AI streaming (STT + TTS) + multi-turn dialog
+
+**Date:** 2026-04-26
+**Status:** accepted (supersedes ADR-018 on the deferral)
+
+**Context.** ADR-018 deferred Sarvam to post-MVP. Three blockers were resolved 2026-04-25: `sarvamai` JS SDK abstracts streaming WebSocket; long-lived `api-subscription-key` server-only; Vercel HTTP-streaming + SSE for STT partials and Vercel streaming `Response` for TTS audio. In the same conversation Rewant chose Option B + B3 from the dialog scoping menu — multi-turn voice with a "Switch to taps" bail-out.
+
+**Decision.** Sarvam AI is the production voice provider for both STT and TTS. `WebSpeechAdapter` (STT) and `web-speech-tts-adapter.ts` (TTS) remain as dev/test fallbacks. New files:
+- `lib/voice/sarvam-adapter.ts` (STT client, `VoiceProvider`).
+- `app/api/transcribe/route.ts` (Vercel Fluid Compute STT proxy).
+- `lib/voice/sarvam-tts-adapter.ts` (TTS client, new `TtsProvider`).
+- `app/api/speak/route.ts` (TTS audio proxy).
+- `lib/saha/follow-up-engine.ts` + `follow-up-variants.ts` (per-metric question + re-ask + decline-acknowledgement copy).
+
+Resolvers picked by env: `VOICE_PROVIDER=sarvam` (STT), `VOICE_TTS_PROVIDER=sarvam` (TTS). Multi-turn dialog drives via 5 new states + 7 new events on the existing check-in state machine. Bail-to-taps from any voice state lands in the existing Stage 2 grid with partial metrics preserved; cycle-1 makes that path forward-only.
+
+**Consequences.**
+- Pros: live partials match the existing UX; multilingual readiness is now a config change (Hindi-next via `language_code`); key never reaches the browser; conversational flow turns into a real product differentiator vs the plain transcribe-and-tap shape of C2.
+- Cons: dialog flow adds ~300 lines of state-machine + page wiring. Cost + latency budget per metric (TTS + STT + extract) is ~3–5s, multiplied by up to 5 missing metrics ⇒ worst-case ~25s of dialog after the freeform turn. Acceptable for MVP; revisit with telemetry.
+- Two-deploy-target risk avoided — everything stays on Vercel.
+
+**Alternatives considered.**
+- Browser-direct with ephemeral tokens: rejected — Sarvam doesn't expose ephemeral tokens.
+- Separate WebSocket service on Render/Fly: rejected — second deploy + monitoring + bill.
+- REST batch (no streaming): rejected — kills live partials.
+- Option B1 (no taps during dialog): rejected — punishing on iOS Safari STT failures.
+- Option B2 (Stage 2 visible during dialog): rejected — two input paths racing each other is messy.
+- Option C (full duplex / barge-in): out of scope for cycle 1.
+
+**Supersedes:** ADR-018 on the deferral. ADR-018 stays in the record as the point-in-time rationale; ADR-026 is the active decision.
+
+## ADR-027 — Voice C1 fix-pass: streaming-with-buffered-fallback upload + client-side silence VAD + state-machine-driven cold greeting
+
+**Date:** 2026-04-27
+**Status:** Accepted
+
+**Context.** Voice C1 shipped end-to-end on a Vercel preview but failed two smoke checks: (1) the opener "How are you feeling today?" never auto-played on `/check-in` mount, and (2) live word-by-word transcript dictation never appeared on either local dev or the deployed preview. Tracing both bugs revealed pre-existing structural issues, not regressions:
+
+- The state machine's `speaking-opener` state was gated on `TAP_ORB → requesting-permission → PERMISSION_GRANTED`, so on cold mount the opener TTS never fired without an orb tap.
+- A prior commit had switched `SarvamAdapter` from streaming POST to buffered-POST-on-stop because Chrome rejects streaming request bodies on HTTP/1.1 (the `next dev` default). The buffered path POSTs the entire audio blob in one shot at `stop()`, so SSE `partial` frames are never received during recording — the `partials: true` capability flag was a lie.
+- The recorder had no client-side voice-activity detection, so the only path to `stop()` was a second orb tap. Users didn't reliably discover this. The `vad: true` capability was also a lie.
+- After `stop()`, the transcript flowed straight into metric extraction with no intermediate "I heard …" feedback frame.
+
+**Decision.** Six structural fixes, shipped as a single fix-pass on `feat/voice-sarvam`:
+
+1. **Streaming-with-buffered-fallback upload.** `SarvamAdapter` gains a `streamingMode: 'auto' | 'streaming' | 'buffered'` option. `'auto'` (default) selects streaming on HTTPS (`window.location.protocol === 'https:'`) and buffered otherwise. Streaming opens a `TransformStream`, fires `fetch(..., { body: stream, duplex: 'half' })` synchronously in `start()`, pipes recorder chunks to the writer as they arrive, and closes the writer on `stop()`. Buffered keeps the prior concat-and-POST-on-stop behaviour so local `next dev` (HTTP/1.1) still smoke-tests the data path. **Trade-off: live partials only fire on Vercel deploys.** Tests default to buffered (jsdom http: protocol) so the existing 26-test contract is preserved; new `tests/voice/sarvam-adapter-streaming.test.ts` pins the streaming mode explicitly.
+
+2. **Client-side silence VAD.** `SarvamRecorder` exposes `onSilenceDetected(cb)` and tracks RMS over each emitted PCM chunk. Once a chunk exceeds `SPEECH_RMS_THRESHOLD = 0.02` the recorder begins counting consecutive chunks below `SILENCE_RMS_THRESHOLD = 0.01`; at `SILENCE_TRAILING_CHUNKS = 6` (1.5s at 250ms cadence) the listener fires once. Asymmetric thresholds avoid borderline-energy chunks bouncing the state. `SarvamAdapter` wires this to its own `stop()` so the user doesn't need a second tap.
+
+3. **State-machine-driven cold greeting.** Two new states added: `idle-greeting` (TTS playing, no mic) and `idle-ready` (post-greeting, awaiting orb tap). Three new events: `START_GREETING`, `GREETING_PLAYED`, `GREETING_FAILED`. The page dispatches `START_GREETING` on mount when `ttsAvailable && state.kind === 'idle' && openerSelection.text`. A `coldGreetingDispatchedRef` ensures it fires once per page lifetime. Cleanup cancels TTS on state transition. `TAP_ORB` from `idle-greeting` skips the remaining greeting and jumps to `requesting-permission`. The hook treats `idle`, `idle-greeting`, and `idle-ready` identically for `TAP_ORB` listening kickoff but only attaches an opener payload to `PERMISSION_GRANTED` when starting from cold `idle` (avoiding double-opener after a greeting was already heard).
+
+4. **`SpokenOpener.autoSpeak` opt-out.** New optional prop (default `true`) lets the page suppress the component's internal auto-speak so the page-level greeting effect owns playback. Without this, mounting the component in `idle` would fire `tts.speak()` once, and the immediate `START_GREETING` dispatch would unmount it (running `tts.cancel()`) and the `idle-greeting` effect would speak again — wasteful and visibly stuttering.
+
+5. **StopButton + heard-transcript echo.** New `<StopButton>` component (mirrors the `SwitchToTapsButton` pattern) renders during `listening` + `listening-answer` with a "Tap when done" affordance. `transientCopyFor()` now echoes `"I heard: '<transcript>'"` during `processing`, `extracting`, and `extracting-answer` so the user has visible feedback that their speech landed before extraction kicks in.
+
+6. **Honest capability flags.** With (1) and (2) in place, `SarvamAdapter.capabilities = { partials: true, vad: true }` is now truthful end-to-end on Vercel deploys. Local dev (buffered) returns the same flags but partials simply don't fire — the page handles partials being absent fine.
+
+**Consequences.**
+- Pros: cold-mount voice greeting works (Bug 1 fixed); live word-by-word transcript renders on Vercel (Bug 2 fixed); silence auto-stop ends the chicken-and-egg "tap to start, tap to stop, but I never showed you the second tap" UX trap; the production capability flags don't lie.
+- Cons: streaming/buffered split means live partials are gated on the deployment target. We lose live-partials in local dev; that's the price of the Chrome HTTP/1.1 streaming-body restriction. Documented; if it ever bites we ship `next dev --experimental-https` as the fix.
+- Risks: silence VAD thresholds are tuned for headset-quality input; loud rooms may never auto-stop. The visible Stop button is the safety net. Real-world tuning will likely need a follow-up.
+
+**Alternatives considered.**
+- Server-side VAD only (Sarvam's own VAD signal): blocked — there's no live socket for the server to send the signal back over. Buffered mode means a single upload-then-process round-trip with no intermediate signalling.
+- Auto-play opener as a one-tap-to-greet button: rejected for v1 — a passive cold-mount greeting is the desired UX. The button-fallback pattern is documented as a backup if browser autoplay blocks fire too often during real-world testing.
+- Re-using `speaking-opener` for cold mount: rejected — `speaking-opener` is gated on permission grant by design (the dialog version follows a `PERMISSION_GRANTED(opener)` payload). Decoupling cold greeting from permission is exactly the bug we're fixing.
+
+**Supersedes / amends:** none. ADR-026 stays the source of truth for the voice provider choice; ADR-027 documents the implementation refinements that made C1 actually work end-to-end.
+
+## ADR-028 — Voice C1 STT transport: pivot from Sarvam streaming WS to REST batch
+
+**Date:** 2026-04-28
+**Status:** Accepted
+
+**Context.** Bug 1 — every voice check-in returned `{ type:"final", text:"", durationMs:~260 }` with no partial frames. Two earlier fix attempts failed:
+- **Option A (codec swap, `pcm_s16le`)** — Sarvam's SDK accepts the value but silently fails to decode raw PCM bytes. Same empty-final.
+- **Option B (prepend a 44-byte WAV header so the bytes are a real WAV file)** — same symptom. The HAR shows `final.bytes ≈ 696 KB` (~22 s of audio at 16 kHz mono 16-bit) but `text=""`. Recorder validation (objective Node.js analysis of the captured WAV) confirms the audio is fine: valid header, RMS=0.041, peak=0.31, real voice activity, no clipping/DC offset. The audio is good; the protocol path is the bug.
+
+Walking the SDK source confirmed the root cause: Sarvam's streaming WS is **VAD-segmented**. The `flush_signal=true` query param is required for `socket.flush()` to actually trigger a final transcript; the SDK type system does not surface it. `transcribe()` enqueues an audio frame, but without `flush_signal=true` the server waits for VAD-detected silence to emit anything. Our adapter buffers the entire utterance client-side and POSTs it as one frame in <50 ms, so VAD never trips. We then force-close the socket 250 ms later and Sarvam emits zero events. The streaming WS protocol is designed for real-time mic capture with continuous segmentation; our usage pattern is buffered upload, which is exactly what REST batch is for.
+
+**Decision.** Rip out the streaming-WS path and replace it with Sarvam's REST batch endpoint (`POST https://api.sarvam.ai/speech-to-text`, multipart form-data). New module `lib/voice/sarvam-stt-rest.ts` (`transcribeBatch`) does a thin direct `fetch` + `FormData` (file + model + mode + language_code) — no SDK indirection. The route (`app/api/transcribe/route.ts`) buffers the request body, calls `transcribeBatch`, and emits **one** SSE `final` frame back to the browser. The SSE wire shape is preserved for the adapter (still parses `data: {…}` envelopes) but no `partial` frames are ever emitted — REST batch is synchronous, so partials are conceptually impossible. Caps tightened: 1 MB / 30 s (down from 5 MB / 90 s) to match Sarvam's REST batch limits. WS module + tests deleted.
+
+**Consequences.**
+- Pros: Bug 1 closes (REST batch returns the transcript synchronously — no VAD/flush/timing race possible). Wire shape stable for the adapter (no client changes required). Fewer moving parts: one HTTP round-trip vs WebSocket connect → audio frames → flush → close → events. No more `flush_signal` / `vad_signals` query-param archaeology in our code.
+- Cons: live word-by-word partials are gone. ADR-027 had restored partials on Vercel HTTPS via streaming POST → streaming WS; that path is also removed here because it shared the same broken upstream. The check-in UX falls back to "show transcript on stop()" which is what local dev already had.
+- Risks: Sarvam's REST batch has a 30 s cap. Long check-ins past the cap surface as `voice.session_too_long`; ADR-027's silence VAD already triggers `stop()` well before that, so this is theoretical.
+
+**Alternatives considered.**
+- **Keep streaming WS, add `flush_signal=true` and `vad_signals=true` query params** — would likely close Bug 1 too, but keeps a streaming-segmentation protocol for a buffered-upload usage pattern. Two-way VAD signalling is over-engineering for "user finished talking, transcribe this one blob."
+- **Keep streaming WS, switch to chunked transcribe (split the buffered audio into N small `transcribe()` calls)** — H2 in the bug-1 history. Closer to Sarvam's intended usage but still requires `flush_signal=true`, fragile chunk-boundary assumptions, and three more sources of timing risk.
+- **Sarvam SDK's `Uploadable` REST helper** — adds an indirection awkward for a `Uint8Array` payload inside a Next.js route. Direct `fetch` + `FormData` is fewer moving parts and easier to test (single `fetchImpl` injection point).
+
+**Supersedes / amends:** ADR-026 still defines the provider choice (Sarvam STT). ADR-027 stays the record of the streaming-with-buffered-fallback adapter shape; the **upload transport** that ADR described is replaced by REST batch as of this ADR. The SarvamRecorder + silence VAD + state-machine cold greeting from ADR-027 are unchanged — only the server-side transport flips.
+

@@ -9,6 +9,13 @@
  * Mobile-first. The orb lives in the centre; transient copy above and
  * below. The `<ErrorSlot>` is rendered by the page when state is `error`
  * — this shell stays agnostic about content.
+ *
+ * Bottom padding clears two stacked floating affordances:
+ *   - `<BottomNav>` (~64px tall, `fixed bottom-0`, safe-area aware)
+ *   - StopButton / SwitchToTapsButton (~44px tap target, sits at
+ *     `bottom-[calc(5rem+safe-area-inset-bottom)]` per Fix B)
+ * So the centred orb stays clear of both. Pre-fix-B padding-bottom of
+ * 1.5rem was insufficient on mobile.
  */
 
 import type { ReactNode } from 'react'
@@ -27,7 +34,7 @@ export function ScreenShell({ children }: ScreenShellProps): React.JSX.Element {
         'dark:bg-zinc-950 dark:text-zinc-50 ' +
         // Safe-area padding — respects notch + home indicator on mobile.
         '[padding-top:max(1.5rem,env(safe-area-inset-top))] ' +
-        '[padding-bottom:max(1.5rem,env(safe-area-inset-bottom))]'
+        '[padding-bottom:calc(8rem+env(safe-area-inset-bottom))]'
       }
     >
       {children}

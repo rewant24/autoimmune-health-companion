@@ -215,6 +215,20 @@ This is the **only backlog item that needs a first pass before MVP launch**, bec
 
 ---
 
+## 22. Voice C1 — deferred polish (logged from review pass, 2026-04-27)
+
+Captured during the cold-eyes review of `feat/voice-sarvam` @ `307dd0d`. All deferred from MVP; none affect the daily-habit loop or the give/get covenant.
+
+**22.1 Streaming TTS decode.** `app/api/speak/route.ts` currently buffers the full Sarvam TTS response (`{ audio: Uint8Array, contentType }`) before returning it as a single `Response(audio)`. The browser plays via blob, not `MediaSource`. Acceptable for C1 because every utterance (opener, per-metric question, closer) is short — typical 2–6 seconds, ≈40–120KB. Becomes worth revisiting if utterances grow (multi-paragraph reflections) or first-byte latency on slow networks shows up in user feedback. Sarvam's chunked-response support and `MediaSource` on the client both required to ship.
+
+**22.2 Upload progress indicator.** `SarvamAdapter` buffers PCM chunks across the listening window then POSTs once on `stop()`. For a 90-second freeform answer over 4G this is ≈1–2MB and the POST takes 100–500ms — invisible to the user. UX risk emerges if we relax the duration cap or users land on flaky networks. The `fetch` upload-progress API is unevenly supported; revisit if user research surfaces "did it submit?" anxiety post-launch. Out of scope until then.
+
+**22.3 Per-user rate limits on `/api/transcribe` and `/api/speak`.** Both routes enforce per-connection caps (5MB body, 90s duration on transcribe; text length cap on speak) but no per-user-per-day budget. A malicious or buggy client could open many parallel connections. Cost-blast scenario is bounded by Sarvam's own API key throttling, but this is the authoritative defence layer. Tracks alongside the F03+ "abuse guards" item — revisit when auth (F02 pre-cycle 2.0) lands, since per-user rate limits assume an authenticated subject.
+
+**22.4 Dev-only mitigation for the extract cost-guard cap (next sprint).** ADR-020 caps `/api/check-in/extract` at 5 calls per `(userId, date)` per the cost-blast defence. The cap is the same in dev as in prod — every smoke pass that re-runs the voice flow burns one of the five, and a single debug session can hit the wall in minutes (seen twice on `feat/voice-sarvam` smoke: 2026-04-27 and 2026-04-28, both required `npx convex run extractAttempts:resetForUserOnDate`). **Why:** smoke ergonomics — current workflow is "hit cap → drop to terminal → run reset script → reload page → resume smoke," which interrupts flow and hides genuine bugs behind 429s. **Post-MVP shape:** two options to evaluate — (a) **env-gated cap bump:** `DAILY_CAP = process.env.NODE_ENV === 'production' ? 5 : 50` in `convex/extractAttempts.ts`. Simplest change; also raises cap on Vercel preview deploys (acceptable — preview is dev-class). (b) **Dev-only reset button:** small UI affordance on `/check-in` gated on `NODE_ENV !== 'production'` that calls `resetForUserOnDate` for the current user/today. Targeted, but adds UI + a public mutation surface (would need to flip the helper back from `internalMutation`). **Recommendation when picked up:** start with (a) — one-line change, no UI risk, no surface-area change. Revisit (b) only if dev-class previews need a stricter cap. **Architectural hook:** none needed; the cap constant already lives in one place.
+
+---
+
 ## Review cadence
 
 This backlog is reviewed at two points:

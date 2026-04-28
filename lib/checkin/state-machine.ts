@@ -31,6 +31,7 @@ import type {
   CheckinMetrics,
   Metric,
   MilestoneKind,
+  OpenerVariantKey,
   StageEnum,
 } from './types'
 
@@ -40,6 +41,27 @@ export type SaveFailedError = { kind: 'save-failed'; message?: string }
 
 export type State =
   | { kind: 'idle' }
+  // Voice C1 fix-pass: cold-mount greeting plays the opener BEFORE
+  // permission is requested. `idle-greeting` is entered on mount when
+  // TTS is available; `idle-ready` is the resting state after the
+  // greeting plays (or is dismissed) — the user must tap the orb to
+  // begin the listening turn. This decouples opener playback from the
+  // TAP_ORB → requesting-permission gate so users hear "How are you
+  // feeling today?" automatically without losing the explicit consent
+  // step before the mic activates.
+  | { kind: 'idle-greeting'; text: string; variantKey: OpenerVariantKey }
+  // `greetingBlocked` is set true only when entering via GREETING_FAILED
+  // (autoplay block — Chrome refuses `audio.play()` on cold-mount when
+  // the navigation gesture didn't carry over). The page reads this to
+  // surface a "Tap to hear" cue near the speaker icon. Omitted on the
+  // GREETING_PLAYED path so the natural cold-start experience is
+  // unchanged. Voice C1 Fix C.
+  | {
+      kind: 'idle-ready'
+      text: string
+      variantKey: OpenerVariantKey
+      greetingBlocked?: boolean
+    }
   | { kind: 'requesting-permission' }
   | { kind: 'listening'; partial: string }
   | { kind: 'processing'; transcript: Transcript }
@@ -85,11 +107,73 @@ export type State =
   // 2.F — milestone celebration overlay; entered from `saved` when
   // `saved.milestone !== null`.
   | { kind: 'celebrating'; milestone: MilestoneKind }
+  // Voice C1 (ADR-026) — multi-turn dialog states. Pre-flight only adds
+  // the union shapes + no-op transition cases so the parallel build
+  // chunks see the seam. Wave 2 (orchestrator integration) implements
+  // the actual transitions per the protocol in the cycle plan.
+  //
+  // `speaking-opener`: TTS plays the opener line before listening starts.
+  // `text` is the rendered string (so the screen can mirror it
+  // captioned); `variantKey` lets Wave-2 telemetry know which
+  // opener-engine variant is being spoken.
+  | { kind: 'speaking-opener'; text: string; variantKey: OpenerVariantKey }
+  // `speaking-question`: per-metric follow-up question. Page selects the
+  // next missing metric, kicks TTS, reducer parks here while playback
+  // runs. `transcript` is the original freeform-turn transcript carried
+  // through so `confirming` still sees it.
+  | {
+      kind: 'speaking-question'
+      metric: Metric
+      text: string
+      metrics: Partial<CheckinMetrics>
+      missing: Metric[]
+      declined: Metric[]
+      transcript: Transcript
+    }
+  // `listening-answer`: per-metric STT for the current question.
+  | {
+      kind: 'listening-answer'
+      metric: Metric
+      partial: string
+      metrics: Partial<CheckinMetrics>
+      missing: Metric[]
+      declined: Metric[]
+      transcript: Transcript
+    }
+  // `extracting-answer`: page extracts the metric value (or detects a
+  // decline phrase) from `answerTranscript`. Reducer stays here until
+  // ANSWER_EXTRACTED arrives.
+  | {
+      kind: 'extracting-answer'
+      metric: Metric
+      answerTranscript: Transcript
+      metrics: Partial<CheckinMetrics>
+      missing: Metric[]
+      declined: Metric[]
+      transcript: Transcript
+    }
+  // `speaking-closer`: TTS plays the closer line before save commits.
+  // Wave 2 bridges this to `saving` on `CLOSER_PLAYED`.
+  | {
+      kind: 'speaking-closer'
+      text: string
+      metrics: CheckinMetrics
+      declined: Metric[]
+      stage: StageEnum
+      transcript: Transcript
+    }
   | { kind: 'error'; error: VoiceError | SaveFailedError }
 
 export type Event =
   | { type: 'TAP_ORB' }
-  | { type: 'PERMISSION_GRANTED' }
+  // Voice C1 (ADR-026): conversational mode supplies an `opener` payload so
+  // the reducer can route to `speaking-opener` instead of `listening`. The
+  // payload-less form preserves the C1 freeform path used by tests and the
+  // taps fallback, so callers who don't want the dialog don't pay for it.
+  | {
+      type: 'PERMISSION_GRANTED'
+      opener?: { text: string; variantKey: OpenerVariantKey }
+    }
   | { type: 'PERMISSION_DENIED' }
   | { type: 'PARTIAL'; text: string }
   | { type: 'PROVIDER_STOPPED'; transcript: Transcript }
@@ -117,7 +201,10 @@ export type Event =
   | { type: 'METRIC_UPDATED'; metric: Metric; value: unknown }
   | { type: 'METRIC_DECLINED'; metric: Metric }
   | { type: 'STAGE_2_CONTINUE' }
-  | { type: 'CONFIRM' }
+  // Voice C1 (ADR-026): conversational mode supplies a `closer` payload so
+  // the reducer can route to `speaking-closer` instead of straight to
+  // `saving`. Payload-less form preserves the C1 path used by existing tests.
+  | { type: 'CONFIRM'; closer?: { text: string } }
   // 2.D — discard flow (request → confirm/cancel).
   | { type: 'DISCARD_REQUEST' }
   | { type: 'DISCARD_CONFIRM' }
@@ -127,6 +214,46 @@ export type Event =
   // 2.F — milestone celebration trigger; dispatched after SAVE_OK when
   // the user hits a day-1/7/30/90/180/365 marker.
   | { type: 'MILESTONE_DETECTED'; milestone: MilestoneKind }
+  // Voice C1 (ADR-026) — multi-turn dialog events. Pre-flight only adds
+  // the union members + no-op cases; Wave 2 implements transitions.
+  | { type: 'OPENER_PLAYED' }
+  | { type: 'OPENER_FAILED' }
+  // Voice C1 fix-pass: cold-mount greeting events. Page dispatches
+  // START_GREETING on mount when TTS is available; the TTS effect
+  // dispatches GREETING_PLAYED on resolve, GREETING_FAILED on reject
+  // (autoplay block, voice synth missing). Both routes land in
+  // `idle-ready`; the user then taps the orb to begin listening.
+  | {
+      type: 'START_GREETING'
+      text: string
+      variantKey: OpenerVariantKey
+    }
+  | { type: 'GREETING_PLAYED' }
+  | { type: 'GREETING_FAILED' }
+  // ASK_QUESTION carries the question text + an optional `seed`. The seed
+  // is required when transitioning from `extracting` (the reducer has no
+  // metrics/missing/declined to inherit from that state). When dispatched
+  // from `extracting-answer` the seed is omitted and the carried payload
+  // is used. See voice-cycle-1-plan §State-machine extension protocol.
+  | {
+      type: 'ASK_QUESTION'
+      metric: Metric
+      text: string
+      seed?: {
+        metrics: Partial<CheckinMetrics>
+        missing: Metric[]
+        declined: Metric[]
+      }
+    }
+  | { type: 'QUESTION_PLAYED' }
+  | { type: 'ANSWER_TRANSCRIBED'; transcript: Transcript }
+  | {
+      type: 'ANSWER_EXTRACTED'
+      metrics: Partial<CheckinMetrics>
+      declined: boolean
+    }
+  | { type: 'BAIL_TO_TAPS' }
+  | { type: 'CLOSER_PLAYED' }
   | { type: 'RESET' }
 
 export const initialState: State = { kind: 'idle' }
@@ -147,10 +274,57 @@ export function reducer(state: State, event: Event): State {
   switch (state.kind) {
     case 'idle': {
       if (event.type === 'TAP_ORB') return { kind: 'requesting-permission' }
+      if (event.type === 'START_GREETING') {
+        return {
+          kind: 'idle-greeting',
+          text: event.text,
+          variantKey: event.variantKey,
+        }
+      }
+      return state
+    }
+    case 'idle-greeting': {
+      // TAP_ORB during greeting cancels TTS (page-level effect handles
+      // tts.cancel()) and goes straight to permission request — lets an
+      // impatient user skip the spoken opener.
+      if (event.type === 'TAP_ORB') {
+        return { kind: 'requesting-permission' }
+      }
+      // Fix E (ADR-026): conversational mode flows opener → listening
+      // without a tap. GREETING_PLAYED auto-progresses straight to
+      // requesting-permission; the hook's requesting-permission effect
+      // fires provider.start() so the mic prompt appears. GREETING_FAILED
+      // keeps the manual gate (Fix C cue) so the user can read+tap when
+      // Chrome blocked autoplay.
+      if (event.type === 'GREETING_PLAYED') {
+        return { kind: 'requesting-permission' }
+      }
+      if (event.type === 'GREETING_FAILED') {
+        return {
+          kind: 'idle-ready',
+          text: state.text,
+          variantKey: state.variantKey,
+          greetingBlocked: true,
+        }
+      }
+      return state
+    }
+    case 'idle-ready': {
+      if (event.type === 'TAP_ORB') return { kind: 'requesting-permission' }
       return state
     }
     case 'requesting-permission': {
       if (event.type === 'PERMISSION_GRANTED') {
+        // Voice C1: opener payload routes to speaking-opener. Without it,
+        // we fall through to the C1 freeform listening path so existing
+        // tests + the taps fallback still work.
+        if (event.opener) {
+          return {
+            kind: 'speaking-opener',
+            text: event.opener.text,
+            variantKey: event.opener.variantKey,
+          }
+        }
         return { kind: 'listening', partial: '' }
       }
       if (event.type === 'PERMISSION_DENIED') {
@@ -173,6 +347,9 @@ export function reducer(state: State, event: Event): State {
       }
       if (event.type === 'PROVIDER_STOPPED') {
         return { kind: 'processing', transcript: event.transcript }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        return emptyStage2()
       }
       if (event.type === 'VOICE_ERROR') {
         return { kind: 'error', error: event.error }
@@ -225,6 +402,23 @@ export function reducer(state: State, event: Event): State {
           missing: ['pain', 'mood', 'adherenceTaken', 'flare', 'energy'],
           declined: [],
         }
+      }
+      // Voice C1: in conversational mode the page bypasses EXTRACTION_DONE
+      // and dispatches ASK_QUESTION with the extraction result as `seed`,
+      // routing the user into the per-metric voice loop.
+      if (event.type === 'ASK_QUESTION' && event.seed) {
+        return {
+          kind: 'speaking-question',
+          metric: event.metric,
+          text: event.text,
+          metrics: event.seed.metrics,
+          missing: event.seed.missing,
+          declined: event.seed.declined,
+          transcript: state.transcript,
+        }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        return emptyStage2(state.transcript)
       }
       return state
     }
@@ -298,7 +492,21 @@ export function reducer(state: State, event: Event): State {
           declined: [...declined, event.metric],
         }
       }
-      if (event.type === 'CONFIRM') return { kind: 'saving' }
+      if (event.type === 'CONFIRM') {
+        // Voice C1: closer payload routes through speaking-closer → saving;
+        // payload-less form preserves the C1 direct-to-saving path.
+        if (event.closer && state.metrics && state.stage) {
+          return {
+            kind: 'speaking-closer',
+            text: event.closer.text,
+            metrics: state.metrics,
+            declined: state.declined ?? [],
+            stage: state.stage,
+            transcript: state.transcript,
+          }
+        }
+        return { kind: 'saving' }
+      }
       if (event.type === 'DISCARD_REQUEST') {
         return { kind: 'discarding', previous: state }
       }
@@ -333,6 +541,146 @@ export function reducer(state: State, event: Event): State {
       // 2.F owns the celebration dismiss path. Pre-flight no-op.
       return state
     }
+    case 'speaking-opener': {
+      if (event.type === 'OPENER_PLAYED' || event.type === 'OPENER_FAILED') {
+        // Both routes drop into the freeform listening state. OPENER_FAILED
+        // degrades silently — the opener text is already on screen so the
+        // user can read what Saha would have said.
+        return { kind: 'listening', partial: '' }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        return emptyStage2()
+      }
+      return state
+    }
+    case 'speaking-question': {
+      if (event.type === 'QUESTION_PLAYED') {
+        return {
+          kind: 'listening-answer',
+          metric: state.metric,
+          partial: '',
+          metrics: state.metrics,
+          missing: state.missing,
+          declined: state.declined,
+          transcript: state.transcript,
+        }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        return carryToStage2(state)
+      }
+      return state
+    }
+    case 'listening-answer': {
+      if (event.type === 'PARTIAL') {
+        return { ...state, partial: event.text }
+      }
+      if (event.type === 'PROVIDER_STOPPED') {
+        return {
+          kind: 'extracting-answer',
+          metric: state.metric,
+          answerTranscript: event.transcript,
+          metrics: state.metrics,
+          missing: state.missing,
+          declined: state.declined,
+          transcript: state.transcript,
+        }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        return carryToStage2(state)
+      }
+      if (event.type === 'VOICE_ERROR') {
+        return { kind: 'error', error: event.error }
+      }
+      return state
+    }
+    case 'extracting-answer': {
+      if (event.type === 'ANSWER_EXTRACTED') {
+        // Three outcomes per protocol:
+        //   1. metric extracted (event.metrics has a value for state.metric)
+        //      → fold into metrics, drop from missing
+        //   2. user declined (event.declined === true)
+        //      → write null, drop from missing, append to declined
+        //   3. neither (no extract, no decline) → leave state alone so the
+        //      page can re-ask via ASK_QUESTION with re-ask copy
+        const captured = event.metrics[state.metric]
+        const wasDeclined = event.declined === true
+        if (captured === undefined && !wasDeclined) {
+          return state
+        }
+        const nextMetrics: Partial<CheckinMetrics> = wasDeclined
+          ? { ...state.metrics, [state.metric]: null }
+          : { ...state.metrics, [state.metric]: captured }
+        const nextMissing = state.missing.filter((m) => m !== state.metric)
+        const nextDeclined = wasDeclined
+          ? state.declined.includes(state.metric)
+            ? state.declined
+            : [...state.declined, state.metric]
+          : state.declined
+        if (nextMissing.length === 0) {
+          // All metrics covered — collapse to confirming. Stage is always
+          // 'hybrid' because some answers came through the voice loop
+          // rather than the cold extract.
+          const filledMetrics: CheckinMetrics = {
+            pain: nextMetrics.pain ?? null,
+            mood: nextMetrics.mood ?? null,
+            adherenceTaken: nextMetrics.adherenceTaken ?? null,
+            flare: nextMetrics.flare ?? null,
+            energy: nextMetrics.energy ?? null,
+          }
+          return {
+            kind: 'confirming',
+            transcript: state.transcript,
+            metrics: filledMetrics,
+            declined: nextDeclined,
+            stage: 'hybrid',
+          }
+        }
+        // More to ask — stay in extracting-answer with updated payload so
+        // the page sees the new missing list and dispatches ASK_QUESTION.
+        return {
+          ...state,
+          metrics: nextMetrics,
+          missing: nextMissing,
+          declined: nextDeclined,
+        }
+      }
+      if (event.type === 'ASK_QUESTION') {
+        // Page picks the next missing metric (or re-asks the current one).
+        // Inherit carried payload; `seed` is ignored from this state since
+        // we already have the loop's running state.
+        return {
+          kind: 'speaking-question',
+          metric: event.metric,
+          text: event.text,
+          metrics: state.metrics,
+          missing: state.missing,
+          declined: state.declined,
+          transcript: state.transcript,
+        }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        return carryToStage2(state)
+      }
+      return state
+    }
+    case 'speaking-closer': {
+      if (event.type === 'CLOSER_PLAYED') {
+        return { kind: 'saving' }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        // User cancelled the closer — drop back to confirming so they can
+        // edit before the (now-cancelled) save. Page is responsible for
+        // calling tts.cancel() to silence playback.
+        return {
+          kind: 'confirming',
+          transcript: state.transcript,
+          metrics: state.metrics,
+          declined: state.declined,
+          stage: state.stage,
+        }
+      }
+      return state
+    }
     case 'error': {
       // Only RESET escapes error (handled at top of function).
       return state
@@ -352,8 +700,11 @@ export type OrbVisualState = 'idle' | 'listening' | 'processing' | 'error'
 export function toOrbState(state: State): OrbVisualState {
   switch (state.kind) {
     case 'idle':
+    case 'idle-greeting':
+    case 'idle-ready':
       return 'idle'
     case 'listening':
+    case 'listening-answer':
       return 'listening'
     case 'requesting-permission':
     case 'processing':
@@ -364,6 +715,10 @@ export function toOrbState(state: State): OrbVisualState {
     case 'saving':
     case 'saved':
     case 'celebrating':
+    case 'speaking-opener':
+    case 'speaking-question':
+    case 'extracting-answer':
+    case 'speaking-closer':
       return 'processing'
     case 'error':
       return 'error'
@@ -378,18 +733,44 @@ export interface CheckinMachine {
 }
 
 /**
+ * Optional hook configuration for Voice C1 conversational mode.
+ *
+ * `getOpener` is consulted by the hook when `start()` resolves on the
+ * idle → requesting-permission path. If it returns a payload, the hook
+ * dispatches `PERMISSION_GRANTED` with the opener so the reducer routes
+ * into `speaking-opener`; if it returns `undefined` the hook falls back
+ * to the C1 payload-less form (PERMISSION_GRANTED → listening). Page
+ * implementations gate on `tts.isAvailable()` so the C1 freeform path
+ * keeps working in jsdom + on browsers without speechSynthesis.
+ */
+export interface UseCheckinMachineOptions {
+  getOpener?: () =>
+    | { text: string; variantKey: OpenerVariantKey }
+    | undefined
+}
+
+/**
  * React hook wiring the reducer to a voice provider.
  *
  * - On `TAP_ORB` from `idle` → the reducer moves to `requesting-permission`.
- *   The hook then calls `provider.start()`. Resolution → PERMISSION_GRANTED;
+ *   The hook then calls `provider.start()`. Resolution → PERMISSION_GRANTED
+ *   (with an opener payload from `options.getOpener` when supplied);
  *   rejection shaped like a VoiceError → PERMISSION_DENIED / VOICE_ERROR.
- * - On `TAP_ORB` from `listening` → hook calls `provider.stop()`, then
- *   dispatches `PROVIDER_STOPPED` with the returned transcript.
+ * - On `TAP_ORB` from `listening` or `listening-answer` → hook calls
+ *   `provider.stop()`, then dispatches `PROVIDER_STOPPED` with the
+ *   returned transcript. The reducer routes `listening` → `processing`
+ *   and `listening-answer` → `extracting-answer`.
  * - Provider `onPartial` → dispatches `PARTIAL`.
  * - Provider `onError` → dispatches `VOICE_ERROR`.
  *
  * `onSave` is called when the state enters `saving`. Success →
  * `SAVE_OK`; throw/reject → `SAVE_ERROR`.
+ *
+ * When the reducer enters `listening-answer` after a question, the hook
+ * re-arms the provider with a fresh `start()` so the user can speak the
+ * answer turn. `PERMISSION_GRANTED` from this re-arm is swallowed —
+ * permission has already been granted for this session and the reducer
+ * is already past `requesting-permission`.
  *
  * Cycle 1 note: callers pass a logging no-op for `onSave`. Cycle 2 wires
  * the Convex `createCheckin` mutation here.
@@ -397,11 +778,31 @@ export interface CheckinMachine {
 export function useCheckinMachine(
   provider: VoiceProvider,
   onSave: () => Promise<void>,
+  options?: UseCheckinMachineOptions,
 ): CheckinMachine {
   const [state, dispatch] = useReducer(reducer, initialState)
   const providerRef = useRef(provider)
   const onSaveRef = useRef(onSave)
   const stateRef = useRef(state)
+  const optionsRef = useRef(options)
+  // Fix E: track the prior state.kind so the requesting-permission
+  // auto-progress effect can distinguish two callers:
+  //   - cold tap (idle → requesting-permission): the TAP_ORB
+  //     interceptor already fires provider.start() and owns the
+  //     opener payload. The effect must skip.
+  //   - auto-progress (idle-greeting → requesting-permission via
+  //     GREETING_PLAYED) and idle-ready tap (idle-ready →
+  //     requesting-permission via TAP_ORB on the autoplay-blocked
+  //     path): the effect fires provider.start() with no payload.
+  const priorStateRef = useRef<State['kind']>(state.kind)
+  // Fix F.1: track whether a stop() has already been initiated for
+  // the current listening turn. Set when silence VAD fires OR when
+  // the user taps the StopButton. Prevents a stale tap (after silence
+  // already auto-stopped) from racing a second provider.stop() call —
+  // which used to produce an empty POST plus a "stop() called before
+  // start()" error. Reset by the effect below when the reducer leaves
+  // the listening states.
+  const stopInitiatedRef = useRef(false)
 
   useEffect(() => {
     providerRef.current = provider
@@ -415,16 +816,111 @@ export function useCheckinMachine(
     stateRef.current = state
   }, [state])
 
+  useEffect(() => {
+    optionsRef.current = options
+  }, [options])
+
   // Wire provider callbacks once per provider instance.
   useEffect(() => {
     const p = providerRef.current
     p.onPartial((text) => dispatch({ type: 'PARTIAL', text }))
     p.onError((error) => dispatch({ type: 'VOICE_ERROR', error }))
+    // Fix F.1: silence VAD callback. Mirrors the TAP_ORB stop branch —
+    // calls provider.stop() and dispatches PROVIDER_STOPPED with the
+    // resolved transcript so the reducer routes `listening` →
+    // `processing` and `listening-answer` → `extracting-answer`. The
+    // dedupe ref keeps a late tap or a stray second silence fire from
+    // racing a second stop() call.
+    p.onSilence?.(() => {
+      if (stopInitiatedRef.current) return
+      stopInitiatedRef.current = true
+      providerRef.current
+        .stop()
+        .then((transcript) =>
+          dispatch({ type: 'PROVIDER_STOPPED', transcript }),
+        )
+        .catch((err: unknown) => {
+          const ve = normaliseVoiceError(err)
+          dispatch({ type: 'VOICE_ERROR', error: ve })
+        })
+    })
   }, [])
+
+  // Fix F.1: clear the stop-initiated guard when the listening turn
+  // ends so the next turn's silence VAD / tap can fire fresh. We
+  // reset on any state.kind transition that leaves both listening
+  // states; entering them re-arms naturally because the ref defaults
+  // to false and the silence/tap branches set it.
+  useEffect(() => {
+    if (state.kind !== 'listening' && state.kind !== 'listening-answer') {
+      stopInitiatedRef.current = false
+    }
+  }, [state.kind])
 
   // R3-7: Haptic feedback lives on the Orb component (closer to the tap
   // event and present even when this hook isn't wired). Don't duplicate it
   // here or each tap vibrates twice.
+
+  // Re-arm the provider when the reducer enters `listening-answer` for a
+  // follow-up turn. Permission is already granted; we swallow the resolution
+  // since the reducer is already past `requesting-permission` and a stray
+  // PERMISSION_GRANTED would no-op anyway.
+  useEffect(() => {
+    if (state.kind !== 'listening-answer') return
+    let cancelled = false
+    providerRef.current.start().catch((err: unknown) => {
+      if (cancelled) return
+      const ve = normaliseVoiceError(err)
+      dispatch({ type: 'VOICE_ERROR', error: ve })
+    })
+    return () => {
+      cancelled = true
+    }
+    // Re-arm only when the answer turn begins. `state.metric` changes per
+    // question so depending on it correctly fires once per turn.
+  }, [state.kind, state.kind === 'listening-answer' ? state.metric : null])
+
+  // Fix E: auto-fire provider.start() when the reducer enters
+  // `requesting-permission` from `idle-greeting` (auto-progress on
+  // GREETING_PLAYED) or `idle-ready` (manual tap on the
+  // autoplay-blocked path). The cold-tap path (prior === 'idle')
+  // is handled by the wrappedDispatch interceptor below, which
+  // owns the opener payload — this effect skips it.
+  useEffect(() => {
+    if (state.kind !== 'requesting-permission') {
+      priorStateRef.current = state.kind
+      return
+    }
+    const prior = priorStateRef.current
+    priorStateRef.current = state.kind
+    // Cold-tap: interceptor already fired start() with the opener.
+    if (prior === 'idle') return
+    // Any other prior is a no-op (defensive guard against future
+    // transitions we haven't designed for).
+    if (prior !== 'idle-greeting' && prior !== 'idle-ready') return
+    let cancelled = false
+    providerRef.current
+      .start()
+      .then(() => {
+        if (cancelled) return
+        // Opener was already spoken (idle-greeting → played) or read
+        // (idle-ready GREETING_FAILED path) — drop into freeform
+        // listening with no opener payload.
+        dispatch({ type: 'PERMISSION_GRANTED' })
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        const ve = normaliseVoiceError(err)
+        if (ve.kind === 'permission-denied') {
+          dispatch({ type: 'PERMISSION_DENIED' })
+        } else {
+          dispatch({ type: 'VOICE_ERROR', error: ve })
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [state.kind])
 
   const wrappedDispatch = (event: Event): void => {
     const current = stateRef.current
@@ -432,11 +928,22 @@ export function useCheckinMachine(
     // Intent interception for TAP_ORB — fire side effects, then dispatch.
     if (event.type === 'TAP_ORB') {
       if (current.kind === 'idle') {
+        // Cold-tap path: opener payload is computed here so the reducer
+        // routes through `speaking-opener` after permission is granted.
+        // priorStateRef will read 'idle' when the requesting-permission
+        // effect runs, signalling that the interceptor already owns
+        // this start() — the effect skips.
         dispatch({ type: 'TAP_ORB' })
-        // Kick off provider.start; resolve → PERMISSION_GRANTED.
         providerRef.current
           .start()
-          .then(() => dispatch({ type: 'PERMISSION_GRANTED' }))
+          .then(() => {
+            const opener = optionsRef.current?.getOpener?.()
+            if (opener) {
+              dispatch({ type: 'PERMISSION_GRANTED', opener })
+            } else {
+              dispatch({ type: 'PERMISSION_GRANTED' })
+            }
+          })
           .catch((err: unknown) => {
             const ve = normaliseVoiceError(err)
             if (ve.kind === 'permission-denied') {
@@ -447,7 +954,25 @@ export function useCheckinMachine(
           })
         return
       }
-      if (current.kind === 'listening') {
+      if (
+        current.kind === 'idle-greeting' ||
+        current.kind === 'idle-ready'
+      ) {
+        // The user has already heard (idle-ready) or is hearing
+        // (idle-greeting) the opener — no payload to attach. Dispatch
+        // TAP_ORB; the requesting-permission effect above owns the
+        // provider.start() side effect for these paths so the
+        // auto-progress (GREETING_PLAYED) and tap paths share one
+        // code path. Page-level effect cancels TTS on the
+        // idle-greeting → requesting-permission transition.
+        dispatch({ type: 'TAP_ORB' })
+        return
+      }
+      if (current.kind === 'listening' || current.kind === 'listening-answer') {
+        // Fix F.1: dedupe with the silence-VAD branch. If silence has
+        // already kicked off stop() for this turn, swallow the tap.
+        if (stopInitiatedRef.current) return
+        stopInitiatedRef.current = true
         providerRef.current
           .stop()
           .then((transcript) =>
@@ -499,6 +1024,53 @@ function normaliseVoiceError(err: unknown): VoiceError {
   if (isVoiceError(err)) return err
   const message = err instanceof Error ? err.message : undefined
   return { kind: 'aborted', message }
+}
+
+// ---------------- Voice C1 bail-out helpers ----------------
+
+const ALL_METRICS: Metric[] = [
+  'pain',
+  'mood',
+  'adherenceTaken',
+  'flare',
+  'energy',
+]
+
+/**
+ * Construct the empty `stage-2` state used when the user bails out of voice
+ * before any extraction has produced metrics (i.e. from `speaking-opener` or
+ * `listening`). All five metrics land in `missing` so Stage 2 renders a full
+ * scripted fallback. The optional `transcript` lets `extracting + BAIL` keep
+ * the freeform transcript already captured.
+ */
+function emptyStage2(transcript?: Transcript): Extract<State, { kind: 'stage-2' }> {
+  return {
+    kind: 'stage-2',
+    transcript: transcript ?? { text: '', durationMs: 0 },
+    metrics: {},
+    missing: [...ALL_METRICS],
+    declined: [],
+  }
+}
+
+/**
+ * Construct the `stage-2` state from a voice loop's running payload. Used
+ * when the user bails from `speaking-question`, `listening-answer`, or
+ * `extracting-answer` — Stage 2 picks up exactly where the loop left off.
+ */
+function carryToStage2(
+  state:
+    | Extract<State, { kind: 'speaking-question' }>
+    | Extract<State, { kind: 'listening-answer' }>
+    | Extract<State, { kind: 'extracting-answer' }>,
+): Extract<State, { kind: 'stage-2' }> {
+  return {
+    kind: 'stage-2',
+    transcript: state.transcript,
+    metrics: state.metrics,
+    missing: state.missing,
+    declined: state.declined,
+  }
 }
 
 function isVoiceError(err: unknown): err is VoiceError {

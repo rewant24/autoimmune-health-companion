@@ -1,12 +1,14 @@
 /**
- * Web Speech `speechSynthesis` adapter (Feature 01, Cycle 2, Chunk 2.E).
+ * Web Speech `speechSynthesis` adapter.
  *
- * Story TTS.US-1.H.1.
+ * Originally `lib/voice/tts-adapter.ts` (Feature 01, Cycle 2, Chunk 2.E,
+ * story TTS.US-1.H.1). Renamed during voice C1 pre-flight (ADR-026) to
+ * make room for `sarvam-tts-adapter.ts`. A re-export shim lives at the
+ * old path until the resolver wires Sarvam in (Wave 2).
  *
- * ADR-018 locks voice output to Web Speech only — no Sarvam, no other
- * provider. This module wraps the browser's `speechSynthesis` API so
- * the rest of the app can call a thin, typed interface and get a
- * Promise that resolves on `end` or rejects on `error`.
+ * The adapter wraps the browser's `speechSynthesis` API so the rest of
+ * the app calls a thin, typed interface (`TtsProvider` from `./types`)
+ * and gets a Promise that resolves on `end` or rejects on `error`.
  *
  * Voice selection (loaded once and cached):
  *   1. First voice with `lang === 'en-IN'`.
@@ -16,20 +18,13 @@
  * The module is React-free; the SpokenOpener component composes it.
  */
 
-export interface TtsSpeakOptions {
-  rate?: number
-  pitch?: number
-  /**
-   * Override the cached voice selection. Used by tests and future
-   * settings UI; the default resolution covers the common case.
-   */
-  voice?: SpeechSynthesisVoice | null
-}
+import type { TtsProvider, TtsSpeakOptions } from './types'
 
-export interface TtsAdapter {
-  speak(text: string, opts?: TtsSpeakOptions): Promise<void>
-  cancel(): void
-}
+/**
+ * Back-compat alias for the original cycle-2 name. New code should
+ * import `TtsProvider` from `./types` directly.
+ */
+export type TtsAdapter = TtsProvider
 
 interface SpeechSynthesisGlobal {
   speechSynthesis?: SpeechSynthesis
@@ -69,7 +64,11 @@ export function resetVoiceCacheForTests(): void {
   cachedVoice = undefined
 }
 
-function selectVoice(
+/**
+ * Pick the best Web Speech voice from a list. Exported because the
+ * provider resolver and tests both call it directly.
+ */
+export function selectVoice(
   voices: readonly SpeechSynthesisVoice[],
 ): SpeechSynthesisVoice | null {
   const enIN = voices.find((v) => v.lang === 'en-IN')
@@ -93,7 +92,7 @@ function resolveVoice(): SpeechSynthesisVoice | null {
 
 // --- Adapter --------------------------------------------------------------
 
-export function createTtsAdapter(): TtsAdapter {
+export function createTtsAdapter(): TtsProvider {
   return {
     speak(text: string, opts: TtsSpeakOptions = {}): Promise<void> {
       const synth = getSynthesis()
@@ -105,7 +104,16 @@ export function createTtsAdapter(): TtsAdapter {
         if (typeof opts.rate === 'number') utterance.rate = opts.rate
         if (typeof opts.pitch === 'number') utterance.pitch = opts.pitch
 
-        const voice = opts.voice !== undefined ? opts.voice : resolveVoice()
+        // `opts.voice` is `unknown` at the interface boundary because
+        // the Sarvam adapter accepts a string speaker name. Web Speech
+        // only honours real `SpeechSynthesisVoice` objects; anything
+        // else falls back to the cached default.
+        const overrideVoice =
+          opts.voice && typeof opts.voice === 'object'
+            ? (opts.voice as SpeechSynthesisVoice)
+            : undefined
+        const voice =
+          overrideVoice !== undefined ? overrideVoice : resolveVoice()
         if (voice) utterance.voice = voice
 
         utterance.onend = (): void => resolve()
@@ -120,6 +128,10 @@ export function createTtsAdapter(): TtsAdapter {
       const synth = getSynthesis()
       if (!synth) return
       synth.cancel()
+    },
+
+    isAvailable(): boolean {
+      return isTtsAvailable()
     },
   }
 }
