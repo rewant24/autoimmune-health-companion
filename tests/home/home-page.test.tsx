@@ -44,9 +44,10 @@ import { clearProfile } from '@/lib/profile/storage'
 
 function seedProfile(patch: Partial<Profile>): void {
   const base: Profile = {
-    v: 1,
+    v: 2,
     name: null,
-    dobIso: null,
+    dobMonth: null,
+    dobYear: null,
     email: null,
     condition: null,
     conditionOther: null,

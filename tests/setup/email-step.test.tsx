@@ -31,20 +31,20 @@ describe('/setup/email page', () => {
     expect(replaceSpy).toHaveBeenCalledWith('/setup/name')
   })
 
-  it('redirects to /setup/dob when only name is filled', () => {
+  it('does not redirect when only name is filled (DOB is optional)', () => {
     writeProfile({ name: 'Asha' })
     render(<SetupEmailPage />)
-    expect(replaceSpy).toHaveBeenCalledWith('/setup/dob')
+    expect(replaceSpy).not.toHaveBeenCalled()
   })
 
   it('does not redirect when name + dob are filled', () => {
-    writeProfile({ name: 'Asha', dobIso: '1992-04-12' })
+    writeProfile({ name: 'Asha', dobMonth: 4, dobYear: 1992 })
     render(<SetupEmailPage />)
     expect(replaceSpy).not.toHaveBeenCalled()
   })
 
   it('disables Next while email is invalid', () => {
-    writeProfile({ name: 'Asha', dobIso: '1992-04-12' })
+    writeProfile({ name: 'Asha', dobMonth: 4, dobYear: 1992 })
     render(<SetupEmailPage />)
     fireEvent.change(screen.getByTestId('email-input'), {
       target: { value: 'not-an-email' },
@@ -53,7 +53,7 @@ describe('/setup/email page', () => {
   })
 
   it('writes lowercased + trimmed email and routes to /setup/condition', () => {
-    writeProfile({ name: 'Asha', dobIso: '1992-04-12' })
+    writeProfile({ name: 'Asha', dobMonth: 4, dobYear: 1992 })
     render(<SetupEmailPage />)
     fireEvent.change(screen.getByTestId('email-input'), {
       target: { value: '  Asha@Example.COM  ' },

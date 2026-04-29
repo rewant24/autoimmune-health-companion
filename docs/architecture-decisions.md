@@ -564,3 +564,30 @@ Walking the SDK source confirmed the root cause: Sarvam's streaming WS is **VAD-
 
 **Supersedes / amends:** ADR-026 still defines the provider choice (Sarvam STT). ADR-027 stays the record of the streaming-with-buffered-fallback adapter shape; the **upload transport** that ADR described is replaced by REST batch as of this ADR. The SarvamRecorder + silence VAD + state-machine cold greeting from ADR-027 are unchanged — only the server-side transport flips.
 
+## ADR-029 — Onboarding DOB: optional, month + year only (Profile schema v1 → v2)
+
+**Status.** Accepted (2026-04-29).
+
+**Context.** The Setup B `/setup/dob` step shipped in the Onboarding Shell cycle as a hard-required Month/Day/Year date that gated forward progress through the four-step setup. Two problems surfaced in review of the live flow:
+1. Friction. Asking patients with autoimmune disease for an exact birthdate up front (a) reads like a clinical intake form, not a companion onboarding, and (b) the day-precision adds nothing — the product surfaces patterns over months/years, never per-day cohort comparisons against birthday.
+2. Incompleteness. Some users will share their birth year as a rough cohort marker but won't share the month. The old form had no representation for "year only."
+
+**Decision.**
+- DOB is now **optional** in the Setup B flow. `firstMissingSetupStep()` no longer returns `'dob'` even when both fields are null.
+- The field captures **month and year only**. The day component is removed entirely.
+- The persisted shape changes: `Profile.dobIso: string | null` (YYYY-MM-DD) is replaced by `Profile.dobMonth: number | null` (1–12) and `Profile.dobYear: number | null`.
+- Valid combinations: `(null, null)` (unassigned) · `(null, year)` (year only) · `(month, year)` (both). The `(month, null)` "orphan-month" case is surfaced in the UI as an inline correction hint but **coerced to (null, null) on persist** — Next stays enabled so the field is never a wall, the orphan month stays visible in the dropdown so the user can correct (add a year) or clear (drop the month) without losing what they typed.
+- Schema version bumps `1 → 2`. **No migrator** is added: `readProfile()` already drops payloads with a stale `v` (logs once, returns null). Pre-launch, the only v1 payloads in the wild are dev/test stubs; safe to drop.
+
+**Consequences.**
+- Pros: Less invasive onboarding; users who don't want to share DOB are no longer blocked. The (null, year) case is now expressible. The data model maps cleanly onto how DOB will actually be used (cohort patterns, not date-arithmetic).
+- Cons: Anyone with a v1 `saha.profile.v1` localStorage payload will be treated as fresh on next visit and routed through Setup B again. Acceptable pre-launch.
+- Risks: Future analytics or pattern surfaces that assume a full birthdate need to widen to the (month?, year?) shape. Touched today: only the Setup B redirect helper. None of the F01/F02 surfaces consume DOB yet.
+
+**Alternatives considered.**
+- **Keep `dobIso: string | null` and overload the format** (e.g. `"YYYY"` for year-only, `"YYYY-MM"` for both, `"YYYY-MM-DD"` retained for backwards-compat). Rejected: every consumer would need a length check before parsing, and we'd carry the day component forever even though we don't capture it anymore.
+- **Block Next on orphan-month** (option B from the build plan). Rejected: turns an optional field back into a soft wall — the worst of both worlds.
+- **Silently discard the orphan month on input change** (option A). Rejected: surprising; user would see the month dropdown reset itself.
+
+**Supersedes / amends:** Amends the Onboarding Shell cycle plan (`docs/features/00-onboarding-shell-cycle-plan.md`) — the Setup.US-2 acceptance criteria are relaxed and the locked seam type is updated. No prior ADR is superseded.
+

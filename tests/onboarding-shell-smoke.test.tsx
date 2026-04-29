@@ -7,7 +7,7 @@
  *   /                 → "Get started" CTA visible (pre-onboarded)
  *   /onboarding/1..5  → Next ×4, then "Start my first check-in" → /setup/name
  *   /setup/name       → write name
- *   /setup/dob        → write dobIso
+ *   /setup/dob        → write dobMonth + dobYear (optional; may be null/null)
  *   /setup/email      → write email (lowercased + trimmed)
  *   /setup/condition  → write condition (+ optional conditionOther)
  *   /welcome          → markOnboarded() runs on mount
@@ -72,8 +72,8 @@ describe('Onboarding Shell — full-chain smoke', () => {
     // /setup/name — user types "Asha"
     writeProfile({ name: 'Asha' })
 
-    // /setup/dob — user picks 1990-05-12
-    writeProfile({ dobIso: '1990-05-12' })
+    // /setup/dob — user picks May 1990 (month + year)
+    writeProfile({ dobMonth: 5, dobYear: 1990 })
 
     // /setup/email — page lowercases + trims before write
     writeProfile({ email: 'asha@example.com' })
@@ -94,9 +94,10 @@ describe('Onboarding Shell — full-chain smoke', () => {
     const profile = readProfile()
     expect(profile).not.toBeNull()
     expect(profile).toMatchObject({
-      v: 1,
+      v: 2,
       name: 'Asha',
-      dobIso: '1990-05-12',
+      dobMonth: 5,
+      dobYear: 1990,
       email: 'asha@example.com',
       condition: 'lupus',
       conditionOther: null,
@@ -105,7 +106,7 @@ describe('Onboarding Shell — full-chain smoke', () => {
     // Spot-check the storage key contract.
     const raw = window.localStorage.getItem(PROFILE_KEY)
     expect(raw).not.toBeNull()
-    expect(JSON.parse(raw!).v).toBe(1)
+    expect(JSON.parse(raw!).v).toBe(2)
     // Sanity: createdAtMs ≤ updatedAtMs and updatedAtMs is recent.
     const now = Date.now()
     expect(profile!.createdAtMs).toBeLessThanOrEqual(profile!.updatedAtMs)
@@ -113,7 +114,7 @@ describe('Onboarding Shell — full-chain smoke', () => {
   })
 
   it('the "Other" condition path persists conditionOther free text', () => {
-    writeProfile({ name: 'Riya', dobIso: '1985-01-01', email: 'r@x.io' })
+    writeProfile({ name: 'Riya', dobMonth: 1, dobYear: 1985, email: 'r@x.io' })
     writeProfile({ condition: 'other', conditionOther: 'IgG4 disease' })
     markOnboarded()
 
@@ -124,7 +125,7 @@ describe('Onboarding Shell — full-chain smoke', () => {
   })
 
   it('markOnboarded() is idempotent — second call leaves onboarded=true', () => {
-    writeProfile({ name: 'A', dobIso: '1990-01-01', email: 'a@b.co', condition: 'lupus' })
+    writeProfile({ name: 'A', dobMonth: 1, dobYear: 1990, email: 'a@b.co', condition: 'lupus' })
     markOnboarded()
     const first = readProfile()
     markOnboarded()

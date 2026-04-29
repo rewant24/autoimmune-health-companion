@@ -9,6 +9,25 @@
 
 ---
 
+## 2026-04-29 — Onboarding DOB: optional, month + year only (ADR-029)
+
+**Related ADR:** ADR-029 (new). Amends Onboarding Shell cycle plan §Setup.US-2 and the locked seam comment on `lib/profile/types.ts`. No prior ADR is superseded.
+
+**What changed.**
+1. `lib/profile/types.ts` — `Profile.dobIso: string | null` (YYYY-MM-DD) replaced by `Profile.dobMonth: number | null` (1–12) and `Profile.dobYear: number | null`. `PROFILE_VERSION` bumped 1 → 2.
+2. `lib/profile/storage.ts` — defaults updated; `firstMissingSetupStep()` no longer returns `'dob'` (DOB is optional and never blocks).
+3. `components/setup/DOBField.tsx` — Day dropdown removed; both dropdowns start unselected (no preselection). New helpers: `isOrphanMonth(value)` and `composeDobMonthYear(value)`. Inline hint surfaces when month is set without year. "(Optional)" tag added to the field legend.
+4. `app/setup/dob/page.tsx` — Next is always enabled (DOB is optional). Subhead tweaked to "Optional — helps Saha anchor patterns over time." On Next, orphan-month is coerced to (null, null) on persist via `composeDobMonthYear`.
+5. Tests swept — `tests/setup/dob-step.test.tsx` rewritten for new behavior; `tests/profile/{contract,storage}.test.ts`, `tests/onboarding-shell-smoke.test.tsx`, `tests/setup/{condition,email}-step.test.tsx`, and the per-screen test profile-seed helpers all updated to the v2 shape.
+
+**Why.** Friction reduction + data-shape honesty. Asking patients with autoimmune disease for an exact birthdate up front reads like a clinical form, not a companion onboarding. Day-precision adds nothing the product uses. Year-only is now expressible — some users will share rough cohort markers but not month.
+
+**Validation pending at write time:** vitest, tsc, next build green; manual smoke on local dev across the four flow paths (none / year-only / month+year / orphan-month).
+
+**Tradeoff acknowledged.** Pre-existing v1 `saha.profile.v1` payloads in the wild will be dropped on next read (logged once, treated as missing) — pre-launch, the only such payloads are dev/test stubs.
+
+---
+
 ## 2026-04-28 — Voice C1 STT transport: pivot from Sarvam streaming WS to REST batch (ADR-028)
 
 **Related ADR:** ADR-028 (new) replaces the **upload transport** half of ADR-027. ADR-026 (provider choice) and the rest of ADR-027 (silence VAD, cold greeting, StopButton, capability flags) are unchanged.

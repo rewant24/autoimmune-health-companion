@@ -30,8 +30,8 @@ describe('profile contract — types', () => {
     expect(PROFILE_KEY).toBe('saha.profile.v1')
   })
 
-  it('PROFILE_VERSION is 1', () => {
-    expect(PROFILE_VERSION).toBe(1)
+  it('PROFILE_VERSION is 2', () => {
+    expect(PROFILE_VERSION).toBe(2)
   })
 
   it('Condition union covers all 10 locked conditions plus other', () => {
@@ -56,9 +56,10 @@ describe('profile contract — types', () => {
     // If a field is renamed or removed, this won't typecheck — the test is
     // the canary for accidental contract drift across A/B/C.
     const p: Profile = {
-      v: 1,
+      v: 2,
       name: null,
-      dobIso: null,
+      dobMonth: null,
+      dobYear: null,
       email: null,
       condition: null,
       conditionOther: null,
@@ -66,7 +67,7 @@ describe('profile contract — types', () => {
       createdAtMs: 0,
       updatedAtMs: 0,
     }
-    expect(p.v).toBe(1)
+    expect(p.v).toBe(2)
   })
 })
 
@@ -78,7 +79,7 @@ describe('profile contract — storage seam', () => {
   it('writeProfile + readProfile round-trips a partial patch', () => {
     const written = writeProfile({ name: 'Asha' })
     expect(written.name).toBe('Asha')
-    expect(written.v).toBe(1)
+    expect(written.v).toBe(2)
     expect(written.createdAtMs).toBeGreaterThan(0)
     expect(written.updatedAtMs).toBeGreaterThanOrEqual(written.createdAtMs)
 
