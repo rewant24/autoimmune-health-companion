@@ -529,13 +529,14 @@ export class SarvamAdapter implements VoiceProvider {
     if (this.streamingModeOpt === 'streaming') return 'streaming'
     if (this.streamingModeOpt === 'buffered') return 'buffered'
     // 'auto'
-    if (
-      typeof window !== 'undefined' &&
-      typeof window.location !== 'undefined' &&
-      window.location.protocol === 'https:'
-    ) {
-      return 'streaming'
-    }
+    // HOT-FIX (voice c1 ship-day, 2026-04-29): always pick 'buffered' until
+    // the streaming branch wraps PCM in a WAV header. Streaming on HTTP/2
+    // (Vercel prod) was shipping raw PCM mislabelled `audio/wav`, so Sarvam
+    // rejected every prod request with "Failed to read the file". Buffered
+    // mode prepends a 44-byte RIFF/WAVE header before upload — works on
+    // both HTTP/1.1 (local) and HTTP/2 (Vercel). See
+    // docs/hotfixes/voice-c1-streaming-pcm.md for the full write-up and
+    // post-MVP backlog item for the proper per-chunk streaming fix.
     return 'buffered'
   }
 
