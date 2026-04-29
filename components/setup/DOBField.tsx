@@ -1,15 +1,20 @@
 'use client'
 
 /**
- * DOBField — three dropdowns (Month / Day / Year) for Setup B.2.
+ * DOBField — two dropdowns (Month / Year) for Setup B.2.
  *
- * Onboarding Shell cycle, Build-B (Chunk B).
+ * 2026-04-29 tweak: field is now OPTIONAL and month/year only (day removed).
  *
- * - Year defaults to 1990 (sensible decade per cycle plan Q3); range
- *   1925..currentYear inclusive.
- * - Month names rendered via `Intl.DateTimeFormat`.
- * - Validation: requires all three; future date → invalid; pre-1925 →
- *   invalid; Feb 29 in non-leap year → invalid (calendar overflow check).
+ * Validation rules:
+ *   - Both null → unassigned, persists as (null, null).
+ *   - Year only → valid, persists as (null, year).
+ *   - Month + year → valid, persists as (month, year).
+ *   - Month without year ("orphan-month") → INVALID. The page surfaces an
+ *     inline hint and persists (null, null) on Next; we deliberately keep the
+ *     orphan month visible in the dropdown so the user can correct it.
+ *
+ * Year range: 1925..currentYear inclusive. Both dropdowns start unselected
+ * (placeholder hint text).
  */
 
 import { useId, useMemo } from 'react'
@@ -17,13 +22,10 @@ import { useId, useMemo } from 'react'
 export interface DOBValue {
   /** 1..12, null until set. */
   month: number | null
-  /** 1..31, null until set. */
-  day: number | null
   /** 4-digit year, null until set. */
   year: number | null
 }
 
-export const DOB_DEFAULT_YEAR = 1990
 export const DOB_MIN_YEAR = 1925
 
 export interface DOBFieldProps {
@@ -31,26 +33,59 @@ export interface DOBFieldProps {
   onChange: (next: DOBValue) => void
 }
 
+/** True when month is set but year is not — the only invalid pair. */
+export function isOrphanMonth(value: DOBValue): boolean {
+  return value.month !== null && value.year === null
+}
+
+/**
+ * Coerces the in-memory dropdown state into the persistable
+ * `{ dobMonth, dobYear }` shape. Orphan-month is silently coerced to
+ * (null, null); year-only and full pairs pass through.
+ */
+export function composeDobMonthYear(value: DOBValue): {
+  dobMonth: number | null
+  dobYear: number | null
+} {
+  if (isOrphanMonth(value)) return { dobMonth: null, dobYear: null }
+  // Range guard: defensive — UI dropdowns should already be valid.
+  const year = value.year
+  if (year !== null) {
+    const currentYear = new Date().getFullYear()
+    if (year < DOB_MIN_YEAR || year > currentYear) {
+      return { dobMonth: null, dobYear: null }
+    }
+  }
+  const month = value.month
+  if (month !== null && (month < 1 || month > 12)) {
+    return { dobMonth: null, dobYear: value.year }
+  }
+  return { dobMonth: value.month, dobYear: value.year }
+}
+
 export function DOBField({
   value,
   onChange,
 }: DOBFieldProps): React.JSX.Element {
   const monthId = useId()
-  const dayId = useId()
   const yearId = useId()
+  const hintId = useId()
 
   const monthNames = useMemo(() => buildMonthNames(), [])
   const yearOptions = useMemo(() => buildYearOptions(), [])
+  const showOrphanHint = isOrphanMonth(value)
 
   return (
     <fieldset
       className="flex flex-col gap-2"
       data-testid="dob-field"
+      aria-describedby={showOrphanHint ? hintId : undefined}
     >
       <legend className="type-label text-[var(--ink-muted)]">
-        Date of birth
+        Date of birth{' '}
+        <span className="text-[var(--ink-muted)] font-normal">(Optional)</span>
       </legend>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-1">
           <label htmlFor={monthId} className="sr-only">
             Month
@@ -71,30 +106,6 @@ export function DOBField({
             {monthNames.map((name, i) => (
               <option key={i + 1} value={i + 1}>
                 {name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label htmlFor={dayId} className="sr-only">
-            Day
-          </label>
-          <select
-            id={dayId}
-            value={value.day ?? ''}
-            onChange={(e) =>
-              onChange({
-                ...value,
-                day: e.target.value ? Number(e.target.value) : null,
-              })
-            }
-            data-testid="dob-day"
-            className={selectClass}
-          >
-            <option value="">Day</option>
-            {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-              <option key={d} value={d}>
-                {d}
               </option>
             ))}
           </select>
@@ -124,6 +135,15 @@ export function DOBField({
           </select>
         </div>
       </div>
+      {showOrphanHint ? (
+        <p
+          id={hintId}
+          data-testid="dob-orphan-month-hint"
+          className="type-label text-[var(--ink-muted)]"
+        >
+          Please also select a year, or clear the month.
+        </p>
+      ) : null}
     </fieldset>
   )
 }
@@ -167,52 +187,4 @@ function buildYearOptions(): number[] {
     out.push(y)
   }
   return out
-}
-
-/**
- * Composes a YYYY-MM-DD ISO date string from the three dropdown values, or
- * returns null when the date is invalid or incomplete.
- *
- * Rules:
- *   - All three values must be present.
- *   - Year ∈ [DOB_MIN_YEAR, currentYear].
- *   - The composed Date must round-trip (rejects Feb 30, Feb 29 in
- *     non-leap year, etc.).
- *   - The composed date must NOT be in the future
- *     (date-only comparison; today counts as valid).
- */
-export function composeDobIso(value: DOBValue): string | null {
-  const { month, day, year } = value
-  if (month === null || day === null || year === null) return null
-  if (!Number.isInteger(month) || !Number.isInteger(day) || !Number.isInteger(year)) {
-    return null
-  }
-  if (month < 1 || month > 12) return null
-  if (day < 1 || day > 31) return null
-  const currentYear = new Date().getFullYear()
-  if (year < DOB_MIN_YEAR || year > currentYear) return null
-
-  const candidate = new Date(year, month - 1, day)
-  if (
-    candidate.getFullYear() !== year ||
-    candidate.getMonth() !== month - 1 ||
-    candidate.getDate() !== day
-  ) {
-    return null
-  }
-
-  // Future-date check — compare YMD only so "today" stays valid even if the
-  // user's local clock is past midnight UTC.
-  const today = new Date()
-  const todayYmd = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate()
-  const candYmd = year * 10000 + month * 100 + day
-  if (candYmd > todayYmd) return null
-
-  const mm = String(month).padStart(2, '0')
-  const dd = String(day).padStart(2, '0')
-  return `${year}-${mm}-${dd}`
-}
-
-export function isValidDob(value: DOBValue): boolean {
-  return composeDobIso(value) !== null
 }

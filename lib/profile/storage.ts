@@ -84,7 +84,8 @@ export function writeProfile(patch: Partial<Profile>): Profile {
   const defaults: Profile = {
     v: PROFILE_VERSION,
     name: null,
-    dobIso: null,
+    dobMonth: null,
+    dobYear: null,
     email: null,
     condition: null,
     conditionOther: null,
@@ -156,6 +157,9 @@ export const SETUP_STEP_ORDER: readonly SetupStep[] = [
  * Returns the first incomplete Setup B step given a profile (or "name" if
  * it's missing entirely — caller treats that as "start at name").
  *
+ * DOB is OPTIONAL (2026-04-29 tweak): it is intentionally NOT checked here,
+ * so a user who skipped /setup/dob is not redirected back to it.
+ *
  * Returns null when every required field is filled.
  */
 export function firstMissingSetupStep(
@@ -163,7 +167,6 @@ export function firstMissingSetupStep(
 ): SetupStep | null {
   if (profile === null) return 'name'
   if (profile.name === null || profile.name.trim().length === 0) return 'name'
-  if (profile.dobIso === null) return 'dob'
   if (profile.email === null || profile.email.trim().length === 0) return 'email'
   if (profile.condition === null) return 'condition'
   if (

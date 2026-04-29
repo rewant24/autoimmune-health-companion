@@ -5,6 +5,10 @@
  *
  * Onboarding Shell cycle, Build-B (Chunk B). Setup.US-2.
  *
+ * 2026-04-29 tweak: optional + month/year only. Next is always enabled.
+ * Orphan-month (month set without year) is allowed in the UI with an inline
+ * hint, and coerced to (null, null) on persist.
+ *
  * Direct-link guard: if a strictly-prior step (name) is unfilled, redirect.
  */
 
@@ -12,10 +16,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import {
-  composeDobIso,
-  DOB_DEFAULT_YEAR,
+  composeDobMonthYear,
   DOBField,
-  isValidDob,
   type DOBValue,
 } from '@/components/setup/DOBField'
 import { SetupShell } from '@/components/setup/SetupShell'
@@ -29,8 +31,7 @@ export default function SetupDobPage(): React.JSX.Element {
   const router = useRouter()
   const [value, setValue] = useState<DOBValue>({
     month: null,
-    day: null,
-    year: DOB_DEFAULT_YEAR,
+    year: null,
   })
 
   useEffect(() => {
@@ -40,25 +41,14 @@ export default function SetupDobPage(): React.JSX.Element {
       router.replace(`/setup/${target}`)
       return
     }
-    if (prior?.dobIso) {
-      const [y, m, d] = prior.dobIso.split('-').map(Number)
-      if (
-        Number.isInteger(y) &&
-        Number.isInteger(m) &&
-        Number.isInteger(d)
-      ) {
-        setValue({ year: y, month: m, day: d })
-      }
+    if (prior) {
+      setValue({ month: prior.dobMonth, year: prior.dobYear })
     }
   }, [router])
 
-  const valid = isValidDob(value)
-
   const next = () => {
-    if (!valid) return
-    const iso = composeDobIso(value)
-    if (iso === null) return
-    writeProfile({ dobIso: iso })
+    const { dobMonth, dobYear } = composeDobMonthYear(value)
+    writeProfile({ dobMonth, dobYear })
     router.push('/setup/email')
   }
 
@@ -66,8 +56,8 @@ export default function SetupDobPage(): React.JSX.Element {
     <SetupShell
       step={2}
       heading="When were you born?"
-      subhead="Saha uses this to anchor patterns over time."
-      disabled={!valid}
+      subhead="Optional — helps Saha anchor patterns over time."
+      disabled={false}
       onNext={next}
     >
       <DOBField value={value} onChange={setValue} />

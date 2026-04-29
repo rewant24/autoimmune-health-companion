@@ -37,7 +37,7 @@ describe('/setup/condition page', () => {
   })
 
   it('redirects to /setup/email when name + dob filled but email missing', () => {
-    writeProfile({ name: 'Asha', dobIso: '1992-04-12' })
+    writeProfile({ name: 'Asha', dobMonth: 4, dobYear: 1992 })
     render(<SetupConditionPage />)
     expect(replaceSpy).toHaveBeenCalledWith('/setup/email')
   })
@@ -45,7 +45,8 @@ describe('/setup/condition page', () => {
   it('renders all 10 conditions + the Other option', () => {
     writeProfile({
       name: 'Asha',
-      dobIso: '1992-04-12',
+      dobMonth: 4,
+      dobYear: 1992,
       email: 'a@b.co',
     })
     render(<SetupConditionPage />)
@@ -58,7 +59,8 @@ describe('/setup/condition page', () => {
   it('disables Next when no condition selected', () => {
     writeProfile({
       name: 'Asha',
-      dobIso: '1992-04-12',
+      dobMonth: 4,
+      dobYear: 1992,
       email: 'a@b.co',
     })
     render(<SetupConditionPage />)
@@ -68,7 +70,8 @@ describe('/setup/condition page', () => {
   it('writes condition + null conditionOther and routes to /welcome', () => {
     writeProfile({
       name: 'Asha',
-      dobIso: '1992-04-12',
+      dobMonth: 4,
+      dobYear: 1992,
       email: 'a@b.co',
     })
     render(<SetupConditionPage />)
@@ -84,7 +87,8 @@ describe('/setup/condition page', () => {
   it('reveals free-text input when "Other" is selected', () => {
     writeProfile({
       name: 'Asha',
-      dobIso: '1992-04-12',
+      dobMonth: 4,
+      dobYear: 1992,
       email: 'a@b.co',
     })
     render(<SetupConditionPage />)
@@ -96,7 +100,8 @@ describe('/setup/condition page', () => {
   it('keeps Next disabled when "Other" is selected but free-text empty', () => {
     writeProfile({
       name: 'Asha',
-      dobIso: '1992-04-12',
+      dobMonth: 4,
+      dobYear: 1992,
       email: 'a@b.co',
     })
     render(<SetupConditionPage />)
@@ -111,7 +116,8 @@ describe('/setup/condition page', () => {
   it('writes condition=other + conditionOther free-text and routes to /welcome', () => {
     writeProfile({
       name: 'Asha',
-      dobIso: '1992-04-12',
+      dobMonth: 4,
+      dobYear: 1992,
       email: 'a@b.co',
     })
     render(<SetupConditionPage />)
@@ -128,7 +134,8 @@ describe('/setup/condition page', () => {
   it('does not redirect when every required field is already filled', () => {
     writeProfile({
       name: 'Asha',
-      dobIso: '1992-04-12',
+      dobMonth: 4,
+      dobYear: 1992,
       email: 'a@b.co',
       condition: 'lupus',
     })

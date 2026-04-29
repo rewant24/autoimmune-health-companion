@@ -1,5 +1,7 @@
 # Onboarding Shell Cycle — Build Plan
 
+> **2026-04-29 tweak (post-ship).** DOB went from required Month/Day/Year to **optional Month/Year only**. The locked seam (`Profile.dobIso: string | null`) is replaced by `Profile.dobMonth: number | null` + `Profile.dobYear: number | null`; `PROFILE_VERSION` bumped 1 → 2 (no migrator — pre-launch). `firstMissingSetupStep()` no longer returns `'dob'`. `<DOBField>` lost its Day dropdown, has no preselection, surfaces an inline hint when month is set without year, and persists orphan-month as (null, null). Setup.US-2 acceptance criteria below are AMENDED accordingly. See ADR-029 + architecture-changelog 2026-04-29 for full rationale.
+
 > **For agentic workers:** This plan follows the **Project Process Playbook** (`~/.claude/projects/-Users-rewantprakash-1/memory/reference_project_process.md`) — parallel build subagents → parallel review subagents → fix → second pass → ship. Steps inside each chunk follow TDD inside the subagent.
 >
 > **Branch:** `feat/onboarding-shell` off `main` after `f01-c2/shipped` (and after the Saha rebrand sweep merges, if not already on `main`).

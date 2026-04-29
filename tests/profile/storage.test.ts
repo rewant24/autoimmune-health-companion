@@ -27,18 +27,34 @@ afterEach(() => {
 describe('storage — full Setup B flow round-trip', () => {
   it('preserves each field as they fill in across the four steps', () => {
     writeProfile({ name: 'Asha' })
-    writeProfile({ dobIso: '1992-04-12' })
+    writeProfile({ dobMonth: 4, dobYear: 1992 })
     writeProfile({ email: 'asha@example.com' })
     writeProfile({ condition: 'lupus', conditionOther: null })
 
     const final = readProfile()
     expect(final).not.toBeNull()
     expect(final?.name).toBe('Asha')
-    expect(final?.dobIso).toBe('1992-04-12')
+    expect(final?.dobMonth).toBe(4)
+    expect(final?.dobYear).toBe(1992)
     expect(final?.email).toBe('asha@example.com')
     expect(final?.condition).toBe('lupus')
     expect(final?.conditionOther).toBeNull()
     expect(final?.onboarded).toBe(false)
+  })
+
+  it('persists year-only DOB (null month, year set)', () => {
+    writeProfile({ name: 'Asha' })
+    writeProfile({ dobMonth: null, dobYear: 1992 })
+    const final = readProfile()
+    expect(final?.dobMonth).toBeNull()
+    expect(final?.dobYear).toBe(1992)
+  })
+
+  it('persists unassigned DOB (both null)', () => {
+    writeProfile({ name: 'Asha' })
+    const final = readProfile()
+    expect(final?.dobMonth).toBeNull()
+    expect(final?.dobYear).toBeNull()
   })
 
   it('persists `condition: other` with free-text conditionOther', () => {
@@ -51,13 +67,14 @@ describe('storage — full Setup B flow round-trip', () => {
   })
 
   it('markOnboarded after the four-step flow does not wipe prior fields', () => {
-    writeProfile({ name: 'Asha', dobIso: '1992-04-12' })
+    writeProfile({ name: 'Asha', dobMonth: 4, dobYear: 1992 })
     writeProfile({ email: 'asha@example.com', condition: 'lupus' })
     markOnboarded()
 
     const final = readProfile()
     expect(final?.name).toBe('Asha')
-    expect(final?.dobIso).toBe('1992-04-12')
+    expect(final?.dobMonth).toBe(4)
+    expect(final?.dobYear).toBe(1992)
     expect(final?.email).toBe('asha@example.com')
     expect(final?.condition).toBe('lupus')
     expect(final?.onboarded).toBe(true)
@@ -94,7 +111,7 @@ describe('storage — payload edge cases', () => {
   it('a stale patch trying to downgrade `v` is overridden to current version', () => {
     // Patch type-asserts because this models a stale call site that pre-dates
     // the version bump — we want behaviour, not type, coverage.
-    const written = writeProfile({ v: 0 as unknown as 1, name: 'Asha' })
+    const written = writeProfile({ v: 0 as unknown as 2, name: 'Asha' })
     expect(written.v).toBe(PROFILE_VERSION)
   })
 
@@ -149,20 +166,19 @@ describe('firstMissingSetupStep helper', () => {
     expect(firstMissingSetupStep(readProfile())).toBe('name')
   })
 
-  it('returns "dob" when name filled but dobIso missing', () => {
+  it('returns "email" when name filled but email missing (DOB is optional and skipped)', () => {
     writeProfile({ name: 'Asha' })
-    expect(firstMissingSetupStep(readProfile())).toBe('dob')
-  })
-
-  it('returns "email" when name + dob filled but email missing', () => {
-    writeProfile({ name: 'Asha', dobIso: '1992-04-12' })
     expect(firstMissingSetupStep(readProfile())).toBe('email')
   })
 
-  it('returns "condition" when name + dob + email filled but condition missing', () => {
+  it('does NOT redirect to "dob" even if both dobMonth and dobYear are null', () => {
+    writeProfile({ name: 'Asha', email: 'a@b.co', condition: 'lupus' })
+    expect(firstMissingSetupStep(readProfile())).toBeNull()
+  })
+
+  it('returns "condition" when name + email filled but condition missing', () => {
     writeProfile({
       name: 'Asha',
-      dobIso: '1992-04-12',
       email: 'a@b.co',
     })
     expect(firstMissingSetupStep(readProfile())).toBe('condition')
@@ -171,7 +187,6 @@ describe('firstMissingSetupStep helper', () => {
   it('returns "condition" when condition is "other" but conditionOther empty', () => {
     writeProfile({
       name: 'Asha',
-      dobIso: '1992-04-12',
       email: 'a@b.co',
       condition: 'other',
       conditionOther: '   ',
@@ -179,10 +194,20 @@ describe('firstMissingSetupStep helper', () => {
     expect(firstMissingSetupStep(readProfile())).toBe('condition')
   })
 
-  it('returns null when every required field is filled', () => {
+  it('returns null when every required field is filled (DOB skipped)', () => {
     writeProfile({
       name: 'Asha',
-      dobIso: '1992-04-12',
+      email: 'a@b.co',
+      condition: 'lupus',
+    })
+    expect(firstMissingSetupStep(readProfile())).toBeNull()
+  })
+
+  it('returns null when DOB also filled (both required + optional present)', () => {
+    writeProfile({
+      name: 'Asha',
+      dobMonth: 4,
+      dobYear: 1992,
       email: 'a@b.co',
       condition: 'lupus',
     })

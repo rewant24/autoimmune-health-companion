@@ -4,12 +4,14 @@
 // so all three Wave-1 build agents (A: onboarding screens, B: setup + storage,
 // C: welcome + home + nav) import a stable shape from day one.
 //
-// Build-B owns `lib/profile/storage.ts` and may extend its implementation, but
-// the exported types here are locked: Build-B may not modify this file.
-// Future migrations bump `v` and add a migrator alongside.
+// 2026-04-29 tweak: DOB became optional and lost the day component; `dobIso`
+// was replaced by separate `dobMonth` + `dobYear` nullable fields. Schema
+// version bumped 1 → 2 (no migrator; pre-launch, v1 payloads are dropped by
+// `readProfile` per the version-mismatch path).
 //
 // Plan reference: docs/features/00-onboarding-shell-cycle-plan.md
 //   §"Profile state contract (locked seam — chunk B owns this file)"
+// ADR reference: docs/architecture-decisions.md ADR-029 (DOB-optional v1→v2).
 
 /**
  * The 10 conditions surfaced on the marketing landing page, plus an "Other"
@@ -35,14 +37,19 @@ export type Condition =
  * - `v` is the version tag — readers reject any payload whose `v` does not
  *   match the current literal (treat as null + log once).
  * - All field-level data starts null and fills in across Setup B's four steps.
+ * - `dobMonth` / `dobYear` are independent + optional. Valid combinations:
+ *     (null, null) — unassigned · (null, year) — year only ·
+ *     (month, year) — both. The (month, null) "orphan-month" case is
+ *     coerced to (null, null) at the write site (see /setup/dob page).
  * - `onboarded` flips to true on the /welcome screen mount.
  * - `createdAtMs` is set once on the first write; `updatedAtMs` refreshes on
  *   every write.
  */
 export interface Profile {
-  v: 1
+  v: 2
   name: string | null
-  dobIso: string | null // YYYY-MM-DD
+  dobMonth: number | null // 1..12 inclusive; null when unassigned or orphan-month coerced
+  dobYear: number | null // 4-digit year; null when unassigned
   email: string | null
   condition: Condition | null
   conditionOther: string | null // free text iff condition === 'other'; else null
@@ -55,4 +62,4 @@ export interface Profile {
 export const PROFILE_KEY = 'saha.profile.v1'
 
 /** Current schema version literal. Bump when introducing a migrator. */
-export const PROFILE_VERSION = 1 as const
+export const PROFILE_VERSION = 2 as const
