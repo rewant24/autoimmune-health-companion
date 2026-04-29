@@ -3,7 +3,7 @@
 **Date:** 2026-04-29
 **Severity:** prod-broken (every voice check-in failed on Vercel prod)
 **Cycle:** Voice C1 (PR #12, squash `1a63036`)
-**Fix commit:** _filled in after merge_
+**Fix commit:** `5c66f1a`
 **File touched:** `lib/voice/sarvam-adapter.ts` (one return value flipped in `resolveMode()`)
 
 ## Symptom
