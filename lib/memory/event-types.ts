@@ -48,13 +48,22 @@ export type FlareEvent = BaseEventFields & {
 
 export type IntakeEvent = BaseEventFields & {
   type: "intake";
+  // SPRINT_F04_INTAKE_PAYLOAD — chunk 4.C replaces this with the real
+  // payload shape (medicationId, medicationName, dose, source). Keep
+  // empty here so existing F02 C1 code still typechecks during pre-flight.
   payload: Record<string, never>;
 };
 
 export type VisitEvent = BaseEventFields & {
   type: "visit";
+  // SPRINT_F05_VISIT_PAYLOAD — chunk 5.C replaces this with the real
+  // payload shape (visitId, doctorName, specialty, visitType, notes).
   payload: Record<string, never>;
 };
+
+// SPRINT_F05_BLOODWORK_EVENT — chunk 5.C adds `BloodWorkEvent` here with
+// payload { bloodWorkId, markerCount, abnormalCount } and includes it in
+// the MemoryEvent union below.
 
 export type MemoryEvent = CheckInEvent | FlareEvent | IntakeEvent | VisitEvent;
 

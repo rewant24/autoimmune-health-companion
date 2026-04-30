@@ -64,7 +64,13 @@ export default function HomePage(): React.JSX.Element {
       <div className="mx-auto w-full max-w-2xl">
         <HomeGreeting />
         <CheckInPromptCard />
+        {/* SPRINT_F04_NUDGE_SLOT — chunk 4.B updates MedsSetupNudgeCard
+            (or replaces with a live regimen-aware variant) so it hides
+            once `listActiveMedications` returns ≥1. */}
         <MedsSetupNudgeCard />
+        {/* SPRINT_F04_INTAKE_SLOT — chunk 4.C inserts <IntakeTapList />
+            here, rendering today's regimen with taken/outstanding state.
+            Hidden when no active medications. */}
         <MetricVizPlaceholder />
       </div>
       <BottomNav />
