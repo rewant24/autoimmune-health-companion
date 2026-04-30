@@ -254,6 +254,30 @@ export type Event =
     }
   | { type: 'BAIL_TO_TAPS' }
   | { type: 'CLOSER_PLAYED' }
+  // F04 chunk 4.C — voice medication extraction signals. Pre-flight-style
+  // additive seam: the events ride alongside the existing union but the
+  // reducer treats them as no-ops in C1. Page-level orchestration owns
+  // the medication confirm-card surface (it lives in the summary step,
+  // not the orb visual states), so the state machine doesn't need to
+  // gate on them. Wave-2 integration of F04 may upgrade this to a
+  // `confirming-medication` state if the surface needs to block save.
+  | {
+      type: 'MEDICATION_EXTRACTED'
+      simpleAdherence: { confirmed: boolean } | null
+      skippedMedications: { medicationId: string; medicationName: string }[]
+      dosageChanges: {
+        medicationId: string
+        medicationName: string
+        oldDose: string
+        newDose: string
+        reason?: string
+      }[]
+    }
+  | {
+      type: 'MEDICATION_CONFIRMED'
+      medicationId: string
+      newDose: string
+    }
   | { type: 'RESET' }
 
 export const initialState: State = { kind: 'idle' }

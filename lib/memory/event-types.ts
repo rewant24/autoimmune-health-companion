@@ -48,10 +48,12 @@ export type FlareEvent = BaseEventFields & {
 
 export type IntakeEvent = BaseEventFields & {
   type: "intake";
-  // SPRINT_F04_INTAKE_PAYLOAD — chunk 4.C replaces this with the real
-  // payload shape (medicationId, medicationName, dose, source). Keep
-  // empty here so existing F02 C1 code still typechecks during pre-flight.
-  payload: Record<string, never>;
+  payload: {
+    medicationId: string;
+    medicationName: string;
+    dose: string;
+    source: "home-tap" | "check-in";
+  };
 };
 
 export type VisitEvent = BaseEventFields & {
@@ -138,4 +140,59 @@ export function eventFromCheckin(row: CheckinRow): MemoryEvent[] {
   }
 
   return events;
+}
+
+// ---- F04 chunk 4.C — intake event projection ------------------------------
+
+/** Minimal intake-row shape `eventFromIntake` reads. Mirrors the
+ *  `intakeEvents` table; defined locally so this module doesn't pull in
+ *  the Convex generated types (which compile only after `convex dev`). */
+export interface IntakeEventRow {
+  _id: string;
+  medicationId: string;
+  date: string;
+  takenAt: number;
+  source: "home-tap" | "check-in" | "module";
+}
+
+/** Minimal medication shape needed to render an intake row's title/meta. */
+export interface IntakeMedication {
+  _id: string;
+  name: string;
+  dose: string;
+}
+
+/**
+ * Project one intake row into a Memory IntakeEvent. Source is normalised:
+ * `module` rows (explicit log inside /medications) are reported as
+ * `home-tap` in the Memory feed because the user typed/tapped, not the
+ * voice path. The `intake` event type discriminator is preserved.
+ *
+ * Returns `null` when the supplied medication doesn't match the row's
+ * `medicationId` — defensive guard so a stale closure doesn't render a
+ * "Took ?" card.
+ */
+export function eventFromIntake(
+  row: IntakeEventRow,
+  medication: IntakeMedication,
+): IntakeEvent | null {
+  if (row.medicationId !== medication._id) return null;
+  const time = formatTimeIST(row.takenAt);
+  const memorySource: "home-tap" | "check-in" =
+    row.source === "check-in" ? "check-in" : "home-tap";
+  return {
+    type: "intake",
+    eventId: `intake:${row._id}`,
+    date: row.date,
+    time,
+    title: `Took ${medication.name}`,
+    meta: medication.dose,
+    taskState: "done",
+    payload: {
+      medicationId: medication._id,
+      medicationName: medication.name,
+      dose: medication.dose,
+      source: memorySource,
+    },
+  };
 }
