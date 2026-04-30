@@ -69,15 +69,16 @@ export default function VisitsPage(): React.JSX.Element {
   // `doctorVisits` — chunk 5.A may still be merging when this lands.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const apiAny = api as any
+  // 5.A returns { items: VisitListRow[] }.
   const visitsQuery = useQuery(
     apiAny.doctorVisits?.listVisits,
     userId ? { userId } : 'skip',
-  ) as VisitListRow[] | undefined
+  ) as { items: VisitListRow[] } | undefined
 
   const softDelete = useMutation(apiAny.doctorVisits?.softDeleteVisit)
 
   const visits: VisitListRow[] = useMemo(() => {
-    const rows = visitsQuery ?? []
+    const rows = visitsQuery?.items ?? []
     // Filter soft-deleted defensively + sort newest-first by date string
     // (YYYY-MM-DD compares lexically). Server already filters & sorts,
     // but we don't want to rely on that contract from the UI.
@@ -89,9 +90,10 @@ export default function VisitsPage(): React.JSX.Element {
   const isLoading = userId !== null && visitsQuery === undefined
 
   const handleDelete = async (id: string) => {
-    if (!softDelete) return
+    if (!softDelete || !userId) return
     try {
-      await softDelete({ id })
+      // 5.A surface: softDeleteVisit({ visitId, userId }).
+      await softDelete({ visitId: id, userId })
     } catch {
       // Best-effort — leave the card visible if the mutation fails.
     } finally {

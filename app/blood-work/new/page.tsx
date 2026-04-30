@@ -48,12 +48,6 @@ function getOrCreateTestUserId(): string {
   return fresh
 }
 
-function newRequestId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `req_${Date.now()}_${Math.random().toString(36).slice(2)}`
-}
-
 function NewBloodWorkInner(): React.JSX.Element {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -70,14 +64,15 @@ function NewBloodWorkInner(): React.JSX.Element {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const apiAny = api as any
 
+  // 5.A returns { items: BloodWorkRow[] }.
   const listQuery = useQuery(
     apiAny.bloodWork?.listBloodWork,
     userId && editId ? { userId } : 'skip',
-  ) as BloodWorkRow[] | undefined
+  ) as { items: BloodWorkRow[] } | undefined
 
   const editingRow = useMemo(() => {
     if (!editId || !listQuery) return null
-    return listQuery.find((r) => r._id === editId) ?? null
+    return listQuery.items.find((r) => r._id === editId) ?? null
   }, [editId, listQuery])
 
   const createBloodWork = useMutation(apiAny.bloodWork?.createBloodWork)
@@ -101,21 +96,25 @@ function NewBloodWorkInner(): React.JSX.Element {
     try {
       if (isEdit && editId) {
         if (!updateBloodWork) throw new Error('updateBloodWork unavailable')
+        // 5.A surface: updateBloodWork({ bloodWorkId, userId, ...flat partials }).
         await updateBloodWork({
-          id: editId,
+          bloodWorkId: editId,
+          userId,
           date: value.date,
           markers: value.markers,
           notes: value.notes,
         })
       } else {
         if (!createBloodWork) throw new Error('createBloodWork unavailable')
+        // 5.A surface: createBloodWork takes no clientRequestId (no
+        // idempotency token in the schema). Manual-form path is gated by
+        // the user submit button.
         await createBloodWork({
           userId,
           date: value.date,
           markers: value.markers,
           notes: value.notes,
           source: 'module',
-          clientRequestId: newRequestId(),
         })
       }
       router.push('/blood-work')

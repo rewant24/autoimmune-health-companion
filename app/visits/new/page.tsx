@@ -56,12 +56,6 @@ function getOrCreateTestUserId(): string {
   return fresh
 }
 
-function newRequestId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `req_${Date.now()}_${Math.random().toString(36).slice(2)}`
-}
-
 function NewVisitInner(): React.JSX.Element {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -81,15 +75,15 @@ function NewVisitInner(): React.JSX.Element {
   // Edit mode: pull the full list and find the row. The 5.A contract may
   // expose a per-id query later; for now `listVisits` is enough and the
   // client-side filter is O(n) on a small table.
+  // 5.A returns { items: VisitListRow[] }.
   const visitsQuery = useQuery(
     apiAny.doctorVisits?.listVisits,
     userId && editId ? { userId } : 'skip',
-  ) as VisitListRow[] | undefined
+  ) as { items: VisitListRow[] } | undefined
 
   const editingRow = useMemo(() => {
-    if (!editId) return null
-    if (!visitsQuery) return null
-    return visitsQuery.find((r) => r._id === editId) ?? null
+    if (!editId || !visitsQuery) return null
+    return visitsQuery.items.find((r) => r._id === editId) ?? null
   }, [editId, visitsQuery])
 
   const createVisit = useMutation(apiAny.doctorVisits?.createVisit)
@@ -121,8 +115,10 @@ function NewVisitInner(): React.JSX.Element {
     try {
       if (isEdit && editId) {
         if (!updateVisit) throw new Error('updateVisit unavailable')
+        // 5.A surface: updateVisit takes { visitId, userId, ...flat partials }.
         await updateVisit({
-          id: editId,
+          visitId: editId,
+          userId,
           date: value.date,
           doctorName: value.doctorName,
           specialty: value.specialty,
@@ -131,6 +127,9 @@ function NewVisitInner(): React.JSX.Element {
         })
       } else {
         if (!createVisit) throw new Error('createVisit unavailable')
+        // 5.A surface: createVisit takes no clientRequestId (no idempotency
+        // token in the schema). Idempotency on the manual-form path is
+        // governed by the user's submit button + redirect.
         await createVisit({
           userId,
           date: value.date,
@@ -139,7 +138,6 @@ function NewVisitInner(): React.JSX.Element {
           visitType: value.visitType,
           notes: value.notes,
           source: 'module',
-          clientRequestId: newRequestId(),
         })
       }
       router.push('/visits')

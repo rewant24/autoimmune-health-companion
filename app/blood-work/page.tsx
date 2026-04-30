@@ -71,15 +71,16 @@ export default function BloodWorkListPage(): React.JSX.Element {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const apiAny = api as any
+  // 5.A returns { items: BloodWorkRow[] }.
   const query = useQuery(
     apiAny.bloodWork?.listBloodWork,
     userId ? { userId } : 'skip',
-  ) as BloodWorkRow[] | undefined
+  ) as { items: BloodWorkRow[] } | undefined
 
   const softDelete = useMutation(apiAny.bloodWork?.softDeleteBloodWork)
 
   const rows: BloodWorkRow[] = useMemo(() => {
-    const list = query ?? []
+    const list = query?.items ?? []
     return [...list]
       .filter((r) => !r.deletedAt)
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
@@ -88,9 +89,10 @@ export default function BloodWorkListPage(): React.JSX.Element {
   const isLoading = userId !== null && query === undefined
 
   const handleDelete = async (id: string) => {
-    if (!softDelete) return
+    if (!softDelete || !userId) return
     try {
-      await softDelete({ id })
+      // 5.A surface: softDeleteBloodWork({ bloodWorkId, userId }).
+      await softDelete({ bloodWorkId: id, userId })
     } catch {
       // best-effort
     } finally {
