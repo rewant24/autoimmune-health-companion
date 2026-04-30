@@ -72,7 +72,11 @@ const visit: MemoryEvent = {
   title: "Doctor visit",
   meta: "",
   taskState: "done",
-  payload: {},
+  payload: {
+    visitId: "v1",
+    doctorName: "Dr. Mehta",
+    visitType: "consultation",
+  },
 };
 
 const all: MemoryEvent[] = [checkinA, checkinB, flare, intake, visit];
