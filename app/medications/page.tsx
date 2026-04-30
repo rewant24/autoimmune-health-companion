@@ -33,19 +33,17 @@
  *       frequency: string,
  *       category: MedCategory,
  *       delivery: MedDelivery,
- *       clientRequestId: string,
- *     }) => Id<"medications">
+ *     }) => { id: string }
  *
  *   api.medications.updateMedication:
  *     mutation({
  *       userId: string,
  *       medicationId: Id<"medications">,
- *       patch: { name?, dose?, frequency?, category?, delivery? },
- *       clientRequestId: string,
- *     }) => Id<"medications">
+ *       name?, dose?, frequency?, category?, delivery?  (flat partials)
+ *     }) => { id: string }
  *
  *   api.medications.deactivateMedication:
- *     mutation({ userId, medicationId, clientRequestId }) => Id<"medications">
+ *     mutation({ userId, medicationId }) => { id, alreadyInactive }
  *
  *   api.dosageChanges.recordDosageChange:
  *     mutation({
@@ -96,12 +94,6 @@ function getOrCreateTestUserId(): string {
       : `u_${Math.random().toString(36).slice(2)}_${Date.now()}`
   window.localStorage.setItem(TEST_USER_KEY, fresh)
   return fresh
-}
-
-function newRequestId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `req_${Date.now()}_${Math.random().toString(36).slice(2)}`
 }
 
 // Shape we expect back from listActiveMedications. Mirrors the
@@ -209,14 +201,14 @@ export default function MedicationsPage(): React.JSX.Element {
       await createMedication({
         userId,
         ...values,
-        clientRequestId: newRequestId(),
       })
     } else {
+      // 4.A's updateMedication takes flat partial fields, not a `patch`
+      // sub-object. Reconciled at integrate; no idempotency on update.
       await updateMedication({
         userId,
         medicationId: editId,
-        patch: values,
-        clientRequestId: newRequestId(),
+        ...values,
       })
     }
     setSheetOpen(false)
@@ -228,7 +220,6 @@ export default function MedicationsPage(): React.JSX.Element {
     await deactivateMedication({
       userId,
       medicationId: deactivateId,
-      clientRequestId: newRequestId(),
     })
     setDeactivateId(null)
   }

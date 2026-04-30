@@ -50,12 +50,6 @@ function getOrCreateTestUserId(): string {
   return fresh
 }
 
-function newRequestId(): string {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `req_${Date.now()}_${Math.random().toString(36).slice(2)}`
-}
-
 const CATEGORY_LABELS: Record<MedCategory, string> = {
   'arthritis-focused': 'Arthritis-focused',
   immunosuppressant: 'Immunosuppressant',
@@ -150,7 +144,6 @@ export default function MedicationsSetupPage(): React.JSX.Element {
         frequency: values.frequency.trim(),
         category: values.category,
         delivery: values.delivery,
-        clientRequestId: newRequestId(),
       })
       setValues(EMPTY)
     } finally {
