@@ -15,6 +15,7 @@
  */
 
 import { Suspense, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
@@ -111,11 +112,48 @@ function JourneyMemoryInner(): React.JSX.Element {
   const isLoading = userId !== null && result === undefined
 
   return (
-    <MemoryTab
-      events={events}
-      initialFilter={initialFilter}
-      isLoading={isLoading}
-    />
+    <>
+      <MemoryTab
+        events={events}
+        initialFilter={initialFilter}
+        isLoading={isLoading}
+      />
+      {/*
+        Sprint F05 chunk 5.B — manual-capture entry points. Per
+        docs/features/05-doctor-visits.md US-5.B.3: "Memory affordance is a
+        single button at the bottom of the day view: '+ Log visit or blood
+        work'." Kept light: two stacked link buttons inside a max-w-2xl
+        container, sage-soft on the parent so they sit visually under the
+        day list rather than competing with the FilterTabs.
+      */}
+      <div
+        data-testid="memory-log-affordance"
+        className="mx-auto mt-4 flex w-full max-w-2xl flex-col gap-2 px-6 pb-8"
+      >
+        <Link
+          href="/visits/new"
+          data-testid="memory-log-visit-link"
+          className={
+            'inline-flex h-12 w-full items-center justify-center rounded-full ' +
+            'border border-[var(--rule)] bg-[var(--bg-card)] text-sm text-[var(--ink-muted)] ' +
+            'transition-colors hover:border-[var(--sage)] hover:text-[var(--ink)]'
+          }
+        >
+          + Log visit
+        </Link>
+        <Link
+          href="/blood-work/new"
+          data-testid="memory-log-blood-work-link"
+          className={
+            'inline-flex h-12 w-full items-center justify-center rounded-full ' +
+            'border border-[var(--rule)] bg-[var(--bg-card)] text-sm text-[var(--ink-muted)] ' +
+            'transition-colors hover:border-[var(--sage)] hover:text-[var(--ink)]'
+          }
+        >
+          + Log blood work
+        </Link>
+      </div>
+    </>
   )
 }
 
