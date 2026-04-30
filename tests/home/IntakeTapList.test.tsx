@@ -94,8 +94,16 @@ describe('<IntakeTapList />', () => {
   })
 
   it('renders a taken row with "Taken at HH:MM" subtext and a disabled button', () => {
-    // 2026-04-30T03:44:00Z → 09:14 IST
+    // Device-local time formatter (per F04 fix-pass — IST hardcoding
+    // dropped). Compute the expected wall-clock label from the same
+    // formatter the component uses so the assertion is timezone-stable
+    // across CI shells regardless of TZ.
     const takenAtMs = Date.parse('2026-04-30T03:44:00Z')
+    const expectedWallClock = new Date(takenAtMs).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
     queryResult = [
       {
         medication: { _id: 'med_1', name: 'Methotrexate', dose: '15mg' },
@@ -106,7 +114,7 @@ describe('<IntakeTapList />', () => {
     render(<IntakeTapList userIdOverride="u-1" dateOverride="2026-04-30" />)
     const row = screen.getByTestId('intake-row-med_1')
     expect(row.getAttribute('data-taken')).toBe('true')
-    expect(row.textContent).toContain('Taken at 09:14')
+    expect(row.textContent).toContain(`Taken at ${expectedWallClock}`)
     const btn = screen.getByTestId('intake-tap-med_1') as HTMLButtonElement
     expect(btn.disabled).toBe(true)
     expect(btn.getAttribute('aria-pressed')).toBe('true')

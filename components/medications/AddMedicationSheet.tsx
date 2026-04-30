@@ -76,6 +76,12 @@ export interface AddMedicationSheetProps {
    * Defaults to "add".
    */
   mode?: 'add' | 'edit'
+  /**
+   * Inline error rendered above the action row when the parent's
+   * `onSubmit` rejects. Sheet stays open so the user can retry without
+   * losing input.
+   */
+  errorMessage?: string | null
   onSubmit: (values: MedicationFormValues) => void | Promise<void>
   onCancel: () => void
 }
@@ -100,6 +106,7 @@ export function AddMedicationSheet({
   open,
   initial,
   mode = 'add',
+  errorMessage,
   onSubmit,
   onCancel,
 }: AddMedicationSheetProps): React.JSX.Element | null {
@@ -220,6 +227,17 @@ export function AddMedicationSheet({
             }
           />
         </div>
+
+        {errorMessage ? (
+          <p
+            data-testid="add-medication-error"
+            role="alert"
+            className="mt-4 type-body"
+            style={{ color: 'var(--terracotta)' }}
+          >
+            {errorMessage}
+          </p>
+        ) : null}
 
         <div className="mt-6 flex items-center justify-end gap-3">
           <button

@@ -60,14 +60,21 @@ function newRequestId(): string {
     : `req_${Date.now()}_${Math.random().toString(36).slice(2)}`
 }
 
-/** Format a UTC ms timestamp as HH:MM in IST (Asia/Kolkata). */
-function formatTimeIST(ts: number): string {
-  const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000
-  const istMs = ts + IST_OFFSET_MS
-  const d = new Date(istMs)
-  const hh = String(d.getUTCHours()).padStart(2, '0')
-  const mm = String(d.getUTCMinutes()).padStart(2, '0')
-  return `${hh}:${mm}`
+/**
+ * Format a UTC ms timestamp as HH:MM in the user's device-local timezone.
+ *
+ * The earlier implementation hardcoded IST (UTC+05:30). That was wrong for
+ * any user not in India, and inconsistent with the rest of the app — every
+ * other surface (check-in date boundary, doses query) uses device-local
+ * time per ADR-027 / locked decision Q3. Using `toLocaleTimeString` keeps
+ * the rendered "Taken at HH:MM" in the same timezone the user just tapped.
+ */
+function formatTimeLocal(ts: number): string {
+  return new Date(ts).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
 }
 
 interface AdherenceRow {
@@ -88,11 +95,35 @@ export function IntakeTapList({
   dateOverride,
 }: IntakeTapListProps = {}): React.JSX.Element | null {
   const [userId, setUserId] = useState<string | null>(userIdOverride ?? null)
-  const [date] = useState<string>(() => dateOverride ?? todayIsoDate())
+  // Device-local date string. When the page is left open across local
+  // midnight, a 60s tick re-derives the date and only updates state on
+  // change so the Convex `getTodayAdherence` subscription rebinds to the
+  // new day. With `dateOverride` set (tests), the tick is suppressed so
+  // the pinned date is stable.
+  const [date, setDate] = useState<string>(() => dateOverride ?? todayIsoDate())
+  useEffect(() => {
+    if (dateOverride !== undefined) return
+    const id = setInterval(() => {
+      const next = todayIsoDate()
+      setDate((prev) => (prev === next ? prev : next))
+    }, 60_000)
+    return () => clearInterval(id)
+  }, [dateOverride])
   // Optimistic overlay: medicationId → "tapped + at-ts" until the Convex
   // subscription catches up. Rolled back on mutation error.
   const [optimistic, setOptimistic] = useState<Record<string, number>>({})
   const [pending, setPending] = useState<Set<string>>(new Set())
+  // Inline confirmation toast — surfaces on the first successful tap of
+  // the day so the user has feedback the intake landed. Resets when the
+  // device-local date rolls over so the next morning's first tap reads
+  // "Logged." again.
+  const [loggedToast, setLoggedToast] = useState<boolean>(false)
+  const [toastShownForDate, setToastShownForDate] = useState<string | null>(null)
+  useEffect(() => {
+    if (!loggedToast) return
+    const id = setTimeout(() => setLoggedToast(false), 2000)
+    return () => clearTimeout(id)
+  }, [loggedToast])
 
   useEffect(() => {
     if (userIdOverride !== undefined) {
@@ -163,6 +194,14 @@ export function IntakeTapList({
           source: 'home-tap',
           clientRequestId: newRequestId(),
         })
+        // First successful tap of the day per check-in date → flash the
+        // "Logged." confirmation. Subsequent taps within the same date
+        // are silent (the row's "Taken at HH:MM" subtext already gives
+        // per-row feedback).
+        if (toastShownForDate !== date) {
+          setToastShownForDate(date)
+          setLoggedToast(true)
+        }
       } catch {
         // Rollback the optimistic flag — Convex subscription will reflect
         // truth once it reconciles, but the rollback gives instant feedback.
@@ -196,7 +235,20 @@ export function IntakeTapList({
         background: 'var(--bg-card)',
       }}
     >
-      <p className="type-label">Today&rsquo;s doses</p>
+      <div className="flex items-baseline justify-between">
+        <p className="type-label">Today&rsquo;s doses</p>
+        {loggedToast ? (
+          <span
+            data-testid="intake-tap-list-logged"
+            role="status"
+            aria-live="polite"
+            className="type-label"
+            style={{ color: 'var(--sage-deep)' }}
+          >
+            Logged.
+          </span>
+        ) : null}
+      </div>
       <ul className="mt-3 divide-y" style={{ borderColor: 'var(--rule)' }}>
         {rows.map((row) => {
           const taken = row.takenToday
@@ -228,7 +280,7 @@ export function IntakeTapList({
                 >
                   {row.medication.dose}
                   {taken && tappedAt
-                    ? ` · Taken at ${formatTimeIST(tappedAt)}`
+                    ? ` · Taken at ${formatTimeLocal(tappedAt)}`
                     : ''}
                 </p>
               </div>

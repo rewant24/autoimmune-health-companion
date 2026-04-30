@@ -42,14 +42,21 @@ export function MedicationConfirmCard({
   testId = 'medication-confirm-card',
 }: MedicationConfirmCardProps): React.JSX.Element {
   const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState<'saved' | 'dismissed' | null>(null)
+  const [done, setDone] = useState<'saved' | 'dismissed' | 'error' | null>(null)
 
   const handleConfirm = async (): Promise<void> => {
-    if (busy || done) return
+    if (busy) return
+    if (done === 'saved' || done === 'dismissed') return
     setBusy(true)
     try {
       await onConfirm()
       setDone('saved')
+    } catch {
+      // Surface a retry affordance instead of stranding the card mid-save.
+      // The dose write is idempotent on the server (see ADR — F04 chunk 4.A
+      // recordDosageChange). Re-tapping fires the same mutation; the
+      // server's same-dose guard turns a duplicate save into a no-op.
+      setDone('error')
     } finally {
       setBusy(false)
     }
@@ -83,6 +90,65 @@ export function MedicationConfirmCard({
   if (done === 'dismissed') {
     // Silent — render nothing per US-4.C.3 ("if user dismisses: no toast").
     return <></>
+  }
+
+  if (done === 'error') {
+    return (
+      <section
+        data-testid={testId}
+        data-state="error"
+        className="mx-6 mt-4 rounded-2xl border p-6"
+        style={{
+          borderColor: 'var(--rule)',
+          background: 'var(--bg-card)',
+        }}
+      >
+        <p className="type-label">Dose change for {medicationName}</p>
+        <p className="type-body mt-2" style={{ color: 'var(--ink-muted)' }}>
+          Couldn&rsquo;t save — tap to retry.
+        </p>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            data-testid={`${testId}-retry`}
+            onClick={() => {
+              setDone(null)
+              void handleConfirm()
+            }}
+            className={
+              'inline-flex min-h-11 items-center justify-center rounded-full ' +
+              'px-5 text-[15px] font-medium transition-colors ' +
+              'focus-visible:outline-none focus-visible:ring-2 ' +
+              'focus-visible:ring-offset-2'
+            }
+            style={{
+              background: 'var(--sage-deep)',
+              color: 'var(--bg-elevated)',
+            }}
+          >
+            Retry
+          </button>
+          <button
+            type="button"
+            data-testid={`${testId}-dismiss`}
+            onClick={handleDismiss}
+            className={
+              'inline-flex min-h-11 items-center justify-center rounded-full ' +
+              'border px-5 text-[15px] font-medium transition-colors ' +
+              'focus-visible:outline-none focus-visible:ring-2 ' +
+              'focus-visible:ring-offset-2'
+            }
+            style={{
+              borderColor: 'var(--rule)',
+              color: 'var(--ink)',
+              background: 'transparent',
+            }}
+          >
+            Not now
+          </button>
+        </div>
+      </section>
+    )
   }
 
   return (

@@ -173,6 +173,12 @@ export default function MedicationsPage(): React.JSX.Element {
   const [editId, setEditId] = useState<string | null>(null)
   const [doseChangeId, setDoseChangeId] = useState<string | null>(null)
   const [deactivateId, setDeactivateId] = useState<string | null>(null)
+  // Mutation error state — surfaces inline above the action surface so the
+  // user gets a deterministic recovery path instead of a silently swallowed
+  // failure. Each handler resets its own slot on entry; success paths clear.
+  const [sheetError, setSheetError] = useState<string | null>(null)
+  const [doseChangeError, setDoseChangeError] = useState<string | null>(null)
+  const [deactivateError, setDeactivateError] = useState<string | null>(null)
 
   const editTarget =
     editId !== null ? meds?.find((m) => m._id === editId) ?? null : null
@@ -197,31 +203,48 @@ export default function MedicationsPage(): React.JSX.Element {
 
   async function handleSheetSubmit(values: MedicationFormValues): Promise<void> {
     if (userId === null) return
-    if (editId === null) {
-      await createMedication({
-        userId,
-        ...values,
-      })
-    } else {
-      // 4.A's updateMedication takes flat partial fields, not a `patch`
-      // sub-object. Reconciled at integrate; no idempotency on update.
-      await updateMedication({
-        userId,
-        medicationId: editId,
-        ...values,
-      })
+    setSheetError(null)
+    try {
+      if (editId === null) {
+        await createMedication({
+          userId,
+          ...values,
+        })
+      } else {
+        // 4.A's updateMedication takes flat partial fields, not a `patch`
+        // sub-object. Reconciled at integrate; no idempotency on update.
+        await updateMedication({
+          userId,
+          medicationId: editId,
+          ...values,
+        })
+      }
+      setSheetOpen(false)
+      setEditId(null)
+    } catch (err) {
+      setSheetError(
+        err instanceof Error ? err.message : 'Couldn\u2019t save — try again.',
+      )
+      // Modal stays open so the user can retry without losing their input.
     }
-    setSheetOpen(false)
-    setEditId(null)
   }
 
   async function handleDeactivate(): Promise<void> {
     if (userId === null || deactivateId === null) return
-    await deactivateMedication({
-      userId,
-      medicationId: deactivateId,
-    })
-    setDeactivateId(null)
+    setDeactivateError(null)
+    try {
+      await deactivateMedication({
+        userId,
+        medicationId: deactivateId,
+      })
+      setDeactivateId(null)
+    } catch (err) {
+      setDeactivateError(
+        err instanceof Error
+          ? err.message
+          : 'Couldn\u2019t stop tracking — try again.',
+      )
+    }
   }
 
   async function handleDosageChange(values: {
@@ -229,16 +252,25 @@ export default function MedicationsPage(): React.JSX.Element {
     reason: string | null
   }): Promise<void> {
     if (userId === null || doseChangeTarget === null) return
-    await recordDosageChange({
-      userId,
-      medicationId: doseChangeTarget._id,
-      oldDose: doseChangeTarget.dose,
-      newDose: values.newDose,
-      changedAt: Date.now(),
-      ...(values.reason !== null ? { reason: values.reason } : {}),
-      source: 'module',
-    })
-    setDoseChangeId(null)
+    setDoseChangeError(null)
+    try {
+      await recordDosageChange({
+        userId,
+        medicationId: doseChangeTarget._id,
+        oldDose: doseChangeTarget.dose,
+        newDose: values.newDose,
+        changedAt: Date.now(),
+        ...(values.reason !== null ? { reason: values.reason } : {}),
+        source: 'module',
+      })
+      setDoseChangeId(null)
+    } catch (err) {
+      setDoseChangeError(
+        err instanceof Error
+          ? err.message
+          : 'Couldn\u2019t record dose change — try again.',
+      )
+    }
   }
 
   return (
@@ -321,10 +353,12 @@ export default function MedicationsPage(): React.JSX.Element {
               }
             : null
         }
+        errorMessage={sheetError}
         onSubmit={handleSheetSubmit}
         onCancel={() => {
           setSheetOpen(false)
           setEditId(null)
+          setSheetError(null)
         }}
       />
 
@@ -333,16 +367,24 @@ export default function MedicationsPage(): React.JSX.Element {
           open={true}
           medicationName={doseChangeTarget.name}
           currentDose={doseChangeTarget.dose}
+          errorMessage={doseChangeError}
           onSubmit={handleDosageChange}
-          onCancel={() => setDoseChangeId(null)}
+          onCancel={() => {
+            setDoseChangeId(null)
+            setDoseChangeError(null)
+          }}
         />
       ) : null}
 
       {deactivateTarget !== null ? (
         <DeactivateConfirm
           name={deactivateTarget.name}
+          errorMessage={deactivateError}
           onConfirm={handleDeactivate}
-          onCancel={() => setDeactivateId(null)}
+          onCancel={() => {
+            setDeactivateId(null)
+            setDeactivateError(null)
+          }}
         />
       ) : null}
 
@@ -353,12 +395,14 @@ export default function MedicationsPage(): React.JSX.Element {
 
 interface DeactivateConfirmProps {
   name: string
+  errorMessage?: string | null
   onConfirm: () => void
   onCancel: () => void
 }
 
 function DeactivateConfirm({
   name,
+  errorMessage,
   onConfirm,
   onCancel,
 }: DeactivateConfirmProps): React.JSX.Element {
@@ -394,6 +438,16 @@ function DeactivateConfirm({
         <p className="mt-2 type-body" style={{ color: 'var(--ink-muted)' }}>
           Your past intake history stays.
         </p>
+        {errorMessage ? (
+          <p
+            data-testid="deactivate-confirm-error"
+            role="alert"
+            className="mt-3 type-body"
+            style={{ color: 'var(--terracotta)' }}
+          >
+            {errorMessage}
+          </p>
+        ) : null}
         <div className="mt-6 flex items-center justify-end gap-3">
           <button
             type="button"

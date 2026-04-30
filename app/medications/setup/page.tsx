@@ -89,6 +89,7 @@ export default function MedicationsSetupPage(): React.JSX.Element {
   const [userId, setUserId] = useState<string | null>(null)
   const [values, setValues] = useState<MedicationFormValues>(EMPTY)
   const [submitting, setSubmitting] = useState<boolean>(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const formId = useId()
 
   useEffect(() => {
@@ -136,6 +137,7 @@ export default function MedicationsSetupPage(): React.JSX.Element {
     e.preventDefault()
     if (!canSubmit || userId === null) return
     setSubmitting(true)
+    setSubmitError(null)
     try {
       await createMedication({
         userId,
@@ -146,6 +148,14 @@ export default function MedicationsSetupPage(): React.JSX.Element {
         delivery: values.delivery,
       })
       setValues(EMPTY)
+    } catch (err) {
+      // Keep the form values populated so the user can retry without
+      // re-typing. Inline error sits above the submit row.
+      setSubmitError(
+        err instanceof Error
+          ? err.message
+          : 'Couldn\u2019t save medication \u2014 try again.',
+      )
     } finally {
       setSubmitting(false)
     }
@@ -288,6 +298,17 @@ export default function MedicationsSetupPage(): React.JSX.Element {
               }
             />
           </div>
+
+          {submitError ? (
+            <p
+              data-testid="medications-setup-error"
+              role="alert"
+              className="mt-4 type-body"
+              style={{ color: 'var(--terracotta)' }}
+            >
+              {submitError}
+            </p>
+          ) : null}
 
           <div className="mt-6 flex items-center justify-end gap-3">
             <button

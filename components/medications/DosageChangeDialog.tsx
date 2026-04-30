@@ -28,6 +28,11 @@ export interface DosageChangeDialogProps {
   open: boolean
   medicationName: string
   currentDose: string
+  /**
+   * Inline error rendered above the action row when the parent's
+   * `onSubmit` rejects. Dialog stays open so the user can retry.
+   */
+  errorMessage?: string | null
   onSubmit: (values: DosageChangeValues) => void | Promise<void>
   onCancel: () => void
 }
@@ -36,6 +41,7 @@ export function DosageChangeDialog({
   open,
   medicationName,
   currentDose,
+  errorMessage,
   onSubmit,
   onCancel,
 }: DosageChangeDialogProps): React.JSX.Element | null {
@@ -175,6 +181,17 @@ export function DosageChangeDialog({
             />
           </label>
         </div>
+
+        {errorMessage ? (
+          <p
+            data-testid="dosage-change-error"
+            role="alert"
+            className="mt-4 type-body"
+            style={{ color: 'var(--terracotta)' }}
+          >
+            {errorMessage}
+          </p>
+        ) : null}
 
         <div className="mt-6 flex items-center justify-end gap-3">
           <button

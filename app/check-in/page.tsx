@@ -90,6 +90,16 @@ import { coverage } from '@/lib/checkin/coverage'
 import { detectMilestone } from '@/lib/checkin/milestone'
 import { buildAppendPayload } from '@/lib/checkin/same-day-reentry'
 import { drain, enqueue, type SaveLaterPayload } from '@/lib/checkin/save-later'
+import {
+  EMPTY_EXTRACTION,
+  extractMedications,
+  resolveDosageChanges,
+  resolveLoggedMedications,
+  type ExtractedMedicationResult,
+  type RegimenMedication,
+  type ResolvedDosageChange,
+} from '@/lib/checkin/medication-extract'
+import { MedicationConfirmCard } from '@/components/check-in/MedicationConfirmCard'
 import type { Id } from '@/convex/_generated/dataModel'
 import type { CheckinRow } from '@/convex/checkIns'
 import type {
@@ -350,6 +360,67 @@ export default function CheckinPage({
 
   const createCheckin = useMutation(api.checkIns.createCheckin)
 
+  // F04 chunk 4.C — voice medication extraction wiring.
+  //
+  // Pulls the user's active regimen so the medication extractor can ground
+  // its name-matching to real entries (no phantom dose-change cards). The
+  // mutation references go through `(api as any)` because the Convex
+  // generated types for the F04 modules don't ship until `npx convex dev`
+  // regenerates against this branch — the orchestrator handles deploy
+  // separately. Same pattern as `app/medications/page.tsx`.
+  const regimenQuery = useQuery(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (api as any)?.medications?.listActiveMedications,
+    userId !== null ? { userId } : 'skip',
+  ) as
+    | Array<{
+        _id: string
+        name: string
+        dose: string
+      }>
+    | undefined
+  const logIntakeRaw = useMutation(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (api as any)?.medications?.logIntake,
+  ) as unknown as (args: {
+    userId: string
+    medicationId: string
+    date: string
+    takenAt: number
+    source: 'check-in'
+    clientRequestId: string
+  }) => Promise<unknown>
+  const recordDosageChange = useMutation(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (api as any)?.dosageChanges?.recordDosageChange,
+  ) as unknown as (args: {
+    userId: string
+    medicationId: string
+    oldDose: string
+    newDose: string
+    changedAt: number
+    reason?: string
+    source: 'check-in'
+    checkInId?: string
+  }) => Promise<unknown>
+
+  // Resolved dosage-change cards we render alongside ConfirmSummary. One
+  // entry per detected mention; user confirms or dismisses each card
+  // independently. Cards do not block save (acceptance criterion: voice
+  // extraction is non-blocking).
+  const [pendingDoseChanges, setPendingDoseChanges] = useState<
+    ResolvedDosageChange[]
+  >([])
+  // Once we've kicked the medication extractor for the current
+  // confirming-state transcript, hold the inbound run id. The effect
+  // below increments-and-captures so a superseded run (RESET → fresh
+  // transcript) ignores stale results.
+  const medicationExtractionRunIdRef = useRef(0)
+  // Track whether we've already kicked the medication extractor for the
+  // current `confirming` snapshot. Resetting on `idle` lets the next
+  // confirming-state entry re-extract.
+  const medicationExtractedTranscriptRef = useRef<string | null>(null)
+
   // Cache the confirming snapshot so the page can keep rendering
   // ConfirmSummary during `saving` and on `error(save-failed)`.
   const confirmingRef = useRef<ConfirmingSnapshot | null>(null)
@@ -527,8 +598,121 @@ export default function CheckinPage({
     if (state.kind === 'idle') {
       confirmingRef.current = null
       lastPayloadRef.current = null
+      // Reset medication-extraction memo so the next check-in re-extracts.
+      medicationExtractedTranscriptRef.current = null
+      setPendingDoseChanges([])
     }
   }, [state.kind])
+
+  // 2b. Medication extraction (F04 chunk 4.C).
+  //
+  // Fires once per `confirming`-state entry when:
+  //   - we have a non-empty transcript (taps-only mode skips entirely),
+  //   - the user has at least one active medication (empty regimen → no-op),
+  //   - the regimen query has resolved (undefined ≠ empty array),
+  //   - we haven't already extracted for this transcript text.
+  //
+  // Three downstream side-effects:
+  //   (a) `simpleAdherence.confirmed === true` → `logIntake` for every
+  //       regimen med NOT in `skippedMedications`. Logs run in parallel;
+  //       individual rejects are swallowed (the home-tap path reconciles).
+  //   (b) `dosageChanges` → resolved against the regimen, stored in
+  //       `pendingDoseChanges` so `MedicationConfirmCard` renders them
+  //       above ConfirmSummary. User confirms each independently.
+  //   (c) Errors (network / 429 / malformed) → silent fallback to empty
+  //       result. Save flow is unaffected (acceptance: non-blocking).
+  useEffect(() => {
+    if (state.kind !== 'confirming') return
+    if (userId === null || todayIso === null) return
+    const transcriptText = state.transcript.text
+    if (transcriptText.trim().length === 0) return
+    if (regimenQuery === undefined) return
+    if (regimenQuery.length === 0) return
+    if (medicationExtractedTranscriptRef.current === transcriptText) return
+    medicationExtractedTranscriptRef.current = transcriptText
+    medicationExtractionRunIdRef.current += 1
+    const runId = medicationExtractionRunIdRef.current
+    const regimen: RegimenMedication[] = regimenQuery.map((m) => ({
+      _id: m._id,
+      name: m.name,
+      dose: m.dose,
+    }))
+    void (async () => {
+      let result: ExtractedMedicationResult = EMPTY_EXTRACTION
+      try {
+        result = await extractMedications({
+          transcript: transcriptText,
+          userId,
+          date: todayIso,
+          regimen,
+        })
+      } catch {
+        // Degrade silently — the medication path is opportunistic. The
+        // user's manual /medications affordances are unaffected.
+        return
+      }
+      if (runId !== medicationExtractionRunIdRef.current) return
+
+      // (a) Auto-log intakes from a blanket-affirmation transcript.
+      if (result.simpleAdherence?.confirmed === true) {
+        const toLog = resolveLoggedMedications(result, regimen)
+        const takenAt = Date.now()
+        for (const med of toLog) {
+          void logIntakeRaw({
+            userId,
+            medicationId: med._id,
+            date: todayIso,
+            takenAt,
+            source: 'check-in',
+            clientRequestId: newRequestId(),
+          }).catch(() => {
+            // Cap-error / network failure — leave the regimen unaffected
+            // and let the home-tap path reconcile.
+          })
+        }
+      }
+
+      // (b) Surface dose-change confirm cards.
+      const cards = resolveDosageChanges(result, regimen)
+      if (cards.length > 0) {
+        setPendingDoseChanges(cards)
+      }
+    })()
+  }, [
+    state,
+    userId,
+    todayIso,
+    regimenQuery,
+    logIntakeRaw,
+  ])
+
+  /**
+   * Confirm a dose-change card. Records the change against Convex and
+   * removes the card from the pending list. `checkInId` is intentionally
+   * undefined — the check-in row may not yet be saved when the user
+   * confirms (cards are non-blocking), and the Convex validator accepts
+   * `v.optional(v.id("checkIns"))` so the linkage is best-effort.
+   */
+  async function handleDosageConfirm(
+    card: ResolvedDosageChange,
+  ): Promise<void> {
+    if (userId === null) throw new Error('userId not yet resolved')
+    await recordDosageChange({
+      userId,
+      medicationId: card.medication._id,
+      oldDose: card.medication.dose,
+      newDose: card.newDose,
+      changedAt: Date.now(),
+      ...(card.reason !== undefined ? { reason: card.reason } : {}),
+      source: 'check-in',
+    })
+  }
+
+  function handleDosageDismiss(card: ResolvedDosageChange): void {
+    setPendingDoseChanges((prev) =>
+      prev.filter((c) => c.medication._id !== card.medication._id),
+    )
+  }
 
   // 3. Kick extraction when the machine enters `processing`. ADR-005:
   //    coverage().missing.length === 0 → ConfirmSummary; else → Stage 2.
@@ -880,6 +1064,17 @@ export default function CheckinPage({
     const snapshot = confirmingRef.current
     return (
       <ScreenShell>
+        {pendingDoseChanges.map((card) => (
+          <MedicationConfirmCard
+            key={card.medication._id}
+            medicationName={card.medication.name}
+            oldDose={card.medication.dose}
+            newDose={card.newDose}
+            reason={card.reason}
+            onConfirm={() => handleDosageConfirm(card)}
+            onDismiss={() => handleDosageDismiss(card)}
+          />
+        ))}
         <ConfirmSummary
           metrics={snapshot.metrics}
           declined={snapshot.declined}
@@ -999,6 +1194,17 @@ export default function CheckinPage({
     }
     return (
       <ScreenShell>
+        {pendingDoseChanges.map((card) => (
+          <MedicationConfirmCard
+            key={card.medication._id}
+            medicationName={card.medication.name}
+            oldDose={card.medication.dose}
+            newDose={card.newDose}
+            reason={card.reason}
+            onConfirm={() => handleDosageConfirm(card)}
+            onDismiss={() => handleDosageDismiss(card)}
+          />
+        ))}
         <ConfirmSummary
           metrics={snapshot.metrics}
           declined={snapshot.declined}
