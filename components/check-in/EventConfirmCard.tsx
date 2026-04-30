@@ -12,20 +12,42 @@
  *
  * Stack order in the summary: dosage-change cards (F04 4.C) first, then
  * event cards (this) — enforced by the page composing them in order.
+ *
+ * F05 fix-pass: when an extracted blood-work marker has `unit: null` (LLM
+ * didn't catch the unit), render a small input next to the value so the
+ * user can fill it before Save. Save is disabled until every null-unit
+ * marker has a non-empty unit string. The completed marker map is passed
+ * to `onConfirm` so the parent can persist with the corrected units.
  */
 
+import { useMemo, useState } from 'react'
 import type {
   ExtractedVisit,
   ExtractedBloodWork,
+  ExtractedBloodWorkMarker,
 } from '@/lib/checkin/event-extract'
 
 export type EventConfirmKind = 'visit' | 'blood-work'
+
+/**
+ * A marker with the user-confirmed unit filled in. Identical shape to the
+ * extracted marker except `unit` is always a non-empty string.
+ */
+export interface ConfirmedBloodWorkMarker {
+  name: string
+  value: number
+  unit: string
+}
 
 export interface EventConfirmCardProps {
   kind: EventConfirmKind
   visit?: ExtractedVisit
   bloodWork?: ExtractedBloodWork
-  onConfirm: () => void
+  /**
+   * Save callback. For blood-work cards the parent receives the marker
+   * list with any user-supplied units patched in.
+   */
+  onConfirm: (patch?: { markers: ConfirmedBloodWorkMarker[] }) => void
   onDecline: () => void
   /** Disable both buttons while the parent is awaiting the mutation. */
   disabled?: boolean
@@ -62,6 +84,28 @@ export function EventConfirmCard(
 ): React.JSX.Element | null {
   const { kind, visit, bloodWork, onConfirm, onDecline, disabled } = props
 
+  // Track user-typed units for any marker whose extracted unit was null.
+  // Keyed by marker index in the extracted list (stable for the lifetime of
+  // the card). Hooks must run unconditionally — declared before the early
+  // returns below.
+  const [unitOverrides, setUnitOverrides] = useState<Record<number, string>>({})
+
+  const markers: ExtractedBloodWorkMarker[] =
+    kind === 'blood-work' && bloodWork ? bloodWork.markers : []
+
+  // Indexes of markers whose unit needs the user to fill it in.
+  const nullUnitIndexes = useMemo(() => {
+    return markers
+      .map((m, i) => (m.unit === null ? i : -1))
+      .filter((i) => i >= 0)
+  }, [markers])
+
+  const allUnitsFilled = useMemo(() => {
+    return nullUnitIndexes.every(
+      (i) => (unitOverrides[i] ?? '').trim().length > 0,
+    )
+  }, [nullUnitIndexes, unitOverrides])
+
   if (kind === 'visit' && !visit) return null
   if (kind === 'blood-work' && !bloodWork) return null
 
@@ -72,6 +116,28 @@ export function EventConfirmCard(
     kind === 'visit'
       ? `Doctor visit on ${dateLabel}?`
       : `Blood work on ${dateLabel}?`
+
+  const handleSave = () => {
+    if (kind === 'blood-work') {
+      // Build the confirmed marker list — substitute the user-typed unit for
+      // any marker whose extracted unit was null. If the LLM had a unit, we
+      // trust it as-is.
+      const confirmed: ConfirmedBloodWorkMarker[] = markers.map((m, i) => ({
+        name: m.name,
+        value: m.value,
+        unit:
+          m.unit !== null
+            ? m.unit
+            : (unitOverrides[i] ?? '').trim(),
+      }))
+      onConfirm({ markers: confirmed })
+      return
+    }
+    onConfirm()
+  }
+
+  const saveDisabled =
+    disabled === true || (kind === 'blood-work' && !allUnitsFilled)
 
   return (
     <section
@@ -94,12 +160,39 @@ export function EventConfirmCard(
       ) : (
         <ul
           data-testid="event-confirm-blood-markers"
-          className="flex flex-col gap-1 text-sm text-zinc-700 dark:text-zinc-200"
+          className="flex flex-col gap-2 text-sm text-zinc-700 dark:text-zinc-200"
         >
-          {bloodWork!.markers.map((m, i) => (
-            <li key={`${m.name}-${i}`}>
-              I heard: {m.name} {m.value}
-              {m.unit ? ` ${m.unit}` : ''}
+          {markers.map((m, i) => (
+            <li
+              key={`${m.name}-${i}`}
+              className="flex flex-wrap items-center gap-2"
+            >
+              <span>
+                I heard: {m.name} {m.value}
+                {m.unit !== null ? ` ${m.unit}` : ''}
+              </span>
+              {m.unit === null && (
+                <label className="flex items-center gap-1 text-xs">
+                  <span className="sr-only">Unit for {m.name}</span>
+                  <input
+                    type="text"
+                    value={unitOverrides[i] ?? ''}
+                    onChange={(e) =>
+                      setUnitOverrides((prev) => ({
+                        ...prev,
+                        [i]: e.target.value,
+                      }))
+                    }
+                    placeholder="unit (e.g. mg/L)"
+                    data-testid={`event-confirm-unit-input-${i}`}
+                    className={[
+                      'h-8 w-28 rounded-md border px-2 text-xs',
+                      'border-zinc-300 bg-white text-zinc-900',
+                      'dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100',
+                    ].join(' ')}
+                  />
+                </label>
+              )}
             </li>
           ))}
         </ul>
@@ -122,8 +215,9 @@ export function EventConfirmCard(
         </button>
         <button
           type="button"
-          onClick={onConfirm}
-          disabled={disabled}
+          onClick={handleSave}
+          disabled={saveDisabled}
+          data-testid={`event-confirm-save-${kind}`}
           className={[
             'inline-flex min-h-9 items-center justify-center rounded-full',
             'bg-teal-600 px-4 text-sm font-medium text-white shadow-sm',

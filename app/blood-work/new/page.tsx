@@ -11,7 +11,7 @@
  *   - `updateBloodWork({ id, ...patch })`
  */
 
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery } from 'convex/react'
@@ -48,6 +48,13 @@ function getOrCreateTestUserId(): string {
   return fresh
 }
 
+function newRequestId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `req_${Math.random().toString(36).slice(2)}_${Date.now()}`
+}
+
 function NewBloodWorkInner(): React.JSX.Element {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -79,7 +86,11 @@ function NewBloodWorkInner(): React.JSX.Element {
   const updateBloodWork = useMutation(apiAny.bloodWork?.updateBloodWork)
 
   const isEdit = editId !== null
-  const editLoading = isEdit && (listQuery === undefined || editingRow === null)
+  // Fix-pass: distinguish "still loading" from "row not found".
+  const editLoading = isEdit && listQuery === undefined
+  const editNotFound = isEdit && listQuery !== undefined && editingRow === null
+
+  const requestIdRef = useRef<string | null>(null)
 
   const initial: BloodWorkFormInitial | undefined = editingRow
     ? {
@@ -106,15 +117,18 @@ function NewBloodWorkInner(): React.JSX.Element {
         })
       } else {
         if (!createBloodWork) throw new Error('createBloodWork unavailable')
-        // 5.A surface: createBloodWork takes no clientRequestId (no
-        // idempotency token in the schema). Manual-form path is gated by
-        // the user submit button.
+        // F05 fix-pass: pass clientRequestId so server-side idempotency
+        // collapses retries to a single row.
+        if (requestIdRef.current === null) {
+          requestIdRef.current = newRequestId()
+        }
         await createBloodWork({
           userId,
           date: value.date,
           markers: value.markers,
           notes: value.notes,
           source: 'module',
+          clientRequestId: requestIdRef.current,
         })
       }
       router.push('/blood-work')
@@ -154,7 +168,31 @@ function NewBloodWorkInner(): React.JSX.Element {
           </p>
         )}
 
-        {!editLoading && (
+        {editNotFound && (
+          <section
+            data-testid="blood-work-edit-not-found"
+            className="mt-6 rounded-2xl border p-6 text-center"
+            style={{
+              borderColor: 'var(--rule)',
+              background: 'var(--bg-card)',
+            }}
+          >
+            <p className="text-base text-[var(--ink-muted)]">
+              We couldn&rsquo;t find that blood-work entry. It may have been deleted.
+            </p>
+            <Link
+              href="/blood-work"
+              className={
+                'mt-4 inline-flex h-12 items-center justify-center rounded-full ' +
+                'bg-[var(--sage-deep)] px-6 text-sm font-medium text-[var(--bg-elevated)]'
+              }
+            >
+              Back to blood work
+            </Link>
+          </section>
+        )}
+
+        {!editLoading && !editNotFound && (
           <div className="mt-6">
             <BloodWorkForm
               initial={initial}

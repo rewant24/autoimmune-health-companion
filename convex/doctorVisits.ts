@@ -55,6 +55,8 @@ export type VisitRow = {
   checkInId?: string;
   createdAt: number;
   deletedAt?: number;
+  /** F05 fix-pass: idempotency token, mirrors `checkIns.clientRequestId`. */
+  clientRequestId: string;
 };
 
 export type CreateVisitArgs = {
@@ -66,6 +68,8 @@ export type CreateVisitArgs = {
   notes?: string;
   source: VisitRow["source"];
   checkInId?: string;
+  /** F05 fix-pass: idempotency token; required at the API surface. */
+  clientRequestId: string;
 };
 
 export type UpdateVisitArgs = {
@@ -102,13 +106,16 @@ export type GetVisitsByDateArgs = {
 // -- Mock-friendly ctx shape -------------------------------------------------
 
 type IndexBuilder = {
-  eq: (field: "userId" | "date", value: string) => IndexBuilder;
+  eq: (
+    field: "userId" | "date" | "clientRequestId",
+    value: string,
+  ) => IndexBuilder;
 };
 
 type DbReader = {
   query: (table: "doctorVisits") => {
     withIndex: (
-      name: "by_user_date",
+      name: "by_user_date" | "by_user_request",
       cb: (q: IndexBuilder) => IndexBuilder,
     ) => {
       collect: () => Promise<VisitRow[]>;
@@ -163,6 +170,20 @@ export async function createVisitHandler(
     });
   }
 
+  // F05 fix-pass: idempotency. Mirrors `convex/checkIns.ts`. A retry with
+  // the same (userId, clientRequestId) returns the existing row instead of
+  // inserting a duplicate.
+  const existing = await ctx.db
+    .query("doctorVisits")
+    .withIndex("by_user_request", (q) =>
+      q.eq("userId", args.userId).eq("clientRequestId", args.clientRequestId),
+    )
+    .collect();
+  const idempotentMatch = existing.find((r) => r.deletedAt === undefined);
+  if (idempotentMatch !== undefined) {
+    return { id: String(idempotentMatch._id) };
+  }
+
   const id = await ctx.db.insert("doctorVisits", {
     userId: args.userId,
     date: args.date,
@@ -173,6 +194,7 @@ export async function createVisitHandler(
     source: args.source,
     checkInId: args.checkInId,
     createdAt: now(),
+    clientRequestId: args.clientRequestId,
   });
 
   return { id: String(id) };
@@ -328,6 +350,7 @@ export const createVisit = mutation({
     notes: v.optional(v.string()),
     source: sourceValidator,
     checkInId: v.optional(v.id("checkIns")),
+    clientRequestId: v.string(),
   },
   returns: v.object({ id: v.string() }),
   handler: async (ctx, args) => {

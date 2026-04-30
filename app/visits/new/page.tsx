@@ -18,7 +18,7 @@
  *   - `updateVisit({ id, ...patch })`
  */
 
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery } from 'convex/react'
@@ -56,6 +56,19 @@ function getOrCreateTestUserId(): string {
   return fresh
 }
 
+/**
+ * Fresh idempotency token for a single create attempt. Re-rolled per submit
+ * so a user who creates → returns to the form → creates again gets distinct
+ * rows. Identical retries (network blip, double-click) within a single
+ * submit reuse the same token via the closed-over ref.
+ */
+function newRequestId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `req_${Math.random().toString(36).slice(2)}_${Date.now()}`
+}
+
 function NewVisitInner(): React.JSX.Element {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -90,7 +103,15 @@ function NewVisitInner(): React.JSX.Element {
   const updateVisit = useMutation(apiAny.doctorVisits?.updateVisit)
 
   const isEdit = editId !== null
-  const editLoading = isEdit && (visitsQuery === undefined || editingRow === null)
+  // Fix-pass: distinguish "still loading" from "row not found". editLoading
+  // is true ONLY while the query is in flight; once it resolves and the row
+  // is missing, we render an explicit empty state instead of the spinner.
+  const editLoading = isEdit && visitsQuery === undefined
+  const editNotFound = isEdit && visitsQuery !== undefined && editingRow === null
+
+  // Stable per-submit idempotency token. Reset to a fresh token on submit
+  // start; if the user navigates back and submits again we get a new row.
+  const requestIdRef = useRef<string | null>(null)
 
   const initial: Partial<VisitFormValue> | undefined = editingRow
     ? {
@@ -127,9 +148,12 @@ function NewVisitInner(): React.JSX.Element {
         })
       } else {
         if (!createVisit) throw new Error('createVisit unavailable')
-        // 5.A surface: createVisit takes no clientRequestId (no idempotency
-        // token in the schema). Idempotency on the manual-form path is
-        // governed by the user's submit button + redirect.
+        // F05 fix-pass: pass a stable clientRequestId so retries collapse on
+        // the server. Token is rolled on each submit attempt — error+retry
+        // reuses the same token so we don't double-create on a network blip.
+        if (requestIdRef.current === null) {
+          requestIdRef.current = newRequestId()
+        }
         await createVisit({
           userId,
           date: value.date,
@@ -138,6 +162,7 @@ function NewVisitInner(): React.JSX.Element {
           visitType: value.visitType,
           notes: value.notes,
           source: 'module',
+          clientRequestId: requestIdRef.current,
         })
       }
       router.push('/visits')
@@ -175,7 +200,31 @@ function NewVisitInner(): React.JSX.Element {
           </p>
         )}
 
-        {!editLoading && (
+        {editNotFound && (
+          <section
+            data-testid="visit-edit-not-found"
+            className="mt-6 rounded-2xl border p-6 text-center"
+            style={{
+              borderColor: 'var(--rule)',
+              background: 'var(--bg-card)',
+            }}
+          >
+            <p className="text-base text-[var(--ink-muted)]">
+              We couldn&rsquo;t find that visit. It may have been deleted.
+            </p>
+            <Link
+              href="/visits"
+              className={
+                'mt-4 inline-flex h-12 items-center justify-center rounded-full ' +
+                'bg-[var(--sage-deep)] px-6 text-sm font-medium text-[var(--bg-elevated)]'
+              }
+            >
+              Back to visits
+            </Link>
+          </section>
+        )}
+
+        {!editLoading && !editNotFound && (
           <div className="mt-6">
             <VisitForm
               initial={initial}

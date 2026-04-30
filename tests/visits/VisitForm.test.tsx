@@ -63,9 +63,9 @@ describe('<VisitForm />', () => {
     render(<VisitForm onSubmit={vi.fn()} />)
     expect(screen.getByLabelText('When?')).toBeInTheDocument()
     expect(screen.getByLabelText('Who did you see?')).toBeInTheDocument()
-    // Specialty placeholder is visible inside the empty option
+    // F05 fix-pass: specialty is now a free-form text input.
     expect(
-      screen.getByRole('combobox', { name: /specialty/i }),
+      screen.getByPlaceholderText('e.g. Rheumatologist (optional)'),
     ).toBeInTheDocument()
     expect(screen.getByText('Type of visit')).toBeInTheDocument()
     expect(

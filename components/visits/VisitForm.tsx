@@ -52,13 +52,6 @@ export interface VisitFormProps {
   isSubmitting?: boolean
 }
 
-const SPECIALTIES = [
-  'Rheumatology',
-  'Endocrinology',
-  'GP',
-  'Other',
-] as const
-
 const VISIT_TYPES: ReadonlyArray<{ id: VisitType; label: string }> = [
   { id: 'consultation', label: 'Consultation' },
   { id: 'follow-up', label: 'Follow-up' },
@@ -204,27 +197,26 @@ export function VisitForm({
         >
           Specialty
         </label>
-        <select
+        {/* F05 fix-pass: free-form input replaces the hardcoded dropdown.
+            Patients see specialists outside the canned list (e.g. "Hand
+            specialist", "Pain management"), and forcing them to pick "Other"
+            loses information. */}
+        <input
           id={specialtyId}
+          type="text"
           value={value.specialty}
           onChange={(e) =>
             setValue((prev) => ({ ...prev, specialty: e.target.value }))
           }
+          placeholder="e.g. Rheumatologist (optional)"
           data-testid="visit-specialty-input"
           className={
             'h-12 w-full rounded-lg border border-[var(--rule)] bg-[var(--bg-card)] ' +
-            'px-4 text-base text-[var(--ink)] ' +
+            'px-4 text-base text-[var(--ink)] placeholder:text-[var(--ink-subtle)] ' +
             'focus:border-[var(--sage-deep)] focus:outline-none focus:ring-2 ' +
             'focus:ring-[var(--sage-soft)]'
           }
-        >
-          <option value="">e.g. Rheumatologist (optional)</option>
-          {SPECIALTIES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        />
       </div>
 
       <fieldset className="flex flex-col gap-2" data-testid="visit-type-group">

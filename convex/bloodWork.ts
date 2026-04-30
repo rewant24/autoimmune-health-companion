@@ -63,6 +63,8 @@ export type BloodWorkRow = {
   checkInId?: string;
   createdAt: number;
   deletedAt?: number;
+  /** F05 fix-pass: idempotency token. */
+  clientRequestId: string;
 };
 
 export type CreateBloodWorkArgs = {
@@ -72,6 +74,8 @@ export type CreateBloodWorkArgs = {
   notes?: string;
   source: BloodWorkRow["source"];
   checkInId?: string;
+  /** F05 fix-pass: idempotency token; required at the API surface. */
+  clientRequestId: string;
 };
 
 export type UpdateBloodWorkArgs = {
@@ -101,13 +105,16 @@ export type GetBloodWorkByDateArgs = {
 // -- Mock-friendly ctx shape -------------------------------------------------
 
 type IndexBuilder = {
-  eq: (field: "userId" | "date", value: string) => IndexBuilder;
+  eq: (
+    field: "userId" | "date" | "clientRequestId",
+    value: string,
+  ) => IndexBuilder;
 };
 
 type DbReader = {
   query: (table: "bloodWork") => {
     withIndex: (
-      name: "by_user_date",
+      name: "by_user_date" | "by_user_request",
       cb: (q: IndexBuilder) => IndexBuilder,
     ) => {
       collect: () => Promise<BloodWorkRow[]>;
@@ -213,6 +220,18 @@ export async function createBloodWorkHandler(
     });
   }
 
+  // F05 fix-pass: idempotency. Mirror checkIns + doctorVisits.
+  const existing = await ctx.db
+    .query("bloodWork")
+    .withIndex("by_user_request", (q) =>
+      q.eq("userId", args.userId).eq("clientRequestId", args.clientRequestId),
+    )
+    .collect();
+  const idempotentMatch = existing.find((r) => r.deletedAt === undefined);
+  if (idempotentMatch !== undefined) {
+    return { id: String(idempotentMatch._id) };
+  }
+
   const markers = normaliseMarkers(args.markers);
 
   const id = await ctx.db.insert("bloodWork", {
@@ -223,6 +242,7 @@ export async function createBloodWorkHandler(
     source: args.source,
     checkInId: args.checkInId,
     createdAt: now(),
+    clientRequestId: args.clientRequestId,
   });
 
   return { id: String(id) };
@@ -323,6 +343,7 @@ export const createBloodWork = mutation({
     notes: v.optional(v.string()),
     source: sourceValidator,
     checkInId: v.optional(v.id("checkIns")),
+    clientRequestId: v.string(),
   },
   returns: v.object({ id: v.string() }),
   handler: async (ctx, args) => {

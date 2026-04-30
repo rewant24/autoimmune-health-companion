@@ -164,6 +164,11 @@ export default function VisitsPage(): React.JSX.Element {
               <li key={v._id}>
                 <VisitCard
                   visit={v}
+                  // F05 fix-pass: card body now opens the read-only detail
+                  // page; explicit Edit button still routes to the form.
+                  onOpen={(id) => {
+                    window.location.href = `/visits/${encodeURIComponent(id)}`
+                  }}
                   onEdit={(id) => {
                     window.location.href = `/visits/new?id=${encodeURIComponent(id)}`
                   }}

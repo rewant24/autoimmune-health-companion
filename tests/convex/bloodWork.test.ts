@@ -29,15 +29,16 @@ function makeCtx() {
   const rows: BloodWorkRow[] = []
   let nextId = 1
 
+  type IdxField = 'userId' | 'date' | 'clientRequestId'
   const dbReader = {
     query: (_table: 'bloodWork') => ({
       withIndex: (
-        _name: 'by_user_date',
-        cb: (q: { eq: (field: 'userId' | 'date', value: string) => unknown }) => unknown,
+        _name: 'by_user_date' | 'by_user_request',
+        cb: (q: { eq: (field: IdxField, value: string) => unknown }) => unknown,
       ) => {
-        const eqs: Array<{ field: 'userId' | 'date'; value: string }> = []
+        const eqs: Array<{ field: IdxField; value: string }> = []
         const builder = {
-          eq(field: 'userId' | 'date', value: string) {
+          eq(field: IdxField, value: string) {
             eqs.push({ field, value })
             return builder
           },
@@ -89,6 +90,8 @@ const sampleMarker = (overrides: Partial<Marker> = {}): Marker => ({
   ...overrides,
 })
 
+// Each call gets a fresh idempotency token — same rationale as doctorVisits.
+let bwReqCounter = 0
 const baseArgs = (
   overrides: Partial<CreateBloodWorkArgs> = {},
 ): CreateBloodWorkArgs => ({
@@ -97,6 +100,7 @@ const baseArgs = (
   markers: [sampleMarker()],
   notes: 'Standard panel',
   source: 'module',
+  clientRequestId: `bw_req_${++bwReqCounter}`,
   ...overrides,
 })
 
@@ -227,6 +231,25 @@ describe('createBloodWorkHandler', () => {
     )
     expect(rows[0].source).toBe('check-in')
     expect(rows[0].checkInId).toBe('ci_42')
+  })
+
+  it('idempotent: same clientRequestId returns the existing row, no duplicate insert', async () => {
+    const { ctx, rows } = makeCtx()
+    const args = baseArgs({ clientRequestId: 'bw_idem_1' })
+    const first = await createBloodWorkHandler(ctx as unknown as Ctx, args)
+    expect(rows.length).toBe(1)
+    const second = await createBloodWorkHandler(ctx as unknown as Ctx, args)
+    expect(rows.length).toBe(1)
+    expect(second.id).toBe(first.id)
+  })
+
+  it('persists clientRequestId on the row', async () => {
+    const { ctx, rows } = makeCtx()
+    await createBloodWorkHandler(
+      ctx as unknown as Ctx,
+      baseArgs({ clientRequestId: 'bw_persist' }),
+    )
+    expect(rows[0].clientRequestId).toBe('bw_persist')
   })
 
   it('error is a ConvexError', async () => {

@@ -190,7 +190,13 @@ export default defineSchema({
     checkInId: v.optional(v.id("checkIns")),
     createdAt: v.number(),
     deletedAt: v.optional(v.number()),
-  }).index("by_user_date", ["userId", "date"]),
+    // F05 fix-pass: idempotency token. Mirrors `checkIns.clientRequestId`
+    // — a retry from the client with the same token short-circuits to the
+    // existing row instead of inserting a duplicate.
+    clientRequestId: v.string(),
+  })
+    .index("by_user_date", ["userId", "date"])
+    .index("by_user_request", ["userId", "clientRequestId"]),
 
   // Feature 05 Cycle 1 — Blood work results (structured markers).
   //
@@ -217,5 +223,9 @@ export default defineSchema({
     checkInId: v.optional(v.id("checkIns")),
     createdAt: v.number(),
     deletedAt: v.optional(v.number()),
-  }).index("by_user_date", ["userId", "date"]),
+    // F05 fix-pass: idempotency token, same role as on `doctorVisits`.
+    clientRequestId: v.string(),
+  })
+    .index("by_user_date", ["userId", "date"])
+    .index("by_user_request", ["userId", "clientRequestId"]),
 });

@@ -26,15 +26,16 @@ function makeCtx() {
   let nextId = 1
   let nowCounter = 1_700_000_000_000
 
+  type IdxField = 'userId' | 'date' | 'clientRequestId'
   const dbReader = {
     query: (_table: 'doctorVisits') => ({
       withIndex: (
-        _name: 'by_user_date',
-        cb: (q: { eq: (field: 'userId' | 'date', value: string) => unknown }) => unknown,
+        _name: 'by_user_date' | 'by_user_request',
+        cb: (q: { eq: (field: IdxField, value: string) => unknown }) => unknown,
       ) => {
-        const eqs: Array<{ field: 'userId' | 'date'; value: string }> = []
+        const eqs: Array<{ field: IdxField; value: string }> = []
         const builder = {
-          eq(field: 'userId' | 'date', value: string) {
+          eq(field: IdxField, value: string) {
             eqs.push({ field, value })
             return builder
           },
@@ -78,6 +79,9 @@ function makeCtx() {
   return { ctx, rows, tickNow }
 }
 
+// Each call gets a fresh idempotency token so tests that create multiple
+// rows aren't accidentally collapsed by the new server-side dedupe.
+let reqCounter = 0
 const baseArgs = (overrides: Partial<CreateVisitArgs> = {}): CreateVisitArgs => ({
   userId: 'user_A',
   date: '2026-05-10',
@@ -86,6 +90,7 @@ const baseArgs = (overrides: Partial<CreateVisitArgs> = {}): CreateVisitArgs => 
   visitType: 'consultation',
   notes: 'Routine review',
   source: 'module',
+  clientRequestId: `req_${++reqCounter}`,
   ...overrides,
 })
 
@@ -152,6 +157,25 @@ describe('createVisitHandler', () => {
     )
     expect(rows[0].source).toBe('check-in')
     expect(rows[0].checkInId).toBe('ci_42')
+  })
+
+  it('idempotent: same clientRequestId returns the existing row, no duplicate insert', async () => {
+    const { ctx, rows } = makeCtx()
+    const args = baseArgs({ clientRequestId: 'req_idem_1' })
+    const first = await createVisitHandler(ctx as unknown as Ctx, args)
+    expect(rows.length).toBe(1)
+    const second = await createVisitHandler(ctx as unknown as Ctx, args)
+    expect(rows.length).toBe(1)
+    expect(second.id).toBe(first.id)
+  })
+
+  it('persists clientRequestId on the row', async () => {
+    const { ctx, rows } = makeCtx()
+    await createVisitHandler(
+      ctx as unknown as Ctx,
+      baseArgs({ clientRequestId: 'req_persist' }),
+    )
+    expect(rows[0].clientRequestId).toBe('req_persist')
   })
 })
 

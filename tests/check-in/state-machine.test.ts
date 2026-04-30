@@ -1266,3 +1266,106 @@ describe('useCheckinMachine — Fix F.1 silence VAD ownership', () => {
     })
   })
 })
+
+// F05 fix-pass — confirming-event additions: race-tolerant transitions.
+describe('reducer: confirming-event fix-pass transitions', () => {
+  const sampleVisit = {
+    doctorName: 'Dr. Mehta',
+    date: '2026-05-10',
+    visitType: 'consultation' as const,
+  }
+  const sampleBloodWork = {
+    date: '2026-05-10',
+    markers: [{ name: 'CRP', value: 12, unit: 'mg/L' }],
+  }
+  const baseConfirmingEvent: State = {
+    kind: 'confirming-event',
+    transcript,
+    metrics: {
+      pain: 4,
+      mood: 'okay',
+      adherenceTaken: true,
+      flare: 'no',
+      energy: 6,
+    },
+    declined: [],
+    stage: 'open',
+    pendingVisits: [sampleVisit],
+    pendingBloodWork: [],
+    acceptedVisits: [],
+    acceptedBloodWork: [],
+  }
+
+  it('EVENT_EXTRACTED merges new pending entries with existing ones', () => {
+    const next = reducer(baseConfirmingEvent, {
+      type: 'EVENT_EXTRACTED',
+      visits: [],
+      bloodWork: [sampleBloodWork],
+    })
+    if (next.kind !== 'confirming-event') throw new Error('expected confirming-event')
+    expect(next.pendingVisits).toHaveLength(1)
+    expect(next.pendingBloodWork).toHaveLength(1)
+  })
+
+  it('METRIC_UPDATED edits a metric without clearing event state', () => {
+    const next = reducer(baseConfirmingEvent, {
+      type: 'METRIC_UPDATED',
+      metric: 'pain',
+      value: 7,
+    })
+    if (next.kind !== 'confirming-event') throw new Error('expected confirming-event')
+    expect(next.metrics.pain).toBe(7)
+    expect(next.pendingVisits).toEqual(baseConfirmingEvent.pendingVisits)
+  })
+
+  it('METRIC_DECLINED records the decline + nulls the value', () => {
+    const next = reducer(baseConfirmingEvent, {
+      type: 'METRIC_DECLINED',
+      metric: 'pain',
+    })
+    if (next.kind !== 'confirming-event') throw new Error('expected confirming-event')
+    expect(next.metrics.pain).toBeNull()
+    expect(next.declined).toEqual(['pain'])
+  })
+
+  it('CONFIRM (no closer) routes to saving — same as EVENT_CONFIRM_DONE', () => {
+    const next = reducer(baseConfirmingEvent, { type: 'CONFIRM' })
+    expect(next).toEqual({ kind: 'saving' })
+  })
+
+  it('CONFIRM with closer routes through speaking-closer', () => {
+    const next = reducer(baseConfirmingEvent, {
+      type: 'CONFIRM',
+      closer: { text: 'Take care.' },
+    })
+    if (next.kind !== 'speaking-closer') throw new Error('expected speaking-closer')
+    expect(next.text).toBe('Take care.')
+    expect(next.metrics).toEqual(baseConfirmingEvent.metrics)
+  })
+
+  it('speaking-closer EVENT_EXTRACTED routes back into confirming-event', () => {
+    const speakingCloser: State = {
+      kind: 'speaking-closer',
+      text: 'Take care.',
+      metrics: baseConfirmingEvent.metrics,
+      declined: [],
+      stage: 'open',
+      transcript,
+    }
+    const next = reducer(speakingCloser, {
+      type: 'EVENT_EXTRACTED',
+      visits: [sampleVisit],
+      bloodWork: [],
+    })
+    if (next.kind !== 'confirming-event') throw new Error('expected confirming-event')
+    expect(next.pendingVisits).toEqual([sampleVisit])
+  })
+
+  it('saving drops late EVENT_EXTRACTED on the floor', () => {
+    const next = reducer(
+      { kind: 'saving' },
+      { type: 'EVENT_EXTRACTED', visits: [sampleVisit], bloodWork: [] },
+    )
+    expect(next).toEqual({ kind: 'saving' })
+  })
+})

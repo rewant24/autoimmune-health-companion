@@ -163,6 +163,10 @@ export default function BloodWorkListPage(): React.JSX.Element {
               <li key={r._id}>
                 <BloodWorkListCard
                   row={r}
+                  // F05 fix-pass: card body opens detail page; Edit goes to form.
+                  onOpen={() => {
+                    window.location.href = `/blood-work/${encodeURIComponent(r._id)}`
+                  }}
                   onEdit={() => {
                     window.location.href = `/blood-work/new?id=${encodeURIComponent(r._id)}`
                   }}
@@ -189,16 +193,20 @@ export default function BloodWorkListPage(): React.JSX.Element {
 
 interface BloodWorkListCardProps {
   row: BloodWorkRow
+  /** Tap on body — defaults to onEdit for back-compat. */
+  onOpen?: () => void
   onEdit: () => void
   onDelete: () => void
 }
 
 function BloodWorkListCard({
   row,
+  onOpen,
   onEdit,
   onDelete,
 }: BloodWorkListCardProps): React.JSX.Element {
   const abnormalCount = row.markers.filter((m) => m.abnormal === true).length
+  const handleBodyTap = onOpen ?? onEdit
   return (
     <article
       data-testid={`blood-work-card-${row._id}`}
@@ -210,7 +218,7 @@ function BloodWorkListCard({
     >
       <button
         type="button"
-        onClick={onEdit}
+        onClick={handleBodyTap}
         className="flex w-full flex-col gap-2 text-left"
         data-testid={`blood-work-card-body-${row._id}`}
       >

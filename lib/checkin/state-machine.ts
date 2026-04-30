@@ -611,6 +611,52 @@ export function reducer(state: State, event: Event): State {
       if (event.type === 'EVENT_CONFIRM_DONE') {
         return { kind: 'saving' }
       }
+      // F05 fix-pass: a delayed second extraction call (e.g. retry after a
+      // network blip) can arrive while the user is still reviewing cards.
+      // Merge new pending entries with whatever's still on the stack so they
+      // aren't dropped.
+      if (event.type === 'EVENT_EXTRACTED') {
+        return {
+          ...state,
+          pendingVisits: [...state.pendingVisits, ...event.visits],
+          pendingBloodWork: [...state.pendingBloodWork, ...event.bloodWork],
+        }
+      }
+      // F05 fix-pass: allow metric edits while reviewing event cards. The
+      // user can swipe back into the metric controls (UI may surface this
+      // post-MVP) without losing accepted/pending event state.
+      if (event.type === 'METRIC_UPDATED') {
+        return {
+          ...state,
+          metrics: { ...state.metrics, [event.metric]: event.value } as CheckinMetrics,
+          declined: state.declined.filter((m) => m !== event.metric),
+        }
+      }
+      if (event.type === 'METRIC_DECLINED') {
+        if (state.declined.includes(event.metric)) return state
+        return {
+          ...state,
+          metrics: { ...state.metrics, [event.metric]: null } as CheckinMetrics,
+          declined: [...state.declined, event.metric],
+        }
+      }
+      // F05 fix-pass: CONFIRM in confirming-event is treated as the same
+      // signal as EVENT_CONFIRM_DONE — a re-trigger after the user dismisses
+      // an error and saves again. Closer payload (voice mode) also routes
+      // through speaking-closer like the standard confirming path.
+      if (event.type === 'CONFIRM') {
+        if (event.closer) {
+          return {
+            kind: 'speaking-closer',
+            text: event.closer.text,
+            metrics: state.metrics,
+            declined: state.declined,
+            stage: state.stage,
+            transcript: state.transcript,
+          }
+        }
+        return { kind: 'saving' }
+      }
       if (event.type === 'DISCARD_REQUEST') {
         return { kind: 'discarding', previous: state }
       }
@@ -633,6 +679,12 @@ export function reducer(state: State, event: Event): State {
           error: { kind: 'save-failed', message: event.message },
         }
       }
+      // F05 fix-pass: EVENT_EXTRACTED arriving during `saving` is dropped
+      // intentionally — the save is in flight, we can't safely abort it
+      // without coordinating with the in-flight mutation. Pages should
+      // dispatch EVENT_EXTRACTED before CONFIRM (the canonical ordering)
+      // so this race is rare. Worst case: extracted events are lost; the
+      // user can manually log via /visits/new.
       return state
     }
     case 'saved': {
@@ -781,6 +833,27 @@ export function reducer(state: State, event: Event): State {
           metrics: state.metrics,
           declined: state.declined,
           stage: state.stage,
+        }
+      }
+      // F05 fix-pass: late-arriving event extraction (race with CONFIRM).
+      // Don't drop on the floor — route into confirming-event so the user
+      // still sees the cards. The closer playback gets cancelled by the
+      // state transition; the page is expected to call tts.cancel() in
+      // its onLeave for speaking-closer.
+      if (
+        event.type === 'EVENT_EXTRACTED' &&
+        (event.visits.length > 0 || event.bloodWork.length > 0)
+      ) {
+        return {
+          kind: 'confirming-event',
+          transcript: state.transcript,
+          metrics: state.metrics,
+          declined: state.declined,
+          stage: state.stage,
+          pendingVisits: event.visits,
+          pendingBloodWork: event.bloodWork,
+          acceptedVisits: [],
+          acceptedBloodWork: [],
         }
       }
       return state

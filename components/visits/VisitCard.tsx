@@ -26,6 +26,12 @@ export interface VisitRowLike {
 
 export interface VisitCardProps {
   visit: VisitRowLike
+  /**
+   * F05 fix-pass: tap on the card body. Defaults to onEdit (back-compat for
+   * callers that haven't been updated yet) so the existing 5.B tests keep
+   * passing while the list page routes to the detail view.
+   */
+  onOpen?: (id: string) => void
   onEdit: (id: string) => void
   onDelete: (id: string) => void
 }
@@ -64,10 +70,12 @@ function formatDate(iso: string): string {
 
 export function VisitCard({
   visit,
+  onOpen,
   onEdit,
   onDelete,
 }: VisitCardProps): React.JSX.Element {
   const pill = TYPE_PILL_COLORS[visit.visitType]
+  const handleBodyTap = onOpen ?? onEdit
   return (
     <article
       data-testid={`visit-card-${visit._id}`}
@@ -79,7 +87,7 @@ export function VisitCard({
     >
       <button
         type="button"
-        onClick={() => onEdit(visit._id)}
+        onClick={() => handleBodyTap(visit._id)}
         data-testid={`visit-card-body-${visit._id}`}
         className="flex w-full flex-col gap-2 text-left"
       >
