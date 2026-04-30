@@ -61,7 +61,12 @@ const intake: MemoryEvent = {
   title: "Medication intake",
   meta: "",
   taskState: "done",
-  payload: {},
+  payload: {
+    medicationId: "med_1",
+    medicationName: "Methotrexate",
+    dose: "15mg",
+    source: "home-tap",
+  },
 };
 
 const visit: MemoryEvent = {

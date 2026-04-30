@@ -23,6 +23,7 @@ import { useRouter } from 'next/navigation'
 import { BottomNav } from '@/components/nav/BottomNav'
 import { CheckInPromptCard } from '@/components/home/CheckInPromptCard'
 import { HomeGreeting } from '@/components/home/HomeGreeting'
+import { IntakeTapList } from '@/components/home/IntakeTapList'
 import { MedsSetupNudgeCard } from '@/components/home/MedsSetupNudgeCard'
 import { MetricVizPlaceholder } from '@/components/home/MetricVizPlaceholder'
 import { readProfile } from '@/lib/profile/storage'
@@ -68,9 +69,7 @@ export default function HomePage(): React.JSX.Element {
             (or replaces with a live regimen-aware variant) so it hides
             once `listActiveMedications` returns ≥1. */}
         <MedsSetupNudgeCard />
-        {/* SPRINT_F04_INTAKE_SLOT — chunk 4.C inserts <IntakeTapList />
-            here, rendering today's regimen with taken/outstanding state.
-            Hidden when no active medications. */}
+        <IntakeTapList />
         <MetricVizPlaceholder />
       </div>
       <BottomNav />
