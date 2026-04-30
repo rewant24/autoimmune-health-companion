@@ -1,12 +1,14 @@
 /**
  * Memory filter predicates — pure functions, no I/O.
  *
- * Maps the 5 filter tabs (All / Check-ins / Intake events / Flare-ups /
+ * Maps the filter tabs (All / Check-ins / Intake events / Flare-ups /
  * Visits) to a subset of MemoryEvents. Shared by client (FilterTabs) and
  * server (listEventsByRange) so the two cannot drift.
  *
- * Note: in F02 C1, 'intake-events' and 'visits' always return [] because
- * F04 / F05 are not shipped yet — by spec, this is correct behavior.
+ * F05 chunk 5.C: blood-work events are surfaced under the `visits` filter
+ * tab so the existing 5-tab layout doesn't grow another label. (The pill
+ * still distinguishes them visually.) When the chunked filter spec evolves
+ * post-MVP, split into its own tab.
  */
 import type { MemoryEvent } from "./event-types";
 
@@ -31,6 +33,8 @@ export function applyFilter(
     case "flare-ups":
       return events.filter((e) => e.type === "flare");
     case "visits":
-      return events.filter((e) => e.type === "visit");
+      return events.filter(
+        (e) => e.type === "visit" || e.type === "blood-work",
+      );
   }
 }

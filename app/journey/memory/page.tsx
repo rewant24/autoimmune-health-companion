@@ -21,6 +21,13 @@ import { useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import type { MemoryFilter } from '@/components/memory/_types'
 import { MemoryTab } from '@/components/memory/MemoryTab'
+import {
+  eventFromVisit,
+  eventFromBloodWork,
+  type DoctorVisitRow,
+  type BloodWorkRow,
+  type MemoryEvent,
+} from '@/lib/memory/event-types'
 
 const TEST_USER_KEY = 'saha.testUser.v1'
 
@@ -105,10 +112,55 @@ function JourneyMemoryInner(): React.JSX.Element {
       : 'skip',
   )
 
-  const events = result?.events ?? []
-  // Loading = userId is provisioned but Convex query hasn't resolved.
-  // Pre-userId render is also a kind of "loading" but instant — keep the
-  // banner specifically for the network round-trip so it doesn't flash.
+  // F05 chunk 5.C — visit + blood-work events fetched alongside check-in/
+  // flare events. Chunk 5.A owns these queries (`listVisits`,
+  // `listBloodWork`); during pre-merge isolation the queries may not yet
+  // exist on the deploy, in which case `useQuery` resolves to `undefined`
+  // and we treat the lists as empty. The integration step replaces these
+  // with the canonical aggregation query (decision deferred per
+  // docs/features/05-doctor-visits.md US-5.C.3 acceptance).
+  const visitsResult = useQuery(
+    // Cast through unknown because `anyApi` is a runtime proxy — the
+    // generated api type doesn't yet declare these functions until 5.A
+    // lands. Keeps this file compilable in the parallel build worktree.
+    (api as unknown as { doctorVisits: { listVisits: typeof api.checkIns.listEventsByRange } })
+      .doctorVisits?.listVisits,
+    userId
+      ? { userId, fromDate: range.fromDate, toDate: range.toDate }
+      : 'skip',
+  )
+  const bloodWorkResult = useQuery(
+    (api as unknown as { bloodWork: { listBloodWork: typeof api.checkIns.listEventsByRange } })
+      .bloodWork?.listBloodWork,
+    userId
+      ? { userId, fromDate: range.fromDate, toDate: range.toDate }
+      : 'skip',
+  )
+
+  // Today in IST drives the visit pending/done classification (future-dated
+  // visits surface as pending). Re-derived per render — cheap, and avoids a
+  // stale clock if the page is left mounted across midnight.
+  const todayIST = useMemo(() => istDateOffset(0), [])
+
+  const events = useMemo<MemoryEvent[]>(() => {
+    const checkInEvents = result?.events ?? []
+    const visitRows = (visitsResult as { items?: DoctorVisitRow[] } | undefined)
+      ?.items
+    const bloodWorkRows = (
+      bloodWorkResult as { items?: BloodWorkRow[] } | undefined
+    )?.items
+    const visitEvents = (visitRows ?? []).map((row) =>
+      eventFromVisit(row, todayIST),
+    )
+    const bloodWorkEvents = (bloodWorkRows ?? []).map((row) =>
+      eventFromBloodWork(row),
+    )
+    return [...checkInEvents, ...visitEvents, ...bloodWorkEvents]
+  }, [result?.events, visitsResult, bloodWorkResult, todayIST])
+
+  // Loading = userId is provisioned but the primary check-in query hasn't
+  // resolved. Visit / blood-work queries don't gate the loading banner —
+  // they degrade silently to empty lists when chunk 5.A's deploy lags.
   const isLoading = userId !== null && result === undefined
 
   return (

@@ -34,6 +34,10 @@ import type {
   OpenerVariantKey,
   StageEnum,
 } from './types'
+import type {
+  ExtractedVisit,
+  ExtractedBloodWork,
+} from './event-extract'
 
 // ---------------- State + Event shapes ----------------
 
@@ -90,6 +94,26 @@ export type State =
       declined?: Metric[]
       stage?: StageEnum
     }
+  // F05 chunk 5.C — event-confirm gate inserted between `confirming` and
+  // `saving`. Entered only when the event extractor returned at least one
+  // candidate visit OR blood-work entry; otherwise `CONFIRM` from
+  // `confirming` jumps straight to `saving` as in C2. The user accepts or
+  // declines each card; once `pendingVisits.length + pendingBloodWork.length === 0`
+  // the page dispatches `EVENT_CONFIRM_DONE` and the reducer transitions
+  // to `saving`. The original `metrics`, `declined`, `stage`, `transcript`
+  // are carried so the post-save side-effects (intake/visit/blood-work
+  // mutations) have everything they need.
+  | {
+      kind: 'confirming-event'
+      transcript: Transcript
+      metrics: CheckinMetrics
+      declined: Metric[]
+      stage: StageEnum
+      pendingVisits: ExtractedVisit[]
+      pendingBloodWork: ExtractedBloodWork[]
+      acceptedVisits: ExtractedVisit[]
+      acceptedBloodWork: ExtractedBloodWork[]
+    }
   // 2.D — modal-overlay state when the user requests discard. `previous`
   // carries the full state to restore on DISCARD_CANCEL — we'd lose
   // metrics/missing/declined otherwise.
@@ -98,6 +122,7 @@ export type State =
       previous:
         | Extract<State, { kind: 'stage-2' }>
         | Extract<State, { kind: 'confirming' }>
+        | Extract<State, { kind: 'confirming-event' }>
     }
   | { kind: 'saving' }
   // 2.F — `milestone` carries the celebration kind (or null when the
@@ -205,6 +230,26 @@ export type Event =
   // the reducer can route to `speaking-closer` instead of straight to
   // `saving`. Payload-less form preserves the C1 path used by existing tests.
   | { type: 'CONFIRM'; closer?: { text: string } }
+  // F05 chunk 5.C — event extraction returned candidates. Dispatched from
+  // `confirming` when the page has run extractEvents() AND the result has
+  // at least one item. The reducer enters `confirming-event`. Empty results
+  // never dispatch this event — the page goes straight to `CONFIRM`.
+  | {
+      type: 'EVENT_EXTRACTED'
+      visits: ExtractedVisit[]
+      bloodWork: ExtractedBloodWork[]
+    }
+  // F05 chunk 5.C — accept the first pending visit or blood-work entry
+  // (FIFO order). The reducer pops the first item from the matching
+  // `pending*` list and appends it to the matching `accepted*` list.
+  | { type: 'EVENT_ACCEPT'; kind: 'visit' | 'blood-work' }
+  // F05 chunk 5.C — decline the first pending entry. The reducer drops it
+  // from the matching `pending*` list (no accumulator — declined entries
+  // are forgotten).
+  | { type: 'EVENT_DECLINE'; kind: 'visit' | 'blood-work' }
+  // F05 chunk 5.C — all event cards have been acted on (or the user
+  // dismissed the gate). Reducer transitions `confirming-event` → `saving`.
+  | { type: 'EVENT_CONFIRM_DONE' }
   // 2.D — discard flow (request → confirm/cancel).
   | { type: 'DISCARD_REQUEST' }
   | { type: 'DISCARD_CONFIRM' }
@@ -492,6 +537,28 @@ export function reducer(state: State, event: Event): State {
           declined: [...declined, event.metric],
         }
       }
+      // F05 chunk 5.C — event extraction returned candidates. Route to the
+      // event-confirm gate instead of straight to `saving`. Requires the
+      // confirming state to have its full payload — it always does after
+      // chunk 2.D landed (the optional fields are pre-flight compat-only).
+      if (
+        event.type === 'EVENT_EXTRACTED' &&
+        state.metrics &&
+        state.stage &&
+        (event.visits.length > 0 || event.bloodWork.length > 0)
+      ) {
+        return {
+          kind: 'confirming-event',
+          transcript: state.transcript,
+          metrics: state.metrics,
+          declined: state.declined ?? [],
+          stage: state.stage,
+          pendingVisits: event.visits,
+          pendingBloodWork: event.bloodWork,
+          acceptedVisits: [],
+          acceptedBloodWork: [],
+        }
+      }
       if (event.type === 'CONFIRM') {
         // Voice C1: closer payload routes through speaking-closer → saving;
         // payload-less form preserves the C1 direct-to-saving path.
@@ -505,6 +572,43 @@ export function reducer(state: State, event: Event): State {
             transcript: state.transcript,
           }
         }
+        return { kind: 'saving' }
+      }
+      if (event.type === 'DISCARD_REQUEST') {
+        return { kind: 'discarding', previous: state }
+      }
+      return state
+    }
+    case 'confirming-event': {
+      if (event.type === 'EVENT_ACCEPT') {
+        if (event.kind === 'visit') {
+          if (state.pendingVisits.length === 0) return state
+          const [head, ...rest] = state.pendingVisits
+          return {
+            ...state,
+            pendingVisits: rest,
+            acceptedVisits: [...state.acceptedVisits, head],
+          }
+        }
+        if (state.pendingBloodWork.length === 0) return state
+        const [head, ...rest] = state.pendingBloodWork
+        return {
+          ...state,
+          pendingBloodWork: rest,
+          acceptedBloodWork: [...state.acceptedBloodWork, head],
+        }
+      }
+      if (event.type === 'EVENT_DECLINE') {
+        if (event.kind === 'visit') {
+          if (state.pendingVisits.length === 0) return state
+          const [, ...rest] = state.pendingVisits
+          return { ...state, pendingVisits: rest }
+        }
+        if (state.pendingBloodWork.length === 0) return state
+        const [, ...rest] = state.pendingBloodWork
+        return { ...state, pendingBloodWork: rest }
+      }
+      if (event.type === 'EVENT_CONFIRM_DONE') {
         return { kind: 'saving' }
       }
       if (event.type === 'DISCARD_REQUEST') {
@@ -711,6 +815,7 @@ export function toOrbState(state: State): OrbVisualState {
     case 'extracting':
     case 'stage-2':
     case 'confirming':
+    case 'confirming-event':
     case 'discarding':
     case 'saving':
     case 'saved':
