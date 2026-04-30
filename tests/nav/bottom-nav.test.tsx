@@ -40,21 +40,24 @@ describe('<BottomNav />', () => {
     ])
   })
 
-  it('renders Home + Journey as real navigation links with href', () => {
+  it('renders Home + Medications + Journey as real navigation links with href', () => {
     mockPathname = '/home'
     render(<BottomNav />)
     const home = document.querySelector('[data-nav-key="home"]')
+    const medications = document.querySelector('[data-nav-key="medications"]')
     const journey = document.querySelector('[data-nav-key="journey"]')
     expect(home?.tagName).toBe('A')
     expect(home?.getAttribute('href')).toBe('/home')
+    expect(medications?.tagName).toBe('A')
+    expect(medications?.getAttribute('href')).toBe('/medications')
     expect(journey?.tagName).toBe('A')
     expect(journey?.getAttribute('href')).toBe('/journey/memory')
   })
 
-  it('renders Medications, Community, Settings as aria-disabled buttons with no href', () => {
+  it('renders Community, Settings as aria-disabled buttons with no href', () => {
     mockPathname = '/home'
     render(<BottomNav />)
-    for (const key of ['medications', 'community', 'settings']) {
+    for (const key of ['community', 'settings']) {
       const el = document.querySelector(`[data-nav-key="${key}"]`)
       expect(el?.tagName).toBe('BUTTON')
       expect(el?.getAttribute('aria-disabled')).toBe('true')
@@ -72,6 +75,23 @@ describe('<BottomNav />', () => {
     expect(journey?.getAttribute('data-active')).toBe('false')
   })
 
+  it('marks the Medications pillar active when pathname is /medications', () => {
+    mockPathname = '/medications'
+    render(<BottomNav />)
+    const meds = document.querySelector('[data-nav-key="medications"]')
+    expect(meds?.getAttribute('data-active')).toBe('true')
+    expect(meds?.getAttribute('aria-current')).toBe('page')
+    const home = document.querySelector('[data-nav-key="home"]')
+    expect(home?.getAttribute('data-active')).toBe('false')
+  })
+
+  it('marks the Medications pillar active on a /medications sub-route', () => {
+    mockPathname = '/medications/setup'
+    render(<BottomNav />)
+    const meds = document.querySelector('[data-nav-key="medications"]')
+    expect(meds?.getAttribute('data-active')).toBe('true')
+  })
+
   it('marks the Journey pillar active when pathname is /journey/memory', () => {
     mockPathname = '/journey/memory'
     render(<BottomNav />)
@@ -87,15 +107,15 @@ describe('<BottomNav />', () => {
     render(<BottomNav />)
     const user = userEvent.setup()
 
-    // Track location.assign attempts (jsdom doesn't actually navigate, but
-    // clicking a disabled button must not throw / change href).
-    const meds = document.querySelector(
-      '[data-nav-key="medications"]',
+    // jsdom doesn't actually navigate; we just confirm clicking a disabled
+    // button doesn't throw and doesn't drop aria-disabled.
+    const community = document.querySelector(
+      '[data-nav-key="community"]',
     ) as HTMLButtonElement
-    expect(meds).toBeTruthy()
+    expect(community).toBeTruthy()
     // No onClick handler attached, no href — clicking is a no-op.
-    await user.click(meds)
-    expect(meds.getAttribute('aria-disabled')).toBe('true')
+    await user.click(community)
+    expect(community.getAttribute('aria-disabled')).toBe('true')
   })
 
   it('applies safe-area-inset-bottom padding for iOS notched devices', () => {
