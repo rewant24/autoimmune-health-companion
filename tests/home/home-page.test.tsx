@@ -135,11 +135,12 @@ describe('/home page', () => {
     expect(screen.queryByTestId('home-page')).not.toBeInTheDocument()
   })
 
-  it('MedsSetupNudgeCard is non-interactive (no link, no button)', async () => {
-    // R3 review #10: aria-disabled is meaningful only on interactive widgets;
-    // applying it to a non-interactive landmark is a misuse. The card's
-    // "disabled" state is communicated visually (opacity) and structurally
-    // (zero focusable children).
+  it('MedsSetupNudgeCard renders during Convex query loading without a CTA', async () => {
+    // F04 chunk 4.B (2026-04-30): the nudge became interactive — a real
+    // CTA links to /medications/setup once `listActiveMedications` returns
+    // an empty array. The global test setup mock returns `undefined` for
+    // every `useQuery`, which the nudge treats as "still loading" — and in
+    // that state the CTA is hidden so the surface doesn't pop in/out.
     seedProfile({ name: 'Asha', onboarded: true })
     render(<HomePage />)
     await waitFor(() =>
