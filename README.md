@@ -4,7 +4,7 @@ A voice-first health companion for people living with autoimmune conditions.
 
 > *Saha* (सह) — Sanskrit, two meanings at once: *to endure* and *with*. Because autoimmune is a long carry, and you don't carry it alone. Saha holds the days you can't, and walks beside the days you can.
 
-**Live:** https://saha-health-companion.vercel.app
+**Live:** https://www.meetsaha.com
 
 ## What it does
 
