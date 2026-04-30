@@ -406,9 +406,9 @@ export function LandingPage() {
 
             <div className="mt-6 flex flex-col gap-4">
               <p className="type-body">
-                I started Saha after a year of patient interviews. The same
-                story, again and again: people doing real work to manage their
-                condition, then losing the thread the moment the visit started.
+                Saha started with someone close to me. So much happens between
+                her appointments, and so little of it makes it into the ten
+                minutes inside.
               </p>
               <p className="type-body">
                 Tracking can&apos;t add cognitive load to a life that&apos;s
