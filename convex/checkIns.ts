@@ -2,6 +2,9 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import {
   eventFromCheckin,
+  eventFromIntake,
+  type IntakeEventRow,
+  type IntakeMedication,
   type MemoryEvent,
 } from "../lib/memory/event-types";
 
@@ -361,11 +364,10 @@ export const getTodayCheckin = query({
 // ---- F02 Memory: listEventsByRange ----
 //
 // Returns mixed MemoryEvents in [fromDate, toDate] reverse-chronological by
-// (date desc, time desc). F02 C1 reads only `checkIns`; F04 (intake) and
-// F05 (visits) will extend the merge. No tier clamp (no free tier per
-// locked decision 2026-04-25). Soft-deleted rows are excluded — same
-// policy as listCheckinsHandler — so behaviour is consistent if/when
-// soft-delete is reintroduced (current ADR is hard-delete).
+// (date desc, time desc). Reads `checkIns` (F02) + `intakeEvents` (F04 C1).
+// F05 (visits + bloodWork) extends the merge later. No tier clamp (no free
+// tier per locked decision 2026-04-25). Soft-deleted rows are excluded
+// from both tables — same policy as listCheckinsHandler.
 
 export type ListEventsByRangeArgs = {
   userId: string;
@@ -377,12 +379,13 @@ export async function listEventsByRangeHandler(
   ctx: QueryHandlerCtx,
   args: ListEventsByRangeArgs,
 ): Promise<{ events: MemoryEvent[] }> {
-  const rows = await ctx.db
+  // 1. Check-in rows → CheckInEvent (and optionally a paired FlareEvent).
+  const checkinRows = await ctx.db
     .query("checkIns")
     .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
     .collect();
 
-  const inRange = rows.filter(
+  const inRangeCheckins = checkinRows.filter(
     (row) =>
       row.deletedAt === undefined &&
       row.date >= args.fromDate &&
@@ -390,8 +393,41 @@ export async function listEventsByRangeHandler(
   );
 
   const events: MemoryEvent[] = [];
-  for (const row of inRange) {
+  for (const row of inRangeCheckins) {
     events.push(...eventFromCheckin(row));
+  }
+
+  // 2. Intake events → IntakeEvent. We need the medication name + dose to
+  //    render the row title/meta, so fetch the regimen once and look up
+  //    each intake's medication by id. ALL meds (active + inactive) are
+  //    pulled — historical intakes for now-deactivated meds must still
+  //    project (the user did take them at the time).
+  const intakeRows = await ctx.db
+    .query("intakeEvents")
+    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .collect();
+
+  const inRangeIntakes = intakeRows.filter(
+    (row) =>
+      row.deletedAt === undefined &&
+      row.date >= args.fromDate &&
+      row.date <= args.toDate,
+  );
+
+  if (inRangeIntakes.length > 0) {
+    const medRows = await ctx.db
+      .query("medications")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    const medById = new Map<string, IntakeMedication>(
+      medRows.map((m) => [m._id, { _id: m._id, name: m.name, dose: m.dose }]),
+    );
+    for (const row of inRangeIntakes) {
+      const med = medById.get(row.medicationId);
+      if (med === undefined) continue; // defensive — medication row missing
+      const projected = eventFromIntake(row as IntakeEventRow, med);
+      if (projected !== null) events.push(projected);
+    }
   }
 
   events.sort((a, b) => {
