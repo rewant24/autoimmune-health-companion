@@ -134,12 +134,16 @@ export function IntakeTapList({
   }, [userIdOverride])
 
   // useMutation/useQuery from convex/react are typed against the generated
-  // api. Chunk 4.A's modules aren't in the generated types yet, so we cast
-  // the references through `unknown` to keep TS happy without disabling
-  // the typecheck globally.
+  // api. We keep a narrow `unknown` cast for these two calls until the
+  // generated `FunctionReference` shapes are imported here directly.
+  // Note: `getTodayAdherence` lives on `medications`; `logIntake` lives on
+  // `intakeEvents` — the original code mistakenly called both off
+  // `medications`, which 404'd at runtime against real Convex.
   const apiAny = api as unknown as {
     medications: {
       getTodayAdherence: never
+    }
+    intakeEvents: {
       logIntake: never
     }
   }
@@ -150,7 +154,7 @@ export function IntakeTapList({
     adherenceArg as never,
   ) as AdherenceRow[] | undefined
 
-  const logIntakeRaw = useMutation(apiAny.medications.logIntake)
+  const logIntakeRaw = useMutation(apiAny.intakeEvents.logIntake)
   const logIntake = logIntakeRaw as unknown as (args: {
     userId: string
     medicationId: string

@@ -380,8 +380,11 @@ export default function CheckinPage({
       }>
     | undefined
   const logIntakeRaw = useMutation(
+    // `logIntake` lives on `intakeEvents`, not `medications` — the
+    // original `?.medications?.logIntake` 404'd at runtime against real
+    // Convex even though the typecast made it compile.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any)?.medications?.logIntake,
+    (api as any)?.intakeEvents?.logIntake,
   ) as unknown as (args: {
     userId: string
     medicationId: string
