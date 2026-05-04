@@ -44,6 +44,8 @@ vi.mock('@/convex/_generated/api', () => ({
   api: {
     medications: {
       getTodayAdherence: '__getTodayAdherence',
+    },
+    intakeEvents: {
       logIntake: '__logIntake',
     },
   },
