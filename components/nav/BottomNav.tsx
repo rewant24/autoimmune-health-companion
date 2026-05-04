@@ -7,14 +7,13 @@
  *
  * Locked decisions:
  *   - 5 pillars left-to-right: Home / Medications / Journey / Community / Settings.
- *   - Home + Journey are real <Link>s (Q-locked: Journey routes to /journey/memory
- *     because it has a working sub-route already).
- *   - Medications, Community, Settings are visually present but `aria-disabled="true"`,
+ *   - Home + Journey + Medications are real <Link>s. Medications was activated
+ *     in F04 C1 once `/medications` shipped (was previously `aria-disabled` per
+ *     onboarding-shell Q6).
+ *   - Community, Settings are visually present but `aria-disabled="true"`,
  *     no href, no onClick (Q6: un-built feature CTAs are non-interactive).
  *   - Active item highlighted by current pathname (`usePathname`).
  *   - Mobile-first: full-width, fixed-bottom, with `safe-area-inset-bottom` padding.
- *   - This cycle renders BottomNav on `/home` only (Q5). Retrofit to /check-in
- *     and /journey/memory is a separate follow-up.
  */
 
 import Link from 'next/link'
@@ -38,8 +37,8 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   {
     key: 'medications',
     label: 'Medications',
-    href: null,
-    match: () => false, // disabled — never active
+    href: '/medications',
+    match: (p) => Boolean(p?.startsWith('/medications')),
   },
   {
     key: 'journey',

@@ -16,8 +16,17 @@
 import { v } from "convex/values";
 import { internalMutation, mutation } from "./_generated/server";
 
-/** Locked daily attempt cap per ADR-020. The 6th call returns 429. */
-export const DAILY_CAP = 5;
+/**
+ * Daily attempt cap per ADR-020. The (cap + 1)th call returns 429.
+ *
+ * Production stays at 5 (the original ADR-020 cost ceiling). Non-production
+ * runtimes (local dev + Vercel preview deploys) use 50 so smoke passes can
+ * re-run the voice flow without hitting `extract.daily_cap_reached` and
+ * dropping to the manual reset script. Bumped per post-MVP backlog item 22.4
+ * (Voice C1 deferred polish, 2026-04-30).
+ */
+export const DAILY_CAP =
+  process.env.NODE_ENV === "production" ? 5 : 50;
 
 export type ExtractAttemptRow = {
   _id: string;

@@ -344,6 +344,8 @@
 - **Option A (Convex action).** Rejected: Saha will set up Gateway anyway for F03 / F06; running two LLM call paths increases ops surface.
 - **Option B (Next.js + direct OpenAI / Anthropic SDK).** Rejected: forfeits Gateway's failover, observability, and single-key model.
 
+**Amendment 2026-04-30 (F04 C1 fix-pass).** Dev/preview cap raised to 50 to support smoke replay (`process.env.NODE_ENV === 'production' ? 5 : 50` in `convex/extractAttempts.ts`). Production cap unchanged at 5. Rationale: post-MVP backlog item 22.4 — smoke testing was being interrupted by the cap during integration. Production behaviour and ADR-020's hard ceiling are unchanged.
+
 ---
 
 ## ADR-021 — `stage` enum semantics for `checkIns` records
@@ -590,4 +592,63 @@ Walking the SDK source confirmed the root cause: Sarvam's streaming WS is **VAD-
 - **Silently discard the orphan month on input change** (option A). Rejected: surprising; user would see the month dropdown reset itself.
 
 **Supersedes / amends:** Amends the Onboarding Shell cycle plan (`docs/features/00-onboarding-shell-cycle-plan.md`) — the Setup.US-2 acceptance criteria are relaxed and the locked seam type is updated. No prior ADR is superseded.
+
+## ADR-030 — Medications module shape: Hybrid (Option D), structured-form Cycle 1 + voice-first Cycle 2
+
+**Status.** Accepted (2026-04-30).
+
+**Context.** Scoping § Medications module locks the Hybrid (Option D) shape for the module overall — slow-changing regimen data lives in a dedicated module, daily adherence is captured via two parallel paths (home-page intake tap + voice check-in), and dosage changes are first-class events. The remaining open call is *how regimen entry happens in Cycle 1*. Two viable shapes:
+1. **Voice-first wizard:** the user speaks her regimen, an LLM structures it into a pill list, she edits.
+2. **Structured form:** the user fills name / dose / frequency / category / delivery as a typed form.
+
+Voice-first is the long-term direction (matches the rest of the app's give/get covenant); but it adds an LLM extraction surface, a confirm-and-edit UI, and a fall-back-to-form path — all of which want their own iteration loop.
+
+**Decision.** Cycle 1 ships **structured form entry** for regimen setup. Cycle 2 adds **voice-first** as an alternative entry mode (form remains the fallback). Adherence + dosage-change voice extraction still ships in Cycle 1 — the deferred bit is *only* the regimen-setup wizard, not voice in the Medications module overall.
+
+**Cycle 1 mechanics (locked):**
+- One-time setup wizard at `/medications/setup`, reachable from the Home setup-nudge slot. Form fields: name, dose, frequency, category (enum), delivery (enum). Submit appends one `medications` row with `isActive: true`.
+- Add / edit / deactivate from `/medications` (the module landing). Deactivate is soft (`isActive: false` + `deactivatedAt: number`) — intake events and dose changes reference the row.
+- Home `IntakeTapList` reads `getTodayAdherence(date)` — joins active medications with today's `intakeEvents`, returns the per-med taken/outstanding state.
+- Voice check-in extracts simple-adherence ("took my meds"), partial-adherence ("skipped the steroid"), and dosage-change mentions. Dosage-change writes are gated by a confirm card during the summary step (per scoping § Daily voice check-in — medication mechanics).
+- Dedupe: `logIntake` is idempotent on `clientRequestId`; the same-day cross-path race (home-tap then check-in) is collapsed in the handler — if any intake row exists for `(userId, medicationId, date)`, the second insert is a no-op that returns the existing id.
+
+**Consequences.**
+- Pros: Cycle 1 is one concrete UX (form + tap + voice extraction) instead of two competing entry surfaces. Voice extraction quality can be measured against the form-baseline once both ship. Smaller blast radius for the first prod ship.
+- Cons: Setup feels less "Saha-like" until Cycle 2 lands — patients who self-identify as voice-first users hit a typed form on day one.
+- Risks: Voice-first Cycle 2 is non-trivial (LLM regimen parser + confirm-and-edit + fallback); the deferral risks indefinite slip if the team never carves time. Mitigation: Cycle 2 sits in `docs/features/04-medications.md` § Cycle 2 plan with concrete chunk slots so it's pickable later.
+
+**Alternatives considered.**
+- **Voice-first now (Option 1).** Rejected: adds LLM extraction + confirm UI + fallback, all on top of a brand-new module. Larger first-ship surface, harder to review.
+- **Structured form forever.** Rejected: drifts from the give/get covenant. Voice-first is the right end state.
+- **Both modes in Cycle 1.** Rejected: doubles the scope of the first ship and the form path becomes vestigial during build.
+
+**Supersedes / amends:** None. Refines scoping § Medications module → *One-time setup* by locking Cycle 1 to structured form.
+
+## ADR-031 — Doctor visits + blood work as first-class timeline events (manual form + voice extraction)
+
+**Status.** Accepted (2026-04-30).
+
+**Context.** Scoping § Journey module → *Doctor-visit timeline* and § Lab-result tracking — MVP slice both promise that doctor visits and blood-work results are captured during the daily flow and surface as Memory timeline markers. The MVP-slice decision (2026-04-25, scoping.md) already locked structured marker capture (CRP / ESR / WBC / Hb + free-form) as in-MVP, with PDF/image attachment + OCR deferred (post-MVP backlog item 3). What remains open is *how* events are captured in Cycle 1 and *how* they render in Memory.
+
+**Decision.** Both visits and blood-work are first-class events with **two capture paths**, mirroring the F04 Medications shape:
+1. **Manual form** at `/visits/new` and `/blood-work/new`, reachable from a "Log a visit / blood work" affordance on `/journey/memory`. Visit form fields: date, doctorName, specialty (optional), visitType (consultation / follow-up / urgent / other), notes (optional). Blood-work form fields: date, markers[] (each: name, value, unit, refRangeLow?, refRangeHigh?), notes.
+2. **Voice extraction during check-in**: a candidate event surfaced as an `EventConfirmCard` during the summary step. On confirm, the row is written with `source: "check-in"` and a `checkInId` link to the originating check-in.
+
+**Memory rendering:** both event types extend `lib/memory/event-types.ts` (`eventFromVisit`, `eventFromBloodWork`) and render in the existing F02 Memory list with type-tagged pills (`APPOINTMENT`, `BLOOD WORK`) per the scoping § Home event feed pill convention.
+
+**Soft-delete only.** Both tables use `deletedAt: number` for delete; matches the F01 checkIns convention. Hard delete is post-MVP (item 21 follow-on).
+
+**Date-anchor resolution.** Voice-extracted events with relative phrases ("yesterday", "next Tuesday") resolve against the check-in's `date` field (device-local YYYY-MM-DD), so the extractor stays deterministic and timezone-stable. Absolute dates ("April 28") are accepted as-is.
+
+**Consequences.**
+- Pros: One data shape per event, two write paths — review-light. The Memory surface gains visible new event types without a Memory rewrite. The F06 Doctor Report's auto-window calculation (last visit → today) gets its anchor data immediately.
+- Cons: Voice extraction false-positives are non-zero; the confirm card is the only safety net. The card must be skippable so a noisy check-in doesn't trap the user.
+- Risks: Form-only users may never discover the voice-extraction path. Acceptable — both surfaces are equivalent; voice is a convenience.
+
+**Alternatives considered.**
+- **Voice-only capture** (no form). Rejected: a patient with a known clinic visit shouldn't need to wait for their next check-in to log it.
+- **Form-only capture** (defer voice extraction to F05 C2). Rejected: misses the highest-leverage voice-flow win — the user already volunteers this data unprompted.
+- **Combined visits + blood-work table.** Rejected: their structured shapes are different enough (markers array vs. notes string) that union types in Convex would cost more than they save.
+
+**Supersedes / amends:** None. Refines scoping § Doctor-visit timeline + § Lab-result tracking — MVP slice with the locked Cycle 1 mechanics.
 

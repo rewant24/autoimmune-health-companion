@@ -48,13 +48,24 @@ export type FlareEvent = BaseEventFields & {
 
 export type IntakeEvent = BaseEventFields & {
   type: "intake";
-  payload: Record<string, never>;
+  payload: {
+    medicationId: string;
+    medicationName: string;
+    dose: string;
+    source: "home-tap" | "check-in";
+  };
 };
 
 export type VisitEvent = BaseEventFields & {
   type: "visit";
+  // SPRINT_F05_VISIT_PAYLOAD — chunk 5.C replaces this with the real
+  // payload shape (visitId, doctorName, specialty, visitType, notes).
   payload: Record<string, never>;
 };
+
+// SPRINT_F05_BLOODWORK_EVENT — chunk 5.C adds `BloodWorkEvent` here with
+// payload { bloodWorkId, markerCount, abnormalCount } and includes it in
+// the MemoryEvent union below.
 
 export type MemoryEvent = CheckInEvent | FlareEvent | IntakeEvent | VisitEvent;
 
@@ -129,4 +140,59 @@ export function eventFromCheckin(row: CheckinRow): MemoryEvent[] {
   }
 
   return events;
+}
+
+// ---- F04 chunk 4.C — intake event projection ------------------------------
+
+/** Minimal intake-row shape `eventFromIntake` reads. Mirrors the
+ *  `intakeEvents` table; defined locally so this module doesn't pull in
+ *  the Convex generated types (which compile only after `convex dev`). */
+export interface IntakeEventRow {
+  _id: string;
+  medicationId: string;
+  date: string;
+  takenAt: number;
+  source: "home-tap" | "check-in" | "module";
+}
+
+/** Minimal medication shape needed to render an intake row's title/meta. */
+export interface IntakeMedication {
+  _id: string;
+  name: string;
+  dose: string;
+}
+
+/**
+ * Project one intake row into a Memory IntakeEvent. Source is normalised:
+ * `module` rows (explicit log inside /medications) are reported as
+ * `home-tap` in the Memory feed because the user typed/tapped, not the
+ * voice path. The `intake` event type discriminator is preserved.
+ *
+ * Returns `null` when the supplied medication doesn't match the row's
+ * `medicationId` — defensive guard so a stale closure doesn't render a
+ * "Took ?" card.
+ */
+export function eventFromIntake(
+  row: IntakeEventRow,
+  medication: IntakeMedication,
+): IntakeEvent | null {
+  if (row.medicationId !== medication._id) return null;
+  const time = formatTimeIST(row.takenAt);
+  const memorySource: "home-tap" | "check-in" =
+    row.source === "check-in" ? "check-in" : "home-tap";
+  return {
+    type: "intake",
+    eventId: `intake:${row._id}`,
+    date: row.date,
+    time,
+    title: `Took ${medication.name}`,
+    meta: medication.dose,
+    taskState: "done",
+    payload: {
+      medicationId: medication._id,
+      medicationName: medication.name,
+      dose: medication.dose,
+      source: memorySource,
+    },
+  };
 }
