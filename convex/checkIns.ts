@@ -100,15 +100,41 @@ type IndexBuilder = {
   eq: (field: "userId" | "date", value: string) => IndexBuilder;
 };
 
+// Minimal medication shape needed for the Memory intake projection — name
+// and dose for the row title/meta. The real `medications` table doc has
+// more fields; this is the structural subset our handler reads.
+export type MedicationRowForMemory = {
+  _id: string;
+  userId: string;
+  name: string;
+  dose: string;
+};
+
+// Minimal intake-event row shape — mirrors `IntakeEventRow` from the
+// memory event-types module + the `userId`/`deletedAt` fields the handler
+// filters on.
+export type IntakeEventDbRow = IntakeEventRow & {
+  userId: string;
+  deletedAt?: number;
+};
+
+type Queryable<Row> = {
+  withIndex: (
+    name: "by_user_date" | "by_user",
+    cb: (q: IndexBuilder) => IndexBuilder,
+  ) => {
+    collect: () => Promise<Row[]>;
+  };
+};
+
 type MutationHandlerCtx = {
   db: {
-    query: (table: "checkIns") => {
-      withIndex: (
-        name: "by_user_date",
-        cb: (q: IndexBuilder) => IndexBuilder,
-      ) => {
-        collect: () => Promise<CheckinRow[]>;
-      };
+    // Overloads — each table returns its own row type. Tests pass a mock
+    // ctx that branches on the table arg (see tests/memory/list-events-query.test.ts).
+    query: {
+      (table: "checkIns"): Queryable<CheckinRow>;
+      (table: "intakeEvents"): Queryable<IntakeEventDbRow>;
+      (table: "medications"): Queryable<MedicationRowForMemory>;
     };
     insert: (
       table: "checkIns",
