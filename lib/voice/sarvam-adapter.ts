@@ -933,14 +933,26 @@ function parseErrorPayload(data: string): VoiceError {
       try {
         const parsed = JSON.parse(trimmed) as { kind?: unknown; message?: unknown }
         const kindRaw = typeof parsed.kind === 'string' ? parsed.kind : 'network'
-        const allowed = new Set([
+        // Server-side SSE frames carry the route's `voice.*` codes
+        // (e.g. `voice.rate_limited`). The UI vocabulary uses dash-form
+        // kinds (`rate-limited`). Translate the codes the UI cares about
+        // explicitly; fall through to dash-form kinds for legacy callers.
+        const serverToKind: Record<string, VoiceError['kind']> = {
+          'voice.rate_limited': 'rate-limited',
+        }
+        const allowed = new Set<VoiceError['kind']>([
           'permission-denied',
           'no-speech',
           'network',
           'unsupported',
           'aborted',
+          'rate-limited',
         ])
-        const kind = (allowed.has(kindRaw) ? kindRaw : 'network') as VoiceError['kind']
+        const mapped = serverToKind[kindRaw]
+        const kind: VoiceError['kind'] =
+          mapped ?? (allowed.has(kindRaw as VoiceError['kind'])
+            ? (kindRaw as VoiceError['kind'])
+            : 'network')
         const message =
           typeof parsed.message === 'string' ? parsed.message : 'Sarvam STT error.'
         return { kind, message }

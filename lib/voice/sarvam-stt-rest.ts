@@ -50,6 +50,7 @@ export type SarvamRestErrorCode =
   | 'voice.session_too_large'
   | 'voice.unprocessable'
   | 'voice.aborted'
+  | 'voice.rate_limited'
 
 /** Typed error class so the route can branch on `.code` without string-matching. */
 export class SarvamRestError extends Error {
@@ -173,6 +174,20 @@ export async function transcribeBatch(
       throw new SarvamRestError(
         'voice.provider_unconfigured',
         `Sarvam rejected the API key (HTTP ${response.status}).`,
+      )
+    }
+    if (response.status === 429) {
+      // Plan-level rate limit (Sarvam Starter is 60 STT REST/min). Surface
+      // a friendlier kind so the UI can suggest tap-fallback instead of
+      // showing a generic "Something got in the way" network error.
+      const retryAfter = response.headers.get('retry-after')
+      const hint =
+        typeof retryAfter === 'string' && retryAfter.trim().length > 0
+          ? ` Retry after ${retryAfter.trim()}s.`
+          : ''
+      throw new SarvamRestError(
+        'voice.rate_limited',
+        `Voice service is busy right now — try again in a moment, or tap your answers.${hint}`,
       )
     }
     throw new SarvamRestError(
