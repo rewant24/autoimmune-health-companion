@@ -900,10 +900,39 @@ export default function CheckinPage({
         })
       } catch (err) {
         if (runId !== extractionRunIdRef.current) return
-        // ExtractDailyCapError + ExtractFailedError both fall through to
-        // a fully-scripted Stage 2 — user can still complete the check-in.
+        // ExtractDailyCapError + ExtractFailedError both fall through.
         if (err instanceof ExtractDailyCapError) {
           // No-op marker; future telemetry hook can land here.
+        }
+        // Voice mode: keep the conversational loop alive even when extract
+        // fails (cap reached / gateway 429 / network / malformed body).
+        // Without this branch, every failure cliff-edges into a silent
+        // Stage 2 form — the user spoke, the assistant fell mute, and a
+        // tap form appeared. Treat the turn as "all 5 missing, unparsed"
+        // and let the per-metric voice loop walk through the list verbally,
+        // matching the success-path behaviour. Tap-only users still fall
+        // back to the scripted Stage 2 form.
+        if (ttsAvailable) {
+          const missingAll: Metric[] = [
+            'pain',
+            'mood',
+            'adherenceTaken',
+            'flare',
+            'energy',
+          ]
+          const next = missingAll[0]
+          if (next === undefined) {
+            dispatch({ type: 'EXTRACTION_FAILED' })
+            return
+          }
+          const q = selectFollowUpQuestion(next, 1, continuityState)
+          dispatch({
+            type: 'ASK_QUESTION',
+            metric: next,
+            text: q.text,
+            seed: { metrics: {}, missing: missingAll, declined: [] },
+          })
+          return
         }
         dispatch({ type: 'EXTRACTION_FAILED' })
       }
