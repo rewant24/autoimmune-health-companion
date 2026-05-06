@@ -74,7 +74,12 @@ export const MedicationExtractionSchema = z.object({
     z.object({
       medicationName: z.string(),
       newDose: z.string(),
-      reason: z.string().optional(),
+      // OpenAI structured-outputs requires every property to appear in
+      // `required`. `.nullable()` keeps the field required while letting
+      // the LLM emit `null` when no reason was spoken. The resolver below
+      // normalises null → undefined so callers see the existing optional
+      // shape.
+      reason: z.string().nullable(),
     }),
   ),
 })
@@ -289,7 +294,7 @@ export function resolveDosageChanges(
     out.push({
       medication: match,
       newDose: change.newDose,
-      reason: change.reason,
+      reason: change.reason ?? undefined,
     })
   }
   return out
