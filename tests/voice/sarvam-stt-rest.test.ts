@@ -241,6 +241,42 @@ describe('transcribeBatch — error paths', () => {
     })
   })
 
+  it('throws voice.rate_limited on 429', async () => {
+    const ff = makeFakeFetch(() => new Response('too many requests', { status: 429 }))
+    await expect(
+      transcribeBatch({
+        audio: SAMPLE_AUDIO,
+        languageCode: 'en-IN',
+        fetchImpl: ff.fetch,
+      }),
+    ).rejects.toMatchObject({
+      name: 'SarvamRestError',
+      code: 'voice.rate_limited',
+    })
+  })
+
+  it('includes Retry-After hint when Sarvam supplies the header', async () => {
+    const ff = makeFakeFetch(
+      () =>
+        new Response('too many requests', {
+          status: 429,
+          headers: { 'retry-after': '12' },
+        }),
+    )
+    let captured: unknown
+    try {
+      await transcribeBatch({
+        audio: SAMPLE_AUDIO,
+        languageCode: 'en-IN',
+        fetchImpl: ff.fetch,
+      })
+    } catch (err) {
+      captured = err
+    }
+    expect(captured).toBeInstanceOf(Error)
+    expect((captured as Error).message).toContain('Retry after 12s')
+  })
+
   it('throws voice.network on 500', async () => {
     const ff = makeFakeFetch(() => new Response('internal error', { status: 500 }))
     await expect(

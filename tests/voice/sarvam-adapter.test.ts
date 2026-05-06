@@ -534,6 +534,38 @@ describe('SarvamAdapter — stop() final + partials (US-V.B.3)', () => {
     ])
   })
 
+  it('maps server `voice.rate_limited` SSE error to UI kind `rate-limited`', async () => {
+    const { stream } = makeFakeStream()
+    const recorder = makeFakeRecorder()
+    const ctrl = makeStreamingResponse()
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(ctrl.response) as unknown as typeof fetch
+
+    const a = new SarvamAdapter({
+      language_code: 'en-IN',
+      getUserMediaImpl: vi.fn().mockResolvedValue(stream),
+      recorderFactory: () => recorder,
+      fetchImpl,
+    })
+    const errors: VoiceError[] = []
+    a.onError((e) => errors.push(e))
+    await a.start()
+
+    setTimeout(() => {
+      ctrl.push(
+        'event: error\ndata: {"kind":"voice.rate_limited","message":"Voice service is busy right now — try again in a moment, or tap your answers."}\n\n',
+      )
+      ctrl.end()
+    }, 0)
+
+    await expect(a.stop()).rejects.toMatchObject({
+      kind: 'rate-limited',
+      message: expect.stringContaining('busy right now'),
+    })
+    expect(errors[errors.length - 1]).toMatchObject({ kind: 'rate-limited' })
+  })
+
   it('treats stream-end-without-final as aborted', async () => {
     const { stream } = makeFakeStream()
     const recorder = makeFakeRecorder()

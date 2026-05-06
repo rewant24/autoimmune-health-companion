@@ -28,6 +28,8 @@ export interface Transcript {
  *   SpeechRecognition on this browser).
  * - `aborted`: session ended before a final result (programmatic stop, tab
  *   hidden, navigation).
+ * - `rate-limited`: provider returned HTTP 429 (per-plan limit). UI should
+ *   suggest tap fallback rather than showing a generic network error.
  */
 export type VoiceErrorKind =
   | 'permission-denied'
@@ -35,6 +37,7 @@ export type VoiceErrorKind =
   | 'network'
   | 'unsupported'
   | 'aborted'
+  | 'rate-limited'
 
 export interface VoiceError {
   kind: VoiceErrorKind
