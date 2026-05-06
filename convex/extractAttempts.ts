@@ -14,7 +14,7 @@
  * the structural shape — no runtime effect.
  */
 import { v } from "convex/values";
-import { internalMutation, mutation } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 /**
  * Daily attempt cap per ADR-020. The (cap + 1)th call returns 429.
@@ -133,6 +133,34 @@ export const incrementAndCheck = mutation({
  * ADR-020's hard 5/day cap as a real ceiling on prod — only platform
  * admins can clear rows.
  */
+/**
+ * QA-only inspection: read the current `(userId, date)` attempt count.
+ *
+ * Returns `0` when no row exists. Used by F04 layer 2 contract tests to
+ * assert the ADR-020 invariant — the medication-extract route must NOT
+ * increment the cost-guard counter (the metric-extract route owns that
+ * single increment per check-in). If `getCount` ever returns a higher
+ * value after `/api/check-in/extract-medication` than before it, that's
+ * a regression.
+ *
+ * Public query (not internal) so `ConvexHttpClient` can call it from a
+ * test runner. Read-only, no PII surface, scoped to the supplied
+ * `(userId, date)` — safe to expose.
+ */
+export const getCount = query({
+  args: { userId: v.string(), date: v.string() },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("extractAttempts")
+      .withIndex("by_user_date", (q) =>
+        q.eq("userId", args.userId).eq("date", args.date),
+      )
+      .unique();
+    return row === null ? 0 : row.count;
+  },
+});
+
 export const resetForUserOnDate = internalMutation({
   args: {
     userId: v.string(),

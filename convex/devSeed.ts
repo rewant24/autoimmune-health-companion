@@ -31,8 +31,8 @@
  * Only `npx convex run` (which uses the deploy key) or another Convex
  * function can invoke it.
  */
-import { v } from "convex/values";
-import { internalMutation } from "./_generated/server";
+import { ConvexError, v } from "convex/values";
+import { internalMutation, mutation } from "./_generated/server";
 
 interface SeedDay {
   /** Days back from today (IST). 0 = today, 14 = oldest. */
@@ -374,5 +374,106 @@ export const wipeSeed = internalMutation({
       }
     }
     return { deleted };
+  },
+});
+
+/**
+ * QA-only: wipe ALL data for one synthetic test user across the F04 surface
+ * (medications, intakeEvents, dosageChanges, checkIns, extractAttempts).
+ *
+ * Used by `tests/integration/medications.test.ts` to clean up between
+ * cases against the live dev Convex deployment.
+ *
+ * IMPORTANT — public `mutation` (not `internalMutation`):
+ *
+ *   The QA plan (F04 layer 1) asked for `internalMutation`, but
+ *   `ConvexHttpClient` cannot invoke internal functions: the client has
+ *   no public `setAdminAuth` and the `/api/mutation` HTTP endpoint
+ *   rejects internal refs. Making this public is the only way the
+ *   integration tests can call it. To compensate, the handler enforces
+ *   a `qa_` prefix on the userId so a hostile caller cannot wipe a real
+ *   user's data via this entrypoint. Synthetic test userIds are always
+ *   `qa_${randomUUID()}`.
+ *
+ * Idempotent: calling on a user with no rows returns zero counts.
+ */
+export const wipeUser = mutation({
+  args: { userId: v.string() },
+  returns: v.object({
+    medications: v.number(),
+    intakeEvents: v.number(),
+    dosageChanges: v.number(),
+    checkIns: v.number(),
+    extractAttempts: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    if (!args.userId.startsWith("qa_")) {
+      // Refuse to wipe anything that isn't a synthetic QA user. This is
+      // the safety gate that lets us expose the function publicly.
+      throw new ConvexError({
+        code: "devSeed.refused_non_qa_user",
+        message: "wipeUser only operates on userIds prefixed 'qa_'.",
+      });
+    }
+
+    let medications = 0;
+    let intakeEvents = 0;
+    let dosageChanges = 0;
+    let checkIns = 0;
+    let extractAttempts = 0;
+
+    const medRows = await ctx.db
+      .query("medications")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const row of medRows) {
+      await ctx.db.delete(row._id);
+      medications++;
+    }
+
+    const intakeRows = await ctx.db
+      .query("intakeEvents")
+      .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const row of intakeRows) {
+      await ctx.db.delete(row._id);
+      intakeEvents++;
+    }
+
+    // dosageChanges has by_user_changed_at index keyed on userId.
+    const dosageRows = await ctx.db
+      .query("dosageChanges")
+      .withIndex("by_user_changed_at", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const row of dosageRows) {
+      await ctx.db.delete(row._id);
+      dosageChanges++;
+    }
+
+    const checkInRows = await ctx.db
+      .query("checkIns")
+      .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const row of checkInRows) {
+      await ctx.db.delete(row._id);
+      checkIns++;
+    }
+
+    const attemptRows = await ctx.db
+      .query("extractAttempts")
+      .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+      .collect();
+    for (const row of attemptRows) {
+      await ctx.db.delete(row._id);
+      extractAttempts++;
+    }
+
+    return {
+      medications,
+      intakeEvents,
+      dosageChanges,
+      checkIns,
+      extractAttempts,
+    };
   },
 });

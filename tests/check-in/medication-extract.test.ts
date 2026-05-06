@@ -287,7 +287,7 @@ describe('resolveDosageChanges', () => {
       skippedMedications: [],
       dosageChanges: [
         { medicationName: 'prednisone', newDose: '20mg', reason: 'flare' },
-        { medicationName: 'Methotrexate', newDose: '20mg' },
+        { medicationName: 'Methotrexate', newDose: '20mg', reason: null },
       ],
     }
     const resolved = resolveDosageChanges(result, REGIMEN)
@@ -302,7 +302,7 @@ describe('resolveDosageChanges', () => {
     const result: ExtractedMedicationResult = {
       simpleAdherence: null,
       skippedMedications: [],
-      dosageChanges: [{ medicationName: 'Aspirin', newDose: '100mg' }],
+      dosageChanges: [{ medicationName: 'Aspirin', newDose: '100mg', reason: null }],
     }
     expect(resolveDosageChanges(result, REGIMEN)).toEqual([])
   })
@@ -311,7 +311,7 @@ describe('resolveDosageChanges', () => {
     const result: ExtractedMedicationResult = {
       simpleAdherence: null,
       skippedMedications: [],
-      dosageChanges: [{ medicationName: 'Prednisone', newDose: '10mg' }],
+      dosageChanges: [{ medicationName: 'Prednisone', newDose: '10mg', reason: null }],
     }
     expect(resolveDosageChanges(result, REGIMEN)).toEqual([])
   })
@@ -323,7 +323,7 @@ describe('resolveDosageChanges', () => {
     const result: ExtractedMedicationResult = {
       simpleAdherence: null,
       skippedMedications: [],
-      dosageChanges: [{ medicationName: 'Prednisone', newDose: '10 mg' }],
+      dosageChanges: [{ medicationName: 'Prednisone', newDose: '10 mg', reason: null }],
     }
     expect(resolveDosageChanges(result, REGIMEN)).toHaveLength(1)
   })

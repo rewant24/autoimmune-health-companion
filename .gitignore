@@ -50,3 +50,8 @@ handbook.backup-*/
 
 # spike artifacts (audio samples, scratch outputs from research spikes)
 docs/research/spike-out/
+
+# playwright (e2e test artifacts)
+/test-results/
+/playwright-report/
+/.playwright/

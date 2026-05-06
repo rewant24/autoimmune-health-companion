@@ -9,6 +9,16 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.{ts,tsx}'],
+    // `*.live.test.ts` files run under `vitest.integration.config.ts` (node env,
+    // no convex/react mock, real ConvexHttpClient). Excluding them here keeps
+    // `pnpm test` fast and free of network calls. Also exclude tests/integration
+    // for the same reason (those have their own config).
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'tests/integration/**',
+      'tests/**/*.live.test.ts',
+    ],
     // Workaround: default `forks`/`threads` pools time out spawning workers
     // when the project lives on a path with spaces or `+` (this volume:
     // `/Volumes/Coding Projects + Docker/`). vmThreads sidesteps the worker
