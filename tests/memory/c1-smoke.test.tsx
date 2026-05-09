@@ -122,6 +122,7 @@ describe('F02 C1 smoke — MemoryTab integrated with seeded events', () => {
       'Intake events',
       'Flare-ups',
       'Visits',
+      'Blood work',
     ])
 
     // Day-list area exists with selectedDate + filter data attrs.

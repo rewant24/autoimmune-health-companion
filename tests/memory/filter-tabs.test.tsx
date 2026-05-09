@@ -27,16 +27,17 @@ function getFilterNav(): HTMLElement {
 }
 
 describe('<FilterTabs />', () => {
-  it('renders 5 chips with verbatim labels in fixed order', () => {
+  it('renders 6 chips with verbatim labels in fixed order', () => {
     render(<FilterTabs value="all" onChange={() => {}} />)
     const tabs = within(getFilterNav()).getAllByRole('button')
-    expect(tabs).toHaveLength(5)
+    expect(tabs).toHaveLength(6)
     expect(tabs.map((t) => t.textContent)).toEqual([
       'All',
       'Check-ins',
       'Intake events',
       'Flare-ups',
       'Visits',
+      'Blood work',
     ])
   })
 
@@ -44,8 +45,16 @@ describe('<FilterTabs />', () => {
     render(<FilterTabs value="flare-ups" onChange={() => {}} />)
     const tabs = within(getFilterNav()).getAllByRole('button')
     const ariaStates = tabs.map((t) => t.getAttribute('aria-pressed'))
-    // Order: all, check-ins, intake-events, flare-ups, visits → only #4 selected.
-    expect(ariaStates).toEqual(['false', 'false', 'false', 'true', 'false'])
+    // Order: all, check-ins, intake-events, flare-ups, visits, blood-work
+    // → only #4 (flare-ups) selected.
+    expect(ariaStates).toEqual([
+      'false',
+      'false',
+      'false',
+      'true',
+      'false',
+      'false',
+    ])
   })
 
   it('fires onChange with the right filter value when a chip is clicked', async () => {

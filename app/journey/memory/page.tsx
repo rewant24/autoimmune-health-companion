@@ -29,6 +29,7 @@ const FILTER_VALUES: ReadonlySet<MemoryFilter> = new Set([
   'intake-events',
   'flare-ups',
   'visits',
+  'blood-work',
 ])
 
 function parseFilter(raw: string | null): MemoryFilter {
