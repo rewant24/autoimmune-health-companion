@@ -142,7 +142,7 @@ export default function VisitsPage(): React.JSX.Element {
                 fontVariationSettings: "'SOFT' 100, 'opsz' 24, 'wght' 420",
               }}
             >
-              No doctor visits logged yet.
+              No visits saved yet — add your last appointment in 30 seconds.
             </p>
             <div className="mt-4">
               <Link

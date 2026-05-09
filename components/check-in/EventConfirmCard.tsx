@@ -28,6 +28,23 @@ import { useState } from 'react'
 
 const COMMON_UNITS = ['mg/L', 'mm/hr', 'g/dL', '×10⁹/L'] as const
 
+/** Format YYYY-MM-DD as "Tue, 21 Apr 2026" in IST. Mirrors the
+ *  formatter in VisitCard + BloodWorkCard — TODO follow-up: lift to
+ *  `lib/format/date.ts` and DRY the three call sites. Inlining for now
+ *  keeps the F05 ship diff narrow (per "no unnecessary abstractions"). */
+function formatDate(date: string): string {
+  const [y, m, d] = date.split('-').map(Number)
+  if (!y || !m || !d) return date
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(dt)
+}
+
 export interface VisitConfirmCardProps {
   kind: 'visit'
   date: string
@@ -123,8 +140,8 @@ export function EventConfirmCard(
 
   const titleText =
     props.kind === 'visit'
-      ? `Doctor visit on ${props.date}?`
-      : `Blood work on ${props.date}?`
+      ? `Doctor visit on ${formatDate(props.date)}?`
+      : `Blood work on ${formatDate(props.date)}?`
 
   if (done === 'saved') {
     return (
@@ -165,7 +182,7 @@ export function EventConfirmCard(
       >
         <p className="type-label">{titleText}</p>
         <p className="type-body mt-2" style={{ color: 'var(--ink-muted)' }}>
-          Couldn&rsquo;t save — tap to retry.
+          Couldn&rsquo;t save. Tap retry?
         </p>
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <button
@@ -237,7 +254,7 @@ export function EventConfirmCard(
             I heard: {props.doctorName} · {visitTypeLabel[props.visitType]}
           </>
         ) : (
-          <>I heard:</>
+          <>Here&rsquo;s what I caught:</>
         )}
       </h3>
       {props.kind === 'blood-work' ? (

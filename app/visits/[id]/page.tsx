@@ -315,7 +315,7 @@ function DeleteConfirm({
             fontVariationSettings: "'SOFT' 100, 'opsz' 24, 'wght' 420",
           }}
         >
-          Delete this visit / blood-work entry? You can&rsquo;t undo this.
+          Delete this doctor visit? You can&rsquo;t undo this.
         </h2>
         <div className="mt-6 flex items-center justify-end gap-3">
           <button

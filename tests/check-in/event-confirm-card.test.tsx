@@ -30,7 +30,8 @@ describe('<EventConfirmCard /> — visit kind', () => {
       'data-state',
       'prompt',
     )
-    expect(screen.getByText(/Doctor visit on 2026-05-09/)).toBeInTheDocument()
+    // Title uses formatted date "Sat, 9 May 2026" (IST), not the ISO YYYY-MM-DD.
+    expect(screen.getByText(/Doctor visit on Sat, 9 May 2026/)).toBeInTheDocument()
     expect(screen.getByText(/Dr\. Mehta · Follow-up/)).toBeInTheDocument()
   })
 

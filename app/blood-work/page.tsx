@@ -142,7 +142,7 @@ export default function BloodWorkPage(): React.JSX.Element {
                 fontVariationSettings: "'SOFT' 100, 'opsz' 24, 'wght' 420",
               }}
             >
-              No blood work logged yet.
+              No results saved yet — log your latest panel so trends start showing up.
             </p>
             <div className="mt-4">
               <Link
