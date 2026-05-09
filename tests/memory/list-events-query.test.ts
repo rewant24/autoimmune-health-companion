@@ -271,6 +271,57 @@ describe("listEventsByRangeHandler", () => {
     }
   });
 
+  it("future-dated visit projects taskState='pending'; today/past project 'done'", async () => {
+    // Pin nowMs to noon-IST on 2026-05-09 so the boundary is deterministic.
+    const nowMs = Date.UTC(2026, 4, 9, 6, 30, 0, 0); // 12:00 IST
+    const { ctx, visitRows } = makeCtx();
+    visitRows.push(
+      {
+        _id: "visit_past",
+        userId: "user_A",
+        date: "2026-05-08", // yesterday → done
+        doctorName: "Dr. A",
+        specialty: undefined,
+        visitType: "consultation",
+        notes: undefined,
+        source: "module",
+        createdAt: Date.UTC(2026, 4, 8, 9, 0, 0, 0),
+      },
+      {
+        _id: "visit_today",
+        userId: "user_A",
+        date: "2026-05-09", // today → done
+        doctorName: "Dr. B",
+        specialty: undefined,
+        visitType: "consultation",
+        notes: undefined,
+        source: "module",
+        createdAt: Date.UTC(2026, 4, 9, 4, 0, 0, 0),
+      },
+      {
+        _id: "visit_future",
+        userId: "user_A",
+        date: "2026-05-12", // future → pending
+        doctorName: "Dr. C",
+        specialty: undefined,
+        visitType: "follow-up",
+        notes: undefined,
+        source: "module",
+        createdAt: Date.UTC(2026, 4, 9, 5, 0, 0, 0),
+      },
+    );
+    const result = await listEventsByRangeHandler(ctx as unknown as Ctx, {
+      userId: "user_A",
+      fromDate: "2026-05-08",
+      toDate: "2026-05-12",
+      nowMs,
+    });
+    const byId = new Map(result.events.map((e) => [e.eventId, e]));
+    expect(byId.get("visit:visit_past")?.taskState).toBe("done");
+    expect(byId.get("visit:visit_today")?.taskState).toBe("done");
+    expect(byId.get("visit:visit_future")?.taskState).toBe("pending");
+  });
+
   it("includes a bloodWork entry with markerCount + abnormalCount", async () => {
     const { ctx, bloodWorkRows } = makeCtx();
     bloodWorkRows.push({

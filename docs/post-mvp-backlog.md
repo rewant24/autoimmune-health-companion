@@ -235,6 +235,12 @@ Captured during the cold-eyes review of `feat/voice-sarvam` @ `307dd0d`. All def
 
 ---
 
+## 23. Memory tab — real cross-table search (added 2026-05-09)
+
+Surfaced during F05 C1 smoke. The Memory header had a search icon that was a no-op stub from F02 (chunk 2.E was deferred). Smoke tester reasonably expected it to work. Hidden in F05 C1 so the UI doesn't promise functionality it doesn't have. **Real shape:** a `<SearchBar />` that queries across `checkIns` (transcript text), `intakeEvents` (medication name lookup via join), `doctorVisits` (doctorName + specialty + notes), and `bloodWork` (marker names + notes). Server-side query on a new `convex/memory.ts:searchEvents` taking `{ userId, queryText, limit }`, debounced 200ms client-side, ranked by recency-tied-to-relevance. Results UI: same `EventRow` projection used by the day list, grouped by date. **Architectural hook:** the four `eventFromX` projections in `lib/memory/event-types.ts` already produce a uniform `MemoryEvent`. Search just needs a different fetch path (text-match, not date-range). Convex doesn't ship a built-in full-text index yet, so MVP version can do `collect()` + JS substring filter while row counts are small (same compromise as `listEventsByRangeHandler` today); revisit when row counts force a real search index. **Acceptance:** search "mehta" returns the doctor visit; "crp" returns the blood work entry; "skipped" returns the check-in transcript that mentioned skipping a med. **Why deferred:** F05 C1 was the last MVP feature before pricing/auth — search is its own mini-cycle and needs the auth model first (per-user search index keying is auth-dependent).
+
+---
+
 ## Review cadence
 
 This backlog is reviewed at two points:

@@ -163,7 +163,12 @@ export function BloodWorkForm({
 
   const hasComplete = rowsHaveAnyComplete(rows)
   const hasError = rowsHaveAnyError(rows)
-  const canSubmit = hasComplete && !hasError && !submitting
+  // Blood work is a record of a past test — future dates are not valid.
+  // Mirrors the backend `bloodWork.future_date` guard so the UI rejects
+  // before the round-trip; backend stays authoritative.
+  const today = todayIST()
+  const isFutureDate = date > today
+  const canSubmit = hasComplete && !hasError && !isFutureDate && !submitting
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault()
@@ -224,7 +229,9 @@ export function BloodWorkForm({
             id={`${formId}-date`}
             type="date"
             value={date}
+            max={today}
             onChange={(e) => setDate(e.target.value)}
+            data-testid="blood-work-form-date"
             className="mt-1 block w-full rounded-xl border px-4 py-3 text-[15px]"
             style={{
               borderColor: 'var(--rule)',
@@ -232,6 +239,15 @@ export function BloodWorkForm({
               color: 'var(--ink)',
             }}
           />
+          {isFutureDate ? (
+            <p
+              data-testid="blood-work-form-future-date-error"
+              className="mt-1 text-[13px]"
+              style={{ color: 'var(--terracotta)' }}
+            >
+              Pick today or a past date — blood work logs results that already came back.
+            </p>
+          ) : null}
         </label>
 
         <p

@@ -223,9 +223,22 @@ const VISIT_TYPE_LABELS: Record<DoctorVisitRow["visitType"], string> = {
  * Project one doctor-visit row into a Memory VisitEvent. Title is "Doctor
  * visit"; meta is "[doctorName] · [visitType]". Tap-to-detail routes to
  * `/visits/[visitId]` (see `EventRow`).
+ *
+ * `taskState` is date-aware: visits whose date is in the past or today
+ * project as `done` (the appointment happened or is happening); visits
+ * dated after today project as `pending` (upcoming appointment that
+ * hasn't taken place yet). `todayIso` MUST be a `YYYY-MM-DD` string in
+ * the same timezone as the row's `date` field (IST in our case) — pass
+ * it from the handler so the projection stays a pure function and tests
+ * remain deterministic.
  */
-export function eventFromVisit(row: DoctorVisitRow): VisitEvent {
+export function eventFromVisit(
+  row: DoctorVisitRow,
+  todayIso: string,
+): VisitEvent {
   const time = formatTimeIST(row.createdAt);
+  const taskState: "done" | "pending" =
+    row.date <= todayIso ? "done" : "pending";
   return {
     type: "visit",
     eventId: `visit:${row._id}`,
@@ -233,7 +246,7 @@ export function eventFromVisit(row: DoctorVisitRow): VisitEvent {
     time,
     title: "Doctor visit",
     meta: `${row.doctorName} · ${VISIT_TYPE_LABELS[row.visitType]}`,
-    taskState: "done",
+    taskState,
     payload: {
       visitId: row._id,
       doctorName: row.doctorName,

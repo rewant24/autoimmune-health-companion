@@ -138,11 +138,42 @@ type BloodWorkCtx = {
 // Validation helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Compute today's YYYY-MM-DD in IST from a UTC ms timestamp. Test-injectable
+ * so future-date assertions stay deterministic. Mirrors the same formatter
+ * used in `convex/checkIns.ts` and `BloodWorkForm`.
+ */
+function todayIstFromMs(nowMs: number): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(nowMs));
+}
+
 function assertBloodWorkDate(date: string): void {
   if (!DATE_RE.test(date)) {
     throw new ConvexError({
       code: "bloodWork.bad_date_format",
       message: "Blood-work date must be YYYY-MM-DD.",
+    });
+  }
+}
+
+/**
+ * Defense-in-depth on the form-level future-date guard. Blood work is by
+ * definition a record of a test that already happened, so future dates are
+ * nonsensical and would produce confusing taskState/Memory ordering. Called
+ * only from write paths (create + update); the read paths (`get*`) intentionally
+ * accept any well-formed date so they can answer "what's there" honestly.
+ */
+function assertBloodWorkDateNotFuture(date: string, nowMs: number): void {
+  const today = todayIstFromMs(nowMs);
+  if (date > today) {
+    throw new ConvexError({
+      code: "bloodWork.future_date",
+      message: "Blood-work date cannot be in the future.",
     });
   }
 }
@@ -242,6 +273,7 @@ export async function createBloodWorkHandler(
   now: () => number = Date.now,
 ): Promise<{ bloodWorkId: string; deduped: boolean }> {
   assertBloodWorkDate(args.date);
+  assertBloodWorkDateNotFuture(args.date, now());
   assertSourceCheckInInvariant(args.source, args.checkInId);
   const markers = normalizeMarkers(args.markers);
 
@@ -283,6 +315,7 @@ export async function createBloodWorkHandler(
 export async function updateBloodWorkHandler(
   ctx: BloodWorkCtx,
   args: UpdateBloodWorkArgs,
+  now: () => number = Date.now,
 ): Promise<{ bloodWorkId: string }> {
   const row = await ctx.db.get(args.bloodWorkId);
   if (row === null) {
@@ -308,6 +341,7 @@ export async function updateBloodWorkHandler(
 
   if (args.date !== undefined) {
     assertBloodWorkDate(args.date);
+    assertBloodWorkDateNotFuture(args.date, now());
     patch.date = args.date;
   }
   if (args.markers !== undefined) {

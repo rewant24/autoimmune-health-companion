@@ -418,6 +418,10 @@ export type ListEventsByRangeArgs = {
   userId: string;
   fromDate: string;
   toDate: string;
+  // Optional injectable for visit-taskState date comparison. Tests pin a
+  // specific "today" so the past/today/future branches stay deterministic.
+  // Production calls omit it and the handler falls back to Date.now().
+  nowMs?: number;
 };
 
 export async function listEventsByRangeHandler(
@@ -476,6 +480,18 @@ export async function listEventsByRangeHandler(
   }
 
   // 3. Doctor visits → VisitEvent (F05 chunk 5.C).
+  //
+  // taskState for visits is date-aware: past/today → done, future →
+  // pending (upcoming appointment). Compute `todayIso` once in IST from
+  // the caller-supplied `nowMs` (or Date.now() at the wrapper) so the
+  // projection stays a pure function. We use en-CA which formats as
+  // YYYY-MM-DD natively.
+  const todayIso = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(args.nowMs ?? Date.now()));
   const visitRows = await ctx.db
     .query("doctorVisits")
     .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
@@ -486,7 +502,7 @@ export async function listEventsByRangeHandler(
       row.date >= args.fromDate &&
       row.date <= args.toDate,
   );
-  for (const row of inRangeVisits) events.push(eventFromVisit(row));
+  for (const row of inRangeVisits) events.push(eventFromVisit(row, todayIso));
 
   // 4. Blood-work rows → BloodWorkEvent (F05 chunk 5.C).
   const bloodWorkRows = await ctx.db

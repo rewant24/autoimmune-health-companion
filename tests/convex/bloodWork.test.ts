@@ -286,6 +286,33 @@ describe("createBloodWorkHandler", () => {
     ).rejects.toMatchObject({ data: { code: "bloodWork.bad_date_format" } });
   });
 
+  it("rejects future-dated blood work (write path defends form-level guard)", async () => {
+    // Pin "now" to noon-IST 2026-05-09 → today=2026-05-09. A 2026-05-10
+    // request must trip the future-date guard regardless of where the
+    // request originated (manual form, voice extraction, future API).
+    const nowMs = Date.UTC(2026, 4, 9, 6, 30, 0, 0);
+    const { ctx } = makeCtx();
+    await expect(
+      createBloodWorkHandler(
+        ctx as unknown as Ctx,
+        baseCreate({ date: "2026-05-10" }),
+        () => nowMs,
+      ),
+    ).rejects.toMatchObject({ data: { code: "bloodWork.future_date" } });
+  });
+
+  it("accepts today's date (boundary — equal-to-today is allowed)", async () => {
+    const nowMs = Date.UTC(2026, 4, 9, 6, 30, 0, 0);
+    const { ctx, rows } = makeCtx();
+    await createBloodWorkHandler(
+      ctx as unknown as Ctx,
+      baseCreate({ date: "2026-05-09" }),
+      () => nowMs,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].date).toBe("2026-05-09");
+  });
+
   it("accepts source='check-in' without checkInId (best-effort linkage)", async () => {
     const { ctx, rows } = makeCtx();
     await createBloodWorkHandler(
@@ -332,6 +359,23 @@ describe("createBloodWorkHandler", () => {
 });
 
 describe("updateBloodWorkHandler", () => {
+  it("rejects patching date to a future value", async () => {
+    const nowMs = Date.UTC(2026, 4, 9, 6, 30, 0, 0); // today=2026-05-09
+    const { ctx } = makeCtx();
+    const { bloodWorkId } = await createBloodWorkHandler(
+      ctx as unknown as Ctx,
+      baseCreate(),
+      () => nowMs,
+    );
+    await expect(
+      updateBloodWorkHandler(
+        ctx as unknown as Ctx,
+        { bloodWorkId, userId: "user_A", date: "2026-05-15" },
+        () => nowMs,
+      ),
+    ).rejects.toMatchObject({ data: { code: "bloodWork.future_date" } });
+  });
+
   it("patches notes only", async () => {
     const { ctx, rows } = makeCtx();
     const { bloodWorkId } = await createBloodWorkHandler(

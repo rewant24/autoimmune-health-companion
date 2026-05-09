@@ -99,37 +99,12 @@ export function MemoryTab({
         <h1 className="text-xl font-semibold tracking-tight text-[color:var(--ink)]">
           Memory
         </h1>
-        <button
-          type="button"
-          aria-label="Search your check-ins"
-          aria-disabled="true"
-          title="Search coming soon"
-          data-testid="memory-search-icon"
-          onClick={() => {
-            /* chunk 2.E wires SearchBar */
-          }}
-          className={
-            'flex h-11 w-11 items-center justify-center rounded-full ' +
-            'text-[color:var(--ink-subtle)] hover:bg-[color:var(--sage-soft)] ' +
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--sage)] ' +
-            'cursor-not-allowed'
-          }
-        >
-          <svg
-            aria-hidden
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
-        </button>
+        {/*
+          Search affordance was a no-op stub from F02 (chunk 2.E was deferred).
+          Hidden until the real cross-table search ships — promising
+          functionality through a disabled icon was misleading at smoke. See
+          docs/post-mvp-backlog.md for the scoped follow-up.
+        */}
       </header>
 
       <WeekScrubber
