@@ -28,6 +28,7 @@ const TABS: ReadonlyArray<{ value: MemoryFilter; label: string }> = [
   { value: 'intake-events', label: 'Intake events' },
   { value: 'flare-ups', label: 'Flare-ups' },
   { value: 'visits', label: 'Visits' },
+  { value: 'blood-work', label: 'Blood work' },
 ]
 
 export function FilterTabs({

@@ -1,8 +1,12 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import {
+  eventFromBloodWork,
   eventFromCheckin,
   eventFromIntake,
+  eventFromVisit,
+  type BloodWorkRow,
+  type DoctorVisitRow,
   type IntakeEventRow,
   type IntakeMedication,
   type MemoryEvent,
@@ -118,6 +122,19 @@ export type IntakeEventDbRow = IntakeEventRow & {
   deletedAt?: number;
 };
 
+// F05 chunk 5.C — doctor-visit + blood-work rows seen by the merged
+// memory feed. Mirror `DoctorVisitRow` / `BloodWorkRow` from
+// lib/memory/event-types and add the `userId`/`deletedAt` fields the
+// handler filters on.
+export type DoctorVisitDbRow = DoctorVisitRow & {
+  userId: string;
+  deletedAt?: number;
+};
+export type BloodWorkDbRow = BloodWorkRow & {
+  userId: string;
+  deletedAt?: number;
+};
+
 type Queryable<Row> = {
   withIndex: (
     name: "by_user_date" | "by_user",
@@ -135,6 +152,8 @@ type MutationHandlerCtx = {
       (table: "checkIns"): Queryable<CheckinRow>;
       (table: "intakeEvents"): Queryable<IntakeEventDbRow>;
       (table: "medications"): Queryable<MedicationRowForMemory>;
+      (table: "doctorVisits"): Queryable<DoctorVisitDbRow>;
+      (table: "bloodWork"): Queryable<BloodWorkDbRow>;
     };
     insert: (
       table: "checkIns",
@@ -455,6 +474,32 @@ export async function listEventsByRangeHandler(
       if (projected !== null) events.push(projected);
     }
   }
+
+  // 3. Doctor visits → VisitEvent (F05 chunk 5.C).
+  const visitRows = await ctx.db
+    .query("doctorVisits")
+    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .collect();
+  const inRangeVisits = visitRows.filter(
+    (row) =>
+      row.deletedAt === undefined &&
+      row.date >= args.fromDate &&
+      row.date <= args.toDate,
+  );
+  for (const row of inRangeVisits) events.push(eventFromVisit(row));
+
+  // 4. Blood-work rows → BloodWorkEvent (F05 chunk 5.C).
+  const bloodWorkRows = await ctx.db
+    .query("bloodWork")
+    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .collect();
+  const inRangeBloodWork = bloodWorkRows.filter(
+    (row) =>
+      row.deletedAt === undefined &&
+      row.date >= args.fromDate &&
+      row.date <= args.toDate,
+  );
+  for (const row of inRangeBloodWork) events.push(eventFromBloodWork(row));
 
   events.sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? 1 : -1;

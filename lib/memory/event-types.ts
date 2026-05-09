@@ -58,16 +58,32 @@ export type IntakeEvent = BaseEventFields & {
 
 export type VisitEvent = BaseEventFields & {
   type: "visit";
-  // SPRINT_F05_VISIT_PAYLOAD — chunk 5.C replaces this with the real
-  // payload shape (visitId, doctorName, specialty, visitType, notes).
-  payload: Record<string, never>;
+  payload: {
+    visitId: string;
+    doctorName: string;
+    specialty?: string;
+    visitType: "consultation" | "follow-up" | "urgent" | "other";
+    notes?: string;
+    source: "module" | "check-in";
+  };
 };
 
-// SPRINT_F05_BLOODWORK_EVENT — chunk 5.C adds `BloodWorkEvent` here with
-// payload { bloodWorkId, markerCount, abnormalCount } and includes it in
-// the MemoryEvent union below.
+export type BloodWorkEvent = BaseEventFields & {
+  type: "blood-work";
+  payload: {
+    bloodWorkId: string;
+    markerCount: number;
+    abnormalCount: number;
+    source: "module" | "check-in";
+  };
+};
 
-export type MemoryEvent = CheckInEvent | FlareEvent | IntakeEvent | VisitEvent;
+export type MemoryEvent =
+  | CheckInEvent
+  | FlareEvent
+  | IntakeEvent
+  | VisitEvent
+  | BloodWorkEvent;
 
 const MOOD_LABELS: Record<Mood, string> = {
   heavy: "Heavy",
@@ -160,6 +176,107 @@ export interface IntakeMedication {
   _id: string;
   name: string;
   dose: string;
+}
+
+// ---- F05 chunk 5.C — visit + blood-work event projections ----------------
+
+/** Minimal doctor-visit row shape `eventFromVisit` reads. Mirrors the
+ *  `doctorVisits` table; defined locally so this module doesn't pull in
+ *  Convex-generated types. */
+export interface DoctorVisitRow {
+  _id: string;
+  date: string;
+  doctorName: string;
+  specialty?: string;
+  visitType: "consultation" | "follow-up" | "urgent" | "other";
+  notes?: string;
+  source: "module" | "check-in";
+  createdAt: number;
+}
+
+/** Minimal blood-work row shape `eventFromBloodWork` reads. Mirrors the
+ *  `bloodWork` table. */
+export interface BloodWorkRow {
+  _id: string;
+  date: string;
+  markers: ReadonlyArray<{
+    name: string;
+    value: number;
+    unit: string;
+    refRangeLow?: number;
+    refRangeHigh?: number;
+    abnormal?: boolean;
+  }>;
+  notes?: string;
+  source: "module" | "check-in";
+  createdAt: number;
+}
+
+const VISIT_TYPE_LABELS: Record<DoctorVisitRow["visitType"], string> = {
+  consultation: "Consultation",
+  "follow-up": "Follow-up",
+  urgent: "Urgent",
+  other: "Visit",
+};
+
+/**
+ * Project one doctor-visit row into a Memory VisitEvent. Title is "Doctor
+ * visit"; meta is "[doctorName] · [visitType]". Tap-to-detail routes to
+ * `/visits/[visitId]` (see `EventRow`).
+ */
+export function eventFromVisit(row: DoctorVisitRow): VisitEvent {
+  const time = formatTimeIST(row.createdAt);
+  return {
+    type: "visit",
+    eventId: `visit:${row._id}`,
+    date: row.date,
+    time,
+    title: "Doctor visit",
+    meta: `${row.doctorName} · ${VISIT_TYPE_LABELS[row.visitType]}`,
+    taskState: "done",
+    payload: {
+      visitId: row._id,
+      doctorName: row.doctorName,
+      ...(row.specialty !== undefined ? { specialty: row.specialty } : {}),
+      visitType: row.visitType,
+      ...(row.notes !== undefined ? { notes: row.notes } : {}),
+      source: row.source,
+    },
+  };
+}
+
+/**
+ * Project one blood-work row into a Memory BloodWorkEvent. Title is "Blood
+ * work"; meta is "[markerCount] markers · [abnormalCount] abnormal" — the
+ * abnormal segment is omitted when `abnormalCount` is 0.
+ */
+export function eventFromBloodWork(row: BloodWorkRow): BloodWorkEvent {
+  const time = formatTimeIST(row.createdAt);
+  const markerCount = row.markers.length;
+  const abnormalCount = row.markers.reduce(
+    (n, m) => n + (m.abnormal === true ? 1 : 0),
+    0,
+  );
+  const markerWord = markerCount === 1 ? "marker" : "markers";
+  const meta =
+    abnormalCount > 0
+      ? `${markerCount} ${markerWord} · ${abnormalCount} abnormal`
+      : `${markerCount} ${markerWord}`;
+  return {
+    type: "blood-work",
+    eventId: `bloodwork:${row._id}`,
+    date: row.date,
+    time,
+    title: "Blood work",
+    meta,
+    taskState: "done",
+    payload: {
+      bloodWorkId: row._id,
+      markerCount,
+      abnormalCount,
+      source: row.source,
+    },
+  };
 }
 
 /**
