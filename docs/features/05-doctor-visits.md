@@ -2,13 +2,13 @@
 number: 05
 name: Doctor Visits & Blood Work
 slug: doctor-visits
-status: chunked
+status: shipped
 depends_on: [01-daily-checkin, 02-memory]
 blocks: [06-doctor-report, 07-prepare-for-visit, 08-journey]
 owner: rewant
 scoping_ref: docs/scoping.md#feature-4-doctor-visits-and-blood-work
 adr_refs: [ADR-019, ADR-020, ADR-031]
-last_updated: 2026-04-30
+last_updated: 2026-05-09
 ---
 
 # Feature 05 — Doctor Visits & Blood Work

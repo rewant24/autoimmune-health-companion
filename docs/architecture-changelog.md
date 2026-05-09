@@ -9,6 +9,31 @@
 
 ---
 
+## 2026-05-09 — F05 Doctor Visits + Blood Work Cycle 1 shipped (ADR-019, ADR-020, ADR-031)
+
+**Related ADRs:** ADR-031 (visits + blood-work data shape), ADR-019 (client-trusted userId, defense-in-depth on row.userId match), ADR-020 (cost-guard cap-counter ownership). No new ADR; F05 C1 fills the slots already locked.
+
+**What shipped.**
+1. **Backend** — `convex/doctorVisits.ts` + `convex/bloodWork.ts` with create / update / get / list / soft-delete. `clientRequestId` idempotency. Soft-delete returns `{ alreadyDeleted: true }` on second call. `bloodWork.markers[]` non-empty + finite-value + `refRangeLow ≤ refRangeHigh` validators; `abnormal` derived at write time when both bounds present. Mock-ctx-friendly handler signatures with injectable `now: () => number = Date.now` (mirrors `medications.ts`).
+2. **Manual UI** — `/visits/{,new,[id]}` + `/blood-work/{,new,[id]}` pages. `BloodWorkForm` with default markers CRP / ESR / WBC / Hb pre-populated (removable per row) + "+ Add another marker" repeater. Submit blocked until ≥1 marker has name+value+unit and `Number(value)` is finite. Visit form mirrors with doctor / specialty / visit-type / notes. List pages render loading / empty / populated tri-state, mirroring `RegimenList`.
+3. **Voice extraction + Memory integration** — `lib/checkin/event-extract.ts` populated from header stub. `app/api/check-in/extract-event/route.ts` does NOT call `incrementAndCheck` (per ADR-020 — the metric extractor at `extract/route.ts:99` is the single increment point per check-in). `EventConfirmCard` mounts in `app/check-in/page.tsx` orchestrator below `MedicationConfirmCard` (cards, not summary). `lib/memory/event-types.ts` filled `VisitEvent.payload` and added `BloodWorkEvent` to the union with `eventFromVisit` + `eventFromBloodWork` projections. `applyFilter` exhaustive switch extended with `case "blood-work"`. `EventRow` renders `DR VISIT` + `BLOOD WORK` pills with detail routing. `listEventsByRangeHandler` extended in place at `convex/checkIns.ts` (in-place per F04 precedent; not split into `convex/memory.ts`).
+4. **Triage from second smoke** —
+   - **userId on edit + softDelete.** Detail pages now thread `userId` through `updateVisit`, `softDeleteVisit`, `updateBloodWork`, `softDeleteBloodWork`. Without this the four mutations 502'd with `ArgumentValidationError`. Commit `3bffb96`.
+   - **Pill copy.** `APPOINTMENT` → `DR VISIT` per PM note.
+   - **Visit `taskState` date-aware.** `eventFromVisit(row, todayIso)` derives `done` for `date <= today`, `pending` for future. `listEventsByRangeHandler` accepts optional `nowMs` and computes IST today, threading it into both visit + bloodwork projections so tests stay deterministic.
+   - **Blood-work future-date guard.** New `assertBloodWorkDateNotFuture(date, nowMs)` called only from create + update; read-path `getBloodWorkByDateHandler` stays format-only so it never blocks fetching past entries. Form mirrors with `max={today}` + inline error.
+   - **Search icon hidden.** Stub disabled magnifier in `MemoryTab` removed — promising functionality through a disabled icon read as broken at smoke. Real cross-table search tracked at post-MVP backlog #23 (needs auth model first).
+
+**Why F05 closes MVP.** Per `docs/scoping.md` and `project_saha_mvp_scope.md`, F05 was the last MVP feature before pricing + auth. F06 (Doctor Report), F07 (Prepare-for-Visit), and F08 (Journey aggregation) all depend on F05's data shape — they unblock as of this ship.
+
+**Validation.** 1054/1054 vitest, `tsc --noEmit` clean, `next build` green. New tests: `tests/convex/visits.test.ts` + `tests/convex/bloodWork.test.ts` (handler-level, mock-ctx pattern), `tests/visits/*.test.tsx` + `tests/blood-work/*.test.tsx` (form + list components), `tests/check-in/event-extract.test.ts` (relative-date anchor + cost-guard non-increment), `tests/memory/list-events-query.test.ts` extended for the new tables + `nowMs`-pinned `taskState` cases. `e2e/f05-visits-bloodwork.spec.ts` from the QE agent run covers T1–T7 + F04 medications regression with per-run `e2e_f05_<uuid>` userId so it does not pollute manual smoke on the shared dev backend.
+
+**Convex prod deploy.** Run `scripts/ship-prod.sh` after Vercel auto-promote completes (per `project_saha_shipping_rule.md`). New tables + new mutations only land in prod after this manual step.
+
+**NOT modified (regression surface preserved).** `components/check-in/ConfirmSummary.tsx` (confirm cards mount in the orchestrator, not the summary). All F04 medication files. F02 Memory rendering except `EventRow`, `FilterTabs`, `MemoryTab` footer (additive only). `convex/extractAttempts.ts` (cost-guard cap counter — F05 does not increment).
+
+---
+
 ## 2026-04-29 — Onboarding DOB: optional, month + year only (ADR-029)
 
 **Related ADR:** ADR-029 (new). Amends Onboarding Shell cycle plan §Setup.US-2 and the locked seam comment on `lib/profile/types.ts`. No prior ADR is superseded.
