@@ -850,3 +850,43 @@ User chose Scope B (full fix, production-ready) and "PLAN THE ENTIRE MODE FIRST"
 - **Sensitive-redaction-vs-empty trap (recurring).** The `vercel env pull` redaction-vs-empty trap from the 2026-04-26 prod incident is in the same family as this bug: surface-level type acceptance does not equal semantic correctness. Same lesson, different layer.
 
 **Next.** Live smoke on `next dev`: cold mount `/check-in` → opener auto-plays (ADR-027 path) → tap orb → speak → silence-VAD or StopButton triggers `stop()` → SSE `final` frame returns the transcript synchronously → "I heard …" echo → Save. Caps to verify: 1 MB byte cap (≈30 s of audio at 32 KB/s); 30 s duration cap. After local smoke passes, push branch, Vercel preview smoke (no live partials this time — that's expected, not a regression), squash-merge, prod smoke. Memory updates and `voice-c1/bug-1-resolved` tag still TBD.
+
+---
+
+## 2026-05-09 — Session 18: F05 Doctor Visits + Blood Work C1 SHIPPED (PR #22 → `0222d5f`, tag `f05-c1/shipped`)
+
+**MVP feature scope is now closed.** F05 was the last feature in MVP — F06 (Doctor Report), F07 (Prepare-for-Visit), F08 (Journey aggregation) all unblock from this ship.
+
+**What landed.**
+- Backend (`convex/doctorVisits.ts`, `convex/bloodWork.ts`) — create/update/get/list/soft-delete with `clientRequestId` idempotency, `bloodWork.markers[]` validation, `abnormal` derivation when reference bounds present, mock-ctx-friendly handler signatures with injectable `now`.
+- Manual UI — `/visits/{,new,[id]}` + `/blood-work/{,new,[id]}`. `BloodWorkForm` with default markers CRP / ESR / WBC / Hb pre-populated and removable. `VisitForm` with doctor / specialty / visit-type / notes. Tri-state list pages (loading / empty / populated) mirroring `RegimenList`.
+- Voice extraction + Memory integration — `lib/checkin/event-extract.ts` populated from header stub. `app/api/check-in/extract-event/route.ts` (does NOT call `incrementAndCheck` — ADR-020 single-counter invariant). `EventConfirmCard` mounts in `app/check-in/page.tsx` orchestrator below `MedicationConfirmCard`. `lib/memory/event-types.ts` filled `VisitEvent.payload` + added `BloodWorkEvent`. `applyFilter` extended exhaustively. `EventRow` renders `DR VISIT` + `BLOOD WORK` pills with detail routing. `listEventsByRangeHandler` extended in place at `convex/checkIns.ts`.
+
+**Process.** Project Process Playbook Map-2 dispatch verbatim, mirroring F04 C1. Build phase: 3 parallel agents (5.A / 5.B / 5.C). Integrate phase: solo merge with two coordination touchpoints (`event-types.ts` slot fill, `MemoryTab` affordance). Review phase: 3 parallel reviewers. Fix phase: solo. Second-pass review: one agent with "decisions locked" preamble. Ship phase: squash-merge, append changelog, Convex prod deploy via `CONVEX_DEPLOYMENT=prod:usable-zebra-515 npx convex deploy --yes`, manual smoke on `meetsaha.com`. Post-ship trio: build-log + memory updates + housekeeping append.
+
+**Triage from second smoke (post-PR-open).**
+1. Detail pages were missing `userId` arg on `updateVisit` / `softDeleteVisit` / `updateBloodWork` / `softDeleteBloodWork` → all four mutations 502'd with `ArgumentValidationError`. Fixed in `3bffb96` by threading `userId` with a `!userId` guard.
+2. Pill copy `APPOINTMENT` → `DR VISIT` per PM note.
+3. Visit `taskState` was statically `done`. Now date-aware via `eventFromVisit(row, todayIso)` + threaded `nowMs` through `listEventsByRangeHandler` for deterministic tests.
+4. Blood-work form was accepting future dates. Added `assertBloodWorkDateNotFuture(date, nowMs)` called only from create + update; read-path stays format-only. Form mirrors with `max={today}` + inline error.
+5. Stub disabled search icon in `MemoryTab` was misleading at smoke. Removed; tracked real cross-table search at `docs/post-mvp-backlog.md` Section 23 (needs auth model first).
+
+**Validation.** 1054/1054 vitest, `tsc --noEmit` clean, `next build` green. New tests cover handler-level mock-ctx (visits + bloodWork), form + list components, voice extraction + relative-date anchor, cost-guard non-increment, taskState by date. `e2e/f05-visits-bloodwork.spec.ts` covers T1–T7 + F04 regression with per-run `e2e_f05_<uuid>` userIds.
+
+**Manual smoke (live).** `meetsaha.com/visits/new`, `meetsaha.com/blood-work/new`, edit + soft-delete on both detail pages, voice check-in firing visit + blood-work confirm cards, F04 medications regression. Reported "working as expected."
+
+**Open backlog from this cycle (tracked in housekeeping #10–14):**
+- TOCTOU `clientRequestId` unique index across 4 tables (before auth lands).
+- Embedded `bloodWork.markers` flattening to relational table (before F08).
+- Date-bounded `withIndex` in `listEventsByRangeHandler` (before F08).
+- 11 `(api as any)` casts cleanup in `app/check-in/page.tsx` (before F06).
+- MemoryTab `<details>` log-affordance UX iteration (post-MVP).
+
+**Surprises / lessons.**
+- **Convex dev `npx convex dev --once` ≠ Convex prod deploy.** First smoke after `npx convex dev` failed because functions were on dev backend only. Memory hit on `feedback_remind_convex_deploy.md` — the rule applies even within the SAME ship sequence (preview hits dev, prod hits prod).
+- **Pre-flight stubs paid off massively.** Schema tables + type-union slot markers landed in F04 PR #18 made F05 integrate phase nearly empty. New memo: `feedback_pre_flight_stub_optionality.md`.
+- **`userId` arg thread breaks silently when added late.** Mock-ctx tests pass while live mutations 502. Lesson: when adding `userId` to a mutation that already has consumers, audit every call site in the same PR.
+- **Stub icons read as broken.** The disabled search button read as a broken feature, not "coming soon." Lesson: don't ship affordances for features that aren't built.
+- **Six architect feedback memos** captured for future cycles: embedded-vs-relational, memory-aggregation index bounds, pre-flight stub optionality, clientRequestId TOCTOU, cost-guard single-increment invariant, confirm-card stack threshold.
+
+**Next.** Decision pending — F06 (Doctor Report) next OR pivot to MVP closeout (pricing + auth + Razorpay/Stripe). Per `project_saha_mvp_scope.md` the MVP feature set is closed; pricing+auth was always the gating step before launch. Rewant's call.
