@@ -21,6 +21,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import type { MemoryEvent, MemoryFilter } from './_types'
 import { applyFilter } from '@/lib/memory/filters'
 import { WeekScrubber } from './WeekScrubber'
@@ -98,37 +99,12 @@ export function MemoryTab({
         <h1 className="text-xl font-semibold tracking-tight text-[color:var(--ink)]">
           Memory
         </h1>
-        <button
-          type="button"
-          aria-label="Search your check-ins"
-          aria-disabled="true"
-          title="Search coming soon"
-          data-testid="memory-search-icon"
-          onClick={() => {
-            /* chunk 2.E wires SearchBar */
-          }}
-          className={
-            'flex h-11 w-11 items-center justify-center rounded-full ' +
-            'text-[color:var(--ink-subtle)] hover:bg-[color:var(--sage-soft)] ' +
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--sage)] ' +
-            'cursor-not-allowed'
-          }
-        >
-          <svg
-            aria-hidden
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
-        </button>
+        {/*
+          Search affordance was a no-op stub from F02 (chunk 2.E was deferred).
+          Hidden until the real cross-table search ships — promising
+          functionality through a disabled icon was misleading at smoke. See
+          docs/post-mvp-backlog.md for the scoped follow-up.
+        */}
       </header>
 
       <WeekScrubber
@@ -151,7 +127,66 @@ export function MemoryTab({
         filter={filter}
         isLoading={isLoading}
       />
+
+      {/*
+        F05 Cycle 1, Chunk 5.B, US-5.B.3 — single "+ Log visit or blood work"
+        affordance at the bottom of the day-view region. <details> popover
+        keeps this trivial: tap to expand, two links inside. Placed once at
+        the bottom of MemoryTab content (rather than per-day) to avoid
+        touching DayView, which is owned by another chunk.
+      */}
+      <LogVisitOrBloodWorkAffordance />
     </main>
+  )
+}
+
+/**
+ * One-shot affordance rendered at the bottom of the Memory day-view region.
+ * Uses a native <details> popover for the choice menu so we don't pull in a
+ * popover dependency or hand-roll outside-click handling. F05 5.B locked
+ * label: "+ Log visit or blood work".
+ */
+function LogVisitOrBloodWorkAffordance(): React.JSX.Element {
+  return (
+    <div
+      data-testid="memory-log-affordance"
+      className="px-3 pt-2 pb-4"
+    >
+      <details className="rounded-2xl border" style={{ borderColor: 'var(--rule)', background: 'var(--bg-card)' }}>
+        <summary
+          data-testid="memory-log-affordance-trigger"
+          className="cursor-pointer px-5 py-3 text-[15px] font-medium"
+          style={{ color: 'var(--ink)' }}
+        >
+          + Log visit or blood work
+        </summary>
+        <div className="flex flex-wrap gap-2 px-5 pb-4">
+          <Link
+            href="/visits/new"
+            data-testid="memory-log-affordance-visit"
+            className="rounded-full px-5 py-2 text-[14px] font-medium"
+            style={{
+              background: 'var(--sage-deep)',
+              color: 'var(--bg-elevated)',
+            }}
+          >
+            Log visit
+          </Link>
+          <Link
+            href="/blood-work/new"
+            data-testid="memory-log-affordance-bloodwork"
+            className="rounded-full border px-5 py-2 text-[14px] font-medium"
+            style={{
+              borderColor: 'var(--rule)',
+              color: 'var(--ink)',
+              background: 'transparent',
+            }}
+          >
+            Log blood work
+          </Link>
+        </div>
+      </details>
+    </div>
   )
 }
 

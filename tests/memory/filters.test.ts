@@ -75,12 +75,33 @@ const visit: MemoryEvent = {
   date: "2026-04-25",
   time: "14:00",
   title: "Doctor visit",
-  meta: "",
+  meta: "Dr. Mehta · Follow-up",
   taskState: "done",
-  payload: {},
+  payload: {
+    visitId: "1",
+    doctorName: "Dr. Mehta",
+    visitType: "follow-up",
+    source: "module",
+  },
 };
 
-const all: MemoryEvent[] = [checkinA, checkinB, flare, intake, visit];
+const bloodWork: MemoryEvent = {
+  type: "blood-work",
+  eventId: "bloodwork:1",
+  date: "2026-04-25",
+  time: "14:00",
+  title: "Blood work",
+  meta: "2 markers · 1 abnormal",
+  taskState: "done",
+  payload: {
+    bloodWorkId: "1",
+    markerCount: 2,
+    abnormalCount: 1,
+    source: "module",
+  },
+};
+
+const all: MemoryEvent[] = [checkinA, checkinB, flare, intake, visit, bloodWork];
 
 describe("applyFilter", () => {
   it("'all' returns every event unchanged", () => {
@@ -103,12 +124,17 @@ describe("applyFilter", () => {
     expect(applyFilter(all, "visits")).toEqual([visit]);
   });
 
+  it("'blood-work' returns only blood-work events", () => {
+    expect(applyFilter(all, "blood-work")).toEqual([bloodWork]);
+  });
+
   it("returns [] for the empty input regardless of filter", () => {
     expect(applyFilter([], "all")).toEqual([]);
     expect(applyFilter([], "check-ins")).toEqual([]);
     expect(applyFilter([], "flare-ups")).toEqual([]);
     expect(applyFilter([], "intake-events")).toEqual([]);
     expect(applyFilter([], "visits")).toEqual([]);
+    expect(applyFilter([], "blood-work")).toEqual([]);
   });
 
   it("does not mutate the input array", () => {

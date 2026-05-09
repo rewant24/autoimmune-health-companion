@@ -15,7 +15,8 @@ export type MemoryFilter =
   | "check-ins"
   | "intake-events"
   | "flare-ups"
-  | "visits";
+  | "visits"
+  | "blood-work";
 
 export function applyFilter(
   events: MemoryEvent[],
@@ -32,5 +33,7 @@ export function applyFilter(
       return events.filter((e) => e.type === "flare");
     case "visits":
       return events.filter((e) => e.type === "visit");
+    case "blood-work":
+      return events.filter((e) => e.type === "blood-work");
   }
 }

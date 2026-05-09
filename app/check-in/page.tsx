@@ -100,6 +100,12 @@ import {
   type ResolvedDosageChange,
 } from '@/lib/checkin/medication-extract'
 import { MedicationConfirmCard } from '@/components/check-in/MedicationConfirmCard'
+import {
+  extractEvents,
+  type BloodWorkCandidate,
+  type VisitCandidate,
+} from '@/lib/checkin/event-extract'
+import { EventConfirmCard } from '@/components/check-in/EventConfirmCard'
 import type { Id } from '@/convex/_generated/dataModel'
 import type { CheckinRow } from '@/convex/checkIns'
 import type {
@@ -407,6 +413,41 @@ export default function CheckinPage({
     checkInId?: string
   }) => Promise<unknown>
 
+  // F05 chunk 5.C — visit + blood-work create mutations. The Convex
+  // generated types for the F05 modules don't ship until `npx convex dev`
+  // regenerates against this branch; cast through `(api as any)` to keep
+  // typecheck green during build, same pattern as the F04 mutations above.
+  const createVisitMutation = useMutation(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (api as any)?.doctorVisits?.createVisit,
+  ) as unknown as (args: {
+    source: 'check-in'
+    userId: string
+    date: string
+    doctorName: string
+    specialty?: string
+    visitType: 'consultation' | 'follow-up' | 'urgent' | 'other'
+    notes?: string
+    clientRequestId: string
+    checkInId?: string
+  }) => Promise<unknown>
+  const createBloodWorkMutation = useMutation(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (api as any)?.bloodWork?.createBloodWork,
+  ) as unknown as (args: {
+    source: 'check-in'
+    userId: string
+    date: string
+    markers: Array<{
+      name: string
+      value: number
+      unit: string
+    }>
+    notes?: string
+    clientRequestId: string
+    checkInId?: string
+  }) => Promise<unknown>
+
   // Resolved dosage-change cards we render alongside ConfirmSummary. One
   // entry per detected mention; user confirms or dismisses each card
   // independently. Cards do not block save (acceptance criterion: voice
@@ -414,6 +455,19 @@ export default function CheckinPage({
   const [pendingDoseChanges, setPendingDoseChanges] = useState<
     ResolvedDosageChange[]
   >([])
+  // F05 chunk 5.C — extracted-candidate state for visit + blood-work confirm
+  // cards. Same vocabulary as `pendingDoseChanges`: array of candidates;
+  // each EventConfirmCard mount on Save → mutation + remove; on Not now →
+  // just remove. Stable identity by index because candidates are pure data
+  // (no _id yet — they're not persisted until the user confirms).
+  const [pendingVisits, setPendingVisits] = useState<VisitCandidate[]>([])
+  const [pendingBloodWork, setPendingBloodWork] = useState<
+    BloodWorkCandidate[]
+  >([])
+  // Track whether we've already kicked the event extractor for the current
+  // confirming-state transcript, mirroring the medication extraction memo.
+  const eventExtractedTranscriptRef = useRef<string | null>(null)
+  const eventExtractionRunIdRef = useRef(0)
   // Once we've kicked the medication extractor for the current
   // confirming-state transcript, hold the inbound run id. The effect
   // below increments-and-captures so a superseded run (RESET → fresh
@@ -715,6 +769,101 @@ export default function CheckinPage({
     setPendingDoseChanges((prev) =>
       prev.filter((c) => c.medication._id !== card.medication._id),
     )
+  }
+
+  // ---- F05 chunk 5.C — voice event extraction wiring ----------------------
+  //
+  // Mirrors the medication extraction effect above:
+  //   - fires once per `confirming`-state entry with non-empty transcript,
+  //   - posts transcript to `/api/check-in/extract-event` (NO cap increment —
+  //     see route file for invariant comment),
+  //   - on success → seed `pendingVisits` / `pendingBloodWork` so
+  //     `EventConfirmCard` renders below the medication cards in ConfirmSummary,
+  //   - on error → silent fallback (matches medication path).
+  useEffect(() => {
+    if (state.kind !== 'confirming') return
+    if (userId === null || todayIso === null) return
+    const transcriptText = state.transcript.text
+    if (transcriptText.trim().length === 0) return
+    if (eventExtractedTranscriptRef.current === transcriptText) return
+    eventExtractedTranscriptRef.current = transcriptText
+    eventExtractionRunIdRef.current += 1
+    const runId = eventExtractionRunIdRef.current
+    void (async () => {
+      try {
+        const result = await extractEvents({
+          transcript: transcriptText,
+          userId,
+          checkInDate: todayIso,
+        })
+        if (runId !== eventExtractionRunIdRef.current) return
+        if (result.visits.length > 0) setPendingVisits(result.visits)
+        if (result.bloodWork.length > 0) setPendingBloodWork(result.bloodWork)
+      } catch {
+        // Silent — event extraction is opportunistic. Manual /visits +
+        // /blood-work flows remain unaffected.
+      }
+    })()
+  }, [state, userId, todayIso])
+
+  // Reset event-extraction memo + pending arrays on idle so the next
+  // check-in re-extracts. Mirrors the medication-extraction reset.
+  useEffect(() => {
+    if (state.kind === 'idle') {
+      eventExtractedTranscriptRef.current = null
+      setPendingVisits([])
+      setPendingBloodWork([])
+    }
+  }, [state.kind])
+
+  /**
+   * Confirm a visit-candidate card. Calls `createVisit` and removes the
+   * card from `pendingVisits`. `checkInId` is intentionally omitted —
+   * the check-in row may not yet be saved when the user confirms (cards
+   * are non-blocking); the Convex validator accepts the omission.
+   */
+  async function handleVisitConfirm(card: VisitCandidate): Promise<void> {
+    if (userId === null) throw new Error('userId not yet resolved')
+    await createVisitMutation({
+      source: 'check-in',
+      userId,
+      date: card.date,
+      doctorName: card.doctorName,
+      ...(card.specialty !== null ? { specialty: card.specialty } : {}),
+      visitType: card.visitType,
+      ...(card.notes !== null ? { notes: card.notes } : {}),
+      clientRequestId: newRequestId(),
+    })
+    setPendingVisits((prev) => prev.filter((c) => c !== card))
+  }
+
+  function handleVisitDismiss(card: VisitCandidate): void {
+    setPendingVisits((prev) => prev.filter((c) => c !== card))
+  }
+
+  /**
+   * Confirm a blood-work-candidate card. The unit picker in
+   * `EventConfirmCard` resolves any null marker units before calling
+   * back; the resolved markers come in as `resolved` here.
+   */
+  async function handleBloodWorkConfirm(
+    card: BloodWorkCandidate,
+    resolved: Array<{ name: string; value: number; unit: string }>,
+  ): Promise<void> {
+    if (userId === null) throw new Error('userId not yet resolved')
+    await createBloodWorkMutation({
+      source: 'check-in',
+      userId,
+      date: card.date,
+      markers: resolved,
+      ...(card.notes !== null ? { notes: card.notes } : {}),
+      clientRequestId: newRequestId(),
+    })
+    setPendingBloodWork((prev) => prev.filter((c) => c !== card))
+  }
+
+  function handleBloodWorkDismiss(card: BloodWorkCandidate): void {
+    setPendingBloodWork((prev) => prev.filter((c) => c !== card))
   }
 
   // 3. Kick extraction when the machine enters `processing`. ADR-005:
@@ -1078,6 +1227,27 @@ export default function CheckinPage({
             onDismiss={() => handleDosageDismiss(card)}
           />
         ))}
+        {pendingVisits.map((card, i) => (
+          <EventConfirmCard
+            key={`visit-${i}-${card.date}-${card.doctorName}`}
+            kind="visit"
+            date={card.date}
+            doctorName={card.doctorName}
+            visitType={card.visitType}
+            onConfirm={() => handleVisitConfirm(card)}
+            onDismiss={() => handleVisitDismiss(card)}
+          />
+        ))}
+        {pendingBloodWork.map((card, i) => (
+          <EventConfirmCard
+            key={`bloodwork-${i}-${card.date}`}
+            kind="blood-work"
+            date={card.date}
+            markers={card.markers}
+            onConfirm={(resolved) => handleBloodWorkConfirm(card, resolved)}
+            onDismiss={() => handleBloodWorkDismiss(card)}
+          />
+        ))}
         <ConfirmSummary
           metrics={snapshot.metrics}
           declined={snapshot.declined}
@@ -1206,6 +1376,27 @@ export default function CheckinPage({
             reason={card.reason}
             onConfirm={() => handleDosageConfirm(card)}
             onDismiss={() => handleDosageDismiss(card)}
+          />
+        ))}
+        {pendingVisits.map((card, i) => (
+          <EventConfirmCard
+            key={`visit-${i}-${card.date}-${card.doctorName}`}
+            kind="visit"
+            date={card.date}
+            doctorName={card.doctorName}
+            visitType={card.visitType}
+            onConfirm={() => handleVisitConfirm(card)}
+            onDismiss={() => handleVisitDismiss(card)}
+          />
+        ))}
+        {pendingBloodWork.map((card, i) => (
+          <EventConfirmCard
+            key={`bloodwork-${i}-${card.date}`}
+            kind="blood-work"
+            date={card.date}
+            markers={card.markers}
+            onConfirm={(resolved) => handleBloodWorkConfirm(card, resolved)}
+            onDismiss={() => handleBloodWorkDismiss(card)}
           />
         ))}
         <ConfirmSummary

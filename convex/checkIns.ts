@@ -1,8 +1,12 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import {
+  eventFromBloodWork,
   eventFromCheckin,
   eventFromIntake,
+  eventFromVisit,
+  type BloodWorkRow,
+  type DoctorVisitRow,
   type IntakeEventRow,
   type IntakeMedication,
   type MemoryEvent,
@@ -118,6 +122,19 @@ export type IntakeEventDbRow = IntakeEventRow & {
   deletedAt?: number;
 };
 
+// F05 chunk 5.C — doctor-visit + blood-work rows seen by the merged
+// memory feed. Mirror `DoctorVisitRow` / `BloodWorkRow` from
+// lib/memory/event-types and add the `userId`/`deletedAt` fields the
+// handler filters on.
+export type DoctorVisitDbRow = DoctorVisitRow & {
+  userId: string;
+  deletedAt?: number;
+};
+export type BloodWorkDbRow = BloodWorkRow & {
+  userId: string;
+  deletedAt?: number;
+};
+
 type Queryable<Row> = {
   withIndex: (
     name: "by_user_date" | "by_user",
@@ -135,6 +152,8 @@ type MutationHandlerCtx = {
       (table: "checkIns"): Queryable<CheckinRow>;
       (table: "intakeEvents"): Queryable<IntakeEventDbRow>;
       (table: "medications"): Queryable<MedicationRowForMemory>;
+      (table: "doctorVisits"): Queryable<DoctorVisitDbRow>;
+      (table: "bloodWork"): Queryable<BloodWorkDbRow>;
     };
     insert: (
       table: "checkIns",
@@ -399,6 +418,10 @@ export type ListEventsByRangeArgs = {
   userId: string;
   fromDate: string;
   toDate: string;
+  // Optional injectable for visit-taskState date comparison. Tests pin a
+  // specific "today" so the past/today/future branches stay deterministic.
+  // Production calls omit it and the handler falls back to Date.now().
+  nowMs?: number;
 };
 
 export async function listEventsByRangeHandler(
@@ -456,9 +479,52 @@ export async function listEventsByRangeHandler(
     }
   }
 
+  // 3. Doctor visits → VisitEvent (F05 chunk 5.C).
+  //
+  // taskState for visits is date-aware: past/today → done, future →
+  // pending (upcoming appointment). Compute `todayIso` once in IST from
+  // the caller-supplied `nowMs` (or Date.now() at the wrapper) so the
+  // projection stays a pure function. We use en-CA which formats as
+  // YYYY-MM-DD natively.
+  const todayIso = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(args.nowMs ?? Date.now()));
+  const visitRows = await ctx.db
+    .query("doctorVisits")
+    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .collect();
+  const inRangeVisits = visitRows.filter(
+    (row) =>
+      row.deletedAt === undefined &&
+      row.date >= args.fromDate &&
+      row.date <= args.toDate,
+  );
+  for (const row of inRangeVisits) events.push(eventFromVisit(row, todayIso));
+
+  // 4. Blood-work rows → BloodWorkEvent (F05 chunk 5.C).
+  const bloodWorkRows = await ctx.db
+    .query("bloodWork")
+    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .collect();
+  const inRangeBloodWork = bloodWorkRows.filter(
+    (row) =>
+      row.deletedAt === undefined &&
+      row.date >= args.fromDate &&
+      row.date <= args.toDate,
+  );
+  for (const row of inRangeBloodWork) events.push(eventFromBloodWork(row));
+
   events.sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? 1 : -1;
     if (a.time !== b.time) return a.time < b.time ? 1 : -1;
+    // Deterministic tiebreaker for same date+minute: lexical eventId.
+    // Without this, four event types landing in the same minute fall back
+    // to insertion order (which is collect-call order — non-deterministic
+    // under future re-ordering of fetches).
+    if (a.eventId !== b.eventId) return a.eventId < b.eventId ? 1 : -1;
     return 0;
   });
 

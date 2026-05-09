@@ -102,13 +102,14 @@ describe('F02 C1 smoke — MemoryTab integrated with seeded events', () => {
   it('renders header, scrubber, filter tabs, and day-list area', () => {
     render(<MemoryTab events={seedEvents(todayIST())} />)
 
-    // Header — title + search icon.
+    // Header — title only. Stub search icon was removed in F05 C1 triage
+    // (post-MVP backlog #23 tracks the real cross-table search build-out).
     expect(
       screen.getByRole('heading', { name: 'Memory', level: 1 }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: 'Search your check-ins' }),
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: 'Search your check-ins' }),
+    ).not.toBeInTheDocument()
 
     // FilterTabs — 5 labels in fixed order. Filter chips use <nav> +
     // aria-pressed (not WAI-ARIA tablist) per F02 C1 review pass.
@@ -122,6 +123,7 @@ describe('F02 C1 smoke — MemoryTab integrated with seeded events', () => {
       'Intake events',
       'Flare-ups',
       'Visits',
+      'Blood work',
     ])
 
     // Day-list area exists with selectedDate + filter data attrs.
