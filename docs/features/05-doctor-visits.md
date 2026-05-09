@@ -136,7 +136,7 @@ tests/check-in/event-extract.test.ts               [5.C]
 - **Functional requirement:** `extractEvents(transcript, checkInDate)` POSTs to `/api/check-in/extract-event`. The extractor returns `visits: { doctorName, date, specialty?, visitType, notes? }[]`. Relative phrases ("yesterday", "next Tuesday") resolved against `checkInDate`. Confirm card renders during the summary step; on confirm → `createVisit({ source: 'check-in', checkInId })`.
 - **Acceptance:**
   - **UX:** Each extracted visit is one card with two buttons (Save / Not now). Card body shows date + doctorName + visitType. Dismissed cards are not persisted.
-  - **UI:** Reuses existing F01 C2 confirm-card visual vocabulary. Card stack: dosage-change cards (from F04) appear above event cards (from F05) when both are present in the same summary.
+  - **UI:** Reuses existing F01 C2 confirm-card visual vocabulary. Card stack (set 2026-05-09 follow-up): dosage-change cards (from F04) → ConfirmSummary → visit + blood-work event cards (from F05). Summary sits above visit/blood-work so the user reads their captured metrics before resolving extractor side-events; dose-change cards remain at the top of the stack.
   - **Backend / data:** `incrementAndCheck` is shared with the medication-extract route — a single check-in burns one cap counter regardless of how many extractor calls fire (coordination invariant; tested explicitly).
   - **UX copy:** Card title: *"Doctor visit on [date]?"*. Body: *"I heard: [doctorName] · [visitType]"*. Buttons: *Save* / *Not now*.
 

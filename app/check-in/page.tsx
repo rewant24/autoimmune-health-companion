@@ -369,84 +369,25 @@ export default function CheckinPage({
   // F04 chunk 4.C — voice medication extraction wiring.
   //
   // Pulls the user's active regimen so the medication extractor can ground
-  // its name-matching to real entries (no phantom dose-change cards). The
-  // mutation references go through `(api as any)` because the Convex
-  // generated types for the F04 modules don't ship until `npx convex dev`
-  // regenerates against this branch — the orchestrator handles deploy
-  // separately. Same pattern as `app/medications/page.tsx`.
+  // its name-matching to real entries (no phantom dose-change cards).
+  // (Pre-F05 these mutation references went through `(api as any)`
+  // because the Convex codegen for F04/F05 modules hadn't shipped on the
+  // branch yet. After F05 C1 landed on main, codegen has the modules and
+  // we can call them directly. Cleanup: 2026-05-09.)
   const regimenQuery = useQuery(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any)?.medications?.listActiveMedications,
+    api.medications.listActiveMedications,
     userId !== null ? { userId } : 'skip',
-  ) as
-    | Array<{
-        _id: string
-        name: string
-        dose: string
-      }>
-    | undefined
-  const logIntakeRaw = useMutation(
-    // `logIntake` lives on `intakeEvents`, not `medications` — the
-    // original `?.medications?.logIntake` 404'd at runtime against real
-    // Convex even though the typecast made it compile.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any)?.intakeEvents?.logIntake,
-  ) as unknown as (args: {
-    userId: string
-    medicationId: string
-    date: string
-    takenAt: number
-    source: 'check-in'
-    clientRequestId: string
-  }) => Promise<unknown>
+  )
+  const logIntakeRaw = useMutation(api.intakeEvents.logIntake)
   const recordDosageChange = useMutation(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any)?.dosageChanges?.recordDosageChange,
-  ) as unknown as (args: {
-    userId: string
-    medicationId: string
-    oldDose: string
-    newDose: string
-    changedAt: number
-    reason?: string
-    source: 'check-in'
-    checkInId?: string
-  }) => Promise<unknown>
+    api.dosageChanges.recordDosageChange,
+  )
 
-  // F05 chunk 5.C — visit + blood-work create mutations. The Convex
-  // generated types for the F05 modules don't ship until `npx convex dev`
-  // regenerates against this branch; cast through `(api as any)` to keep
-  // typecheck green during build, same pattern as the F04 mutations above.
-  const createVisitMutation = useMutation(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any)?.doctorVisits?.createVisit,
-  ) as unknown as (args: {
-    source: 'check-in'
-    userId: string
-    date: string
-    doctorName: string
-    specialty?: string
-    visitType: 'consultation' | 'follow-up' | 'urgent' | 'other'
-    notes?: string
-    clientRequestId: string
-    checkInId?: string
-  }) => Promise<unknown>
-  const createBloodWorkMutation = useMutation(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any)?.bloodWork?.createBloodWork,
-  ) as unknown as (args: {
-    source: 'check-in'
-    userId: string
-    date: string
-    markers: Array<{
-      name: string
-      value: number
-      unit: string
-    }>
-    notes?: string
-    clientRequestId: string
-    checkInId?: string
-  }) => Promise<unknown>
+  // F05 chunk 5.C — visit + blood-work create mutations. Direct refs after
+  // 2026-05-09 codegen-cast cleanup; same rationale as the F04 mutations
+  // above.
+  const createVisitMutation = useMutation(api.doctorVisits.createVisit)
+  const createBloodWorkMutation = useMutation(api.bloodWork.createBloodWork)
 
   // Resolved dosage-change cards we render alongside ConfirmSummary. One
   // entry per detected mention; user confirms or dismisses each card
@@ -717,7 +658,10 @@ export default function CheckinPage({
         for (const med of toLog) {
           void logIntakeRaw({
             userId,
-            medicationId: med._id,
+            // RegimenMedication._id is `string` (the lib intentionally
+            // doesn't depend on Convex types). Brand it back to
+            // `Id<"medications">` here at the Convex boundary.
+            medicationId: med._id as Id<'medications'>,
             date: todayIso,
             takenAt,
             source: 'check-in',
@@ -756,7 +700,9 @@ export default function CheckinPage({
     if (userId === null) throw new Error('userId not yet resolved')
     await recordDosageChange({
       userId,
-      medicationId: card.medication._id,
+      // See note above: `card.medication._id` is the lib's string
+      // alias for the Convex Id; brand it at the boundary.
+      medicationId: card.medication._id as Id<'medications'>,
       oldDose: card.medication.dose,
       newDose: card.newDose,
       changedAt: Date.now(),
@@ -1216,6 +1162,15 @@ export default function CheckinPage({
     const snapshot = confirmingRef.current
     return (
       <ScreenShell>
+        {/*
+          Render order (set 2026-05-09): dose changes → ConfirmSummary →
+          visit cards → blood-work cards. The summary sits ABOVE the
+          visit/blood-work confirm cards so the user reads their captured
+          metrics first; visit + blood-work cards are extractor side-events
+          that come after. Dose-change cards remain at the top per the F05
+          chunk 5.C invariant ("dosage-change cards from F04 appear above
+          event cards from F05").
+        */}
         {pendingDoseChanges.map((card) => (
           <MedicationConfirmCard
             key={card.medication._id}
@@ -1225,27 +1180,6 @@ export default function CheckinPage({
             reason={card.reason}
             onConfirm={() => handleDosageConfirm(card)}
             onDismiss={() => handleDosageDismiss(card)}
-          />
-        ))}
-        {pendingVisits.map((card, i) => (
-          <EventConfirmCard
-            key={`visit-${i}-${card.date}-${card.doctorName}`}
-            kind="visit"
-            date={card.date}
-            doctorName={card.doctorName}
-            visitType={card.visitType}
-            onConfirm={() => handleVisitConfirm(card)}
-            onDismiss={() => handleVisitDismiss(card)}
-          />
-        ))}
-        {pendingBloodWork.map((card, i) => (
-          <EventConfirmCard
-            key={`bloodwork-${i}-${card.date}`}
-            kind="blood-work"
-            date={card.date}
-            markers={card.markers}
-            onConfirm={(resolved) => handleBloodWorkConfirm(card, resolved)}
-            onDismiss={() => handleBloodWorkDismiss(card)}
           />
         ))}
         <ConfirmSummary
@@ -1284,6 +1218,27 @@ export default function CheckinPage({
           isSaving={false}
           saveError={state.error.message ?? 'save-failed'}
         />
+        {pendingVisits.map((card, i) => (
+          <EventConfirmCard
+            key={`visit-${i}-${card.date}-${card.doctorName}`}
+            kind="visit"
+            date={card.date}
+            doctorName={card.doctorName}
+            visitType={card.visitType}
+            onConfirm={() => handleVisitConfirm(card)}
+            onDismiss={() => handleVisitDismiss(card)}
+          />
+        ))}
+        {pendingBloodWork.map((card, i) => (
+          <EventConfirmCard
+            key={`bloodwork-${i}-${card.date}`}
+            kind="blood-work"
+            date={card.date}
+            markers={card.markers}
+            onConfirm={(resolved) => handleBloodWorkConfirm(card, resolved)}
+            onDismiss={() => handleBloodWorkDismiss(card)}
+          />
+        ))}
       </ScreenShell>
     )
   }
@@ -1367,6 +1322,7 @@ export default function CheckinPage({
     }
     return (
       <ScreenShell>
+        {/* See render-order rationale comment in the save-failed branch above. */}
         {pendingDoseChanges.map((card) => (
           <MedicationConfirmCard
             key={card.medication._id}
@@ -1376,27 +1332,6 @@ export default function CheckinPage({
             reason={card.reason}
             onConfirm={() => handleDosageConfirm(card)}
             onDismiss={() => handleDosageDismiss(card)}
-          />
-        ))}
-        {pendingVisits.map((card, i) => (
-          <EventConfirmCard
-            key={`visit-${i}-${card.date}-${card.doctorName}`}
-            kind="visit"
-            date={card.date}
-            doctorName={card.doctorName}
-            visitType={card.visitType}
-            onConfirm={() => handleVisitConfirm(card)}
-            onDismiss={() => handleVisitDismiss(card)}
-          />
-        ))}
-        {pendingBloodWork.map((card, i) => (
-          <EventConfirmCard
-            key={`bloodwork-${i}-${card.date}`}
-            kind="blood-work"
-            date={card.date}
-            markers={card.markers}
-            onConfirm={(resolved) => handleBloodWorkConfirm(card, resolved)}
-            onDismiss={() => handleBloodWorkDismiss(card)}
           />
         ))}
         <ConfirmSummary
@@ -1422,6 +1357,27 @@ export default function CheckinPage({
           isSaving={state.kind === 'saving'}
           saveError={null}
         />
+        {pendingVisits.map((card, i) => (
+          <EventConfirmCard
+            key={`visit-${i}-${card.date}-${card.doctorName}`}
+            kind="visit"
+            date={card.date}
+            doctorName={card.doctorName}
+            visitType={card.visitType}
+            onConfirm={() => handleVisitConfirm(card)}
+            onDismiss={() => handleVisitDismiss(card)}
+          />
+        ))}
+        {pendingBloodWork.map((card, i) => (
+          <EventConfirmCard
+            key={`bloodwork-${i}-${card.date}`}
+            kind="blood-work"
+            date={card.date}
+            markers={card.markers}
+            onConfirm={(resolved) => handleBloodWorkConfirm(card, resolved)}
+            onDismiss={() => handleBloodWorkDismiss(card)}
+          />
+        ))}
       </ScreenShell>
     )
   }

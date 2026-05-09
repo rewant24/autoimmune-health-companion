@@ -132,15 +132,17 @@ async function waitForUserIdProvisioned(page: Page): Promise<void> {
 }
 
 /**
- * Open the Completed group in DayView (it starts collapsed). Visits +
- * blood-work events are emitted with taskState='done' so they render
- * inside Completed, not in the always-open Other events group.
+ * Ensure the Completed group in DayView is expanded. Visits + blood-work
+ * events are emitted with taskState='done' so they render inside Completed,
+ * not in the always-open Other events group.
+ *
+ * Default flipped 2026-05-09: the Completed group now starts EXPANDED, so
+ * this helper is usually a no-op. Kept idempotent in case a previous test
+ * step collapsed it: if `aria-expanded` is already 'true', do nothing.
  */
 async function expandCompleted(page: Page): Promise<void> {
   const completedGroup = page.locator('[data-event-group="Completed"]')
   await expect(completedGroup).toBeVisible({ timeout: 10_000 })
-  // The header is the toggle button (aria-expanded). Idempotent: if already
-  // expanded, do nothing — calling click here would re-collapse it.
   const toggle = completedGroup.locator('button[aria-expanded]').first()
   const expanded = await toggle.getAttribute('aria-expanded')
   if (expanded !== 'true') {

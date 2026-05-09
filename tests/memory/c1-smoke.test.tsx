@@ -140,12 +140,13 @@ describe('F02 C1 smoke — MemoryTab integrated with seeded events', () => {
     // DayView renders the "Today" sticky header.
     expect(within(dayList).getByText('Today')).toBeInTheDocument()
 
-    // All 5 seeded events are taskState='done' → all collapse into the
-    // Completed group with count "(5)" — collapsed by default.
+    // All 5 seeded events are taskState='done' → all land in the Completed
+    // group. Default flipped 2026-05-09: group starts EXPANDED, header
+    // reads bare label (no "(N)" count), aria-expanded=true.
     const completedToggle = within(dayList).getByRole('button', {
-      name: /Completed \(5\)/,
+      name: 'Completed',
     })
-    expect(completedToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(completedToggle).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('renders empty when no events for the selected day', () => {
