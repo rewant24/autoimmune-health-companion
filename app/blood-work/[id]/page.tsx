@@ -94,10 +94,11 @@ export default function BloodWorkDetailPage(): React.JSX.Element {
   }, [rows, bloodWorkId])
 
   async function handleEditSubmit(values: BloodWorkFormValues): Promise<void> {
-    if (!row) return
+    if (!row || !userId) return
     setError(null)
     try {
       await updateBloodWork({
+        userId,
         bloodWorkId: row._id,
         date: values.date,
         markers: values.markers,
@@ -112,10 +113,10 @@ export default function BloodWorkDetailPage(): React.JSX.Element {
   }
 
   async function handleDelete(): Promise<void> {
-    if (!row) return
+    if (!row || !userId) return
     setError(null)
     try {
-      await softDeleteBloodWork({ bloodWorkId: row._id })
+      await softDeleteBloodWork({ userId, bloodWorkId: row._id })
       router.push('/blood-work')
     } catch (err) {
       setError(

@@ -102,10 +102,11 @@ export default function VisitDetailPage(): React.JSX.Element {
   }, [visits, visitId])
 
   async function handleEditSubmit(values: VisitFormValues): Promise<void> {
-    if (!visit) return
+    if (!visit || !userId) return
     setError(null)
     try {
       await updateVisit({
+        userId,
         visitId: visit._id,
         date: values.date,
         doctorName: values.doctorName,
@@ -122,10 +123,10 @@ export default function VisitDetailPage(): React.JSX.Element {
   }
 
   async function handleDelete(): Promise<void> {
-    if (!visit) return
+    if (!visit || !userId) return
     setError(null)
     try {
-      await softDeleteVisit({ visitId: visit._id })
+      await softDeleteVisit({ userId, visitId: visit._id })
       router.push('/visits')
     } catch (err) {
       setError(

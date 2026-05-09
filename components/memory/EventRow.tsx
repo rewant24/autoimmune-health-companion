@@ -4,7 +4,7 @@
  * <EventRow> — one row in a day section (US-2.C.2).
  *
  * Layout: TaskStateIcon (24px) → time (HH:MM, tabular nums) → title +
- * meta line stacked, plus an optional type-pill badge (APPOINTMENT,
+ * meta line stacked, plus an optional type-pill badge (DR VISIT,
  * BLOOD WORK) on the right edge for F05 events. Entire row is a <button>
  * so click + keyboard come for free; a visible focus ring is part of the
  * contract. Reduced-motion users get no entrance animation.
@@ -30,7 +30,7 @@ const STATE_LABELS: Record<TaskState, string> = {
 }
 
 function pillLabelFor(event: MemoryEvent): string | null {
-  if (event.type === 'visit') return 'APPOINTMENT'
+  if (event.type === 'visit') return 'DR VISIT'
   if (event.type === 'blood-work') return 'BLOOD WORK'
   return null
 }
