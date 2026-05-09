@@ -151,10 +151,15 @@ function assertSourceCheckInInvariant(
   source: BloodWorkSource,
   checkInId: string | undefined,
 ): void {
-  if (source === "check-in" && (checkInId === undefined || checkInId === "")) {
+  // checkInId is best-effort when source='check-in'. The check-in row may
+  // not yet be persisted at the moment a confirm-card fires (cards are
+  // non-blocking), so we accept the omission. We still reject empty-string
+  // checkInId as a likely bug, and reject checkInId on source='module'
+  // since the module path has no associated check-in.
+  if (source === "check-in" && checkInId === "") {
     throw new ConvexError({
-      code: "bloodWork.missing_check_in_id",
-      message: "checkInId is required when source is 'check-in'.",
+      code: "bloodWork.empty_check_in_id",
+      message: "checkInId, when provided, must be non-empty.",
     });
   }
   if (source === "module" && checkInId !== undefined) {

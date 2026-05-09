@@ -363,6 +363,43 @@ describe('POST /api/check-in/extract-event — cost-guard invariant', () => {
     expect(codeOnly).not.toContain('extractAttempts')
     expect(codeOnly).not.toMatch(/from\s+["']convex/)
   })
+
+  it(
+    'three extractors per check-in burn exactly ONE cap counter — ' +
+      'metric increments, medication + event do not',
+    async () => {
+      // Locks the F05-spec invariant: one summary firing all three extractors
+      // (metric + medication + event) burns exactly one cap-counter slot.
+      // Static source-level assertion — counts the routes that import
+      // `incrementAndCheck` from the cost-guard module. Lower-cost than
+      // spinning up actual handlers; same correctness signal.
+      const fs = await import('node:fs/promises')
+      const path = await import('node:path')
+      const stripComments = (s: string): string =>
+        s
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/^\s*\/\/.*$/gm, '')
+      const read = async (p: string): Promise<string> =>
+        stripComments(await fs.readFile(path.resolve(process.cwd(), p), 'utf8'))
+
+      const metricRoute = await read('app/api/check-in/extract/route.ts')
+      const medicationRoute = await read(
+        'app/api/check-in/extract-medication/route.ts',
+      )
+      const eventRoute = await read('app/api/check-in/extract-event/route.ts')
+
+      // Exactly the metric extractor calls incrementAndCheck.
+      expect(metricRoute).toContain('incrementAndCheck')
+      expect(medicationRoute).not.toContain('incrementAndCheck')
+      expect(eventRoute).not.toContain('incrementAndCheck')
+
+      // Exactly the metric extractor imports from convex (it's the only
+      // route that needs the Convex client to call incrementAndCheck).
+      expect(metricRoute).toMatch(/from\s+["']convex/)
+      expect(medicationRoute).not.toMatch(/from\s+["']convex/)
+      expect(eventRoute).not.toMatch(/from\s+["']convex/)
+    },
+  )
 })
 
 // =========================================================================

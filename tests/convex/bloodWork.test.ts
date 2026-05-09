@@ -286,15 +286,25 @@ describe("createBloodWorkHandler", () => {
     ).rejects.toMatchObject({ data: { code: "bloodWork.bad_date_format" } });
   });
 
-  it("rejects source='check-in' without checkInId", async () => {
+  it("accepts source='check-in' without checkInId (best-effort linkage)", async () => {
+    const { ctx, rows } = makeCtx();
+    await createBloodWorkHandler(
+      ctx as unknown as Ctx,
+      baseCreate({ source: "check-in" }),
+    );
+    expect(rows[0].source).toBe("check-in");
+    expect(rows[0].checkInId).toBeUndefined();
+  });
+
+  it("rejects source='check-in' with empty-string checkInId", async () => {
     const { ctx } = makeCtx();
     await expect(
       createBloodWorkHandler(
         ctx as unknown as Ctx,
-        baseCreate({ source: "check-in" }),
+        baseCreate({ source: "check-in", checkInId: "" }),
       ),
     ).rejects.toMatchObject({
-      data: { code: "bloodWork.missing_check_in_id" },
+      data: { code: "bloodWork.empty_check_in_id" },
     });
   });
 

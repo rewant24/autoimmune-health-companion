@@ -504,6 +504,11 @@ export async function listEventsByRangeHandler(
   events.sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? 1 : -1;
     if (a.time !== b.time) return a.time < b.time ? 1 : -1;
+    // Deterministic tiebreaker for same date+minute: lexical eventId.
+    // Without this, four event types landing in the same minute fall back
+    // to insertion order (which is collect-call order — non-deterministic
+    // under future re-ordering of fetches).
+    if (a.eventId !== b.eventId) return a.eventId < b.eventId ? 1 : -1;
     return 0;
   });
 

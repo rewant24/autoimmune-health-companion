@@ -87,6 +87,12 @@ export function EventConfirmCard(
 
   const handleConfirm = async (): Promise<void> => {
     if (busy) return
+    // INVARIANT: do NOT add 'error' to this guard list. The retry button at
+    // the bottom of this file calls setDone('prompt') then synchronously
+    // invokes handleConfirm — but the setDone is queued, so handleConfirm
+    // still reads done='error' on the call stack. If 'error' were added
+    // here the retry path would silently no-op. Re-saving an already
+    // 'saved' or 'dismissed' card is the only thing this guard protects.
     if (done === 'saved' || done === 'dismissed') return
     setBusy(true)
     try {
