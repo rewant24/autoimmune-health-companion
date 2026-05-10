@@ -64,12 +64,13 @@ describe('<DayView />', () => {
     expect(screen.queryByText('Other events')).not.toBeInTheDocument()
     expect(screen.queryByText('Medication intake')).not.toBeInTheDocument()
 
-    // Completed exists and starts collapsed → header reads with count.
+    // Completed exists and starts EXPANDED (default flipped 2026-05-09) →
+    // header reads as the bare label, no "(N)" count, aria-expanded=true.
     const completedHeader = screen.getByRole('button', {
-      name: /Completed \(2\)/,
+      name: 'Completed',
     })
     expect(completedHeader).toBeInTheDocument()
-    expect(completedHeader).toHaveAttribute('aria-expanded', 'false')
+    expect(completedHeader).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('places non-completed events in their type group, not Completed', () => {
@@ -109,7 +110,7 @@ describe('<DayView />', () => {
     expect(screen.queryByText(/Completed/)).not.toBeInTheDocument()
   })
 
-  it('Completed group toggles aria-expanded and reveals rows on click', async () => {
+  it('Completed group starts expanded and toggles closed/open on click', async () => {
     const events: MemoryEvent[] = [
       evt({
         type: 'check-in',
@@ -121,24 +122,26 @@ describe('<DayView />', () => {
     render(<DayView date="2026-04-22" events={events} />)
 
     const toggle = screen.getByRole('button', { name: /Completed/ })
+    // Default flipped 2026-05-09: Completed starts expanded.
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    // Row is visible without any tap.
+    expect(
+      screen.getByRole('button', { name: /Daily check-in, Done/ }),
+    ).toBeInTheDocument()
+
+    // Tap collapses.
+    await userEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    // Row is hidden while collapsed.
     expect(
       screen.queryByRole('button', { name: /Daily check-in, Done/ }),
     ).not.toBeInTheDocument()
 
+    // Tap again expands.
     await userEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
     expect(
       screen.getByRole('button', { name: /Daily check-in, Done/ }),
     ).toBeInTheDocument()
-
-    // Toggle back collapses again.
-    await userEvent.click(toggle)
-    expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(
-      screen.queryByRole('button', { name: /Daily check-in, Done/ }),
-    ).not.toBeInTheDocument()
   })
 
   it('forwards onEventTap from rows up to the consumer', async () => {

@@ -5,8 +5,12 @@
  *   1. Today's check-in   — type='check-in' && taskState!='done'
  *   2. Medication intake  — type='intake'   && taskState!='done'
  *   3. Other events       — type in (flare,visit) && taskState!='done'
- *   4. Completed (collapsible, initially collapsed)
+ *   4. Completed (collapsible, initially EXPANDED)
  *                          — taskState='done'  (across all types)
+ *                          Default flipped 2026-05-09: at MVP scale a day's
+ *                          completed items are the *content* of Memory, so
+ *                          hiding them behind a tap was friction. Group
+ *                          remains collapsible for users who want to declutter.
  *
  * Note: in F02 C1 the only event-producer is `eventFromCheckin`, which
  * emits check-ins as `done`. So in C1 every check-in lands in Completed.
@@ -107,7 +111,6 @@ export function DayView({ date, events, onEventTap }: Props): React.JSX.Element 
               events={completed}
               onEventTap={onEventTap}
               collapsible
-              initiallyCollapsed
             />
           )}
         </>

@@ -172,9 +172,8 @@ test('full F04 flow: empty home → setup → intake list → tap → cross-rout
 
   // Today's intake event should appear under the day's "Completed" group
   // (intake events have taskState="done" → DayView routes them to the
-  // Completed section, which is initially collapsed → no rows in DOM
-  // until we expand). Assert the group header carries a non-zero count,
-  // then expand and check the intake row landed.
+  // Completed section). Default flipped 2026-05-09: the Completed group
+  // starts EXPANDED, so the intake row is in the DOM without any tap.
   //
   // Timezone caveat: WeekScrubber defaults to `todayIST()`. The intake's
   // `date` is the device-local YYYY-MM-DD (IntakeTapList line 49–55).
@@ -184,10 +183,10 @@ test('full F04 flow: empty home → setup → intake list → tap → cross-rout
   // the scrubber to the local-today or override the device timezone.
   const completedGroup = page.locator('[data-event-group="Completed"]')
   await expect(completedGroup).toBeVisible({ timeout: 5_000 })
-  // Header shows "(N)" when collapsed; we accept any N ≥ 1.
-  await expect(completedGroup).toContainText(/Completed \(\d+\)/)
-  // Expand and assert the intake row is present.
-  await completedGroup.getByRole('button', { name: /Completed/ }).click()
+  // Header is the bare label when expanded; toggle starts aria-expanded=true.
+  const completedToggle = completedGroup.getByRole('button', { name: /Completed/ })
+  await expect(completedToggle).toHaveAttribute('aria-expanded', 'true')
+  // Intake row is visible directly — no tap needed.
   await expect(
     completedGroup.locator('[data-event-type="intake"]').first(),
   ).toBeVisible()

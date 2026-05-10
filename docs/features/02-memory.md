@@ -197,9 +197,9 @@ tests/memory/*.test.ts(x)
 
 ### US-2.C.1 — Day view structure
 - **As** Sonakshi **I want** each day rendered as a grouped section with task states **so that** I can see at a glance what's done, missed, and pending.
-- **Functional requirement:** `<DayView>` accepts `{ date, events }` and renders: day header ("Today" if today, otherwise "Tue, 22 Apr") → `<EventGroup>` per category in fixed order (Today's check-in / Medication intake / Other events) → completed items collapse into a "Completed" group at the bottom of the day. Reverse-chronological scroll loads previous days as Sonakshi scrolls past today; scroll position syncs back into the scrubber's selected-day state.
+- **Functional requirement:** `<DayView>` accepts `{ date, events }` and renders: day header ("Today" if today, otherwise "Tue, 22 Apr") → `<EventGroup>` per category in fixed order (Today's check-in / Medication intake / Other events) → completed items group at the bottom of the day under a "Completed" header. The Completed group is collapsible but starts EXPANDED (default flipped 2026-05-09 — at MVP scale a day's completed events are the content of Memory, so hiding them behind a tap was friction). Reverse-chronological scroll loads previous days as Sonakshi scrolls past today; scroll position syncs back into the scrubber's selected-day state.
 - **Acceptance:**
-  - **UX:** smooth scroll; sticky day header. Completed group collapsible (tap header to expand / collapse).
+  - **UX:** smooth scroll; sticky day header. Completed group expanded by default; collapsible (tap header to declutter, tap again to expand).
   - **UI:** day header format: "Tue, 22 Apr" (IST). Section headers small, secondary text.
   - **Backend / data:** consumes filtered events from page state; calls `listEventsByRange` for new ranges as Sonakshi scrolls back.
   - **UX copy:** group labels: "Today's check-in", "Medication intake", "Other events", "Completed". Today's date row label: "Today".
