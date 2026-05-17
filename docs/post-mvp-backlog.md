@@ -239,6 +239,76 @@ Captured during the cold-eyes review of `feat/voice-sarvam` @ `307dd0d`. All def
 
 Surfaced during F05 C1 smoke. The Memory header had a search icon that was a no-op stub from F02 (chunk 2.E was deferred). Smoke tester reasonably expected it to work. Hidden in F05 C1 so the UI doesn't promise functionality it doesn't have. **Real shape:** a `<SearchBar />` that queries across `checkIns` (transcript text), `intakeEvents` (medication name lookup via join), `doctorVisits` (doctorName + specialty + notes), and `bloodWork` (marker names + notes). Server-side query on a new `convex/memory.ts:searchEvents` taking `{ userId, queryText, limit }`, debounced 200ms client-side, ranked by recency-tied-to-relevance. Results UI: same `EventRow` projection used by the day list, grouped by date. **Architectural hook:** the four `eventFromX` projections in `lib/memory/event-types.ts` already produce a uniform `MemoryEvent`. Search just needs a different fetch path (text-match, not date-range). Convex doesn't ship a built-in full-text index yet, so MVP version can do `collect()` + JS substring filter while row counts are small (same compromise as `listEventsByRangeHandler` today); revisit when row counts force a real search index. **Acceptance:** search "mehta" returns the doctor visit; "crp" returns the blood work entry; "skipped" returns the check-in transcript that mentioned skipping a med. **Why deferred:** F05 C1 was the last MVP feature before pricing/auth — search is its own mini-cycle and needs the auth model first (per-user search index keying is auth-dependent).
 
+## 24. Auth Decision C lock + MSG91 build (added 2026-05-16, deferred at owner's discretion)
+
+**Status:** RESEARCHED, recommendation drafted, **lock deferred by Rewant on 2026-05-16**. Not technically post-MVP — Decision C sits on the auth critical path and is acknowledged as high-priority. Captured here so the deferral is tracked and the revisit is a re-read, not a re-walk.
+
+**What's been done.** Full India-friendly, price-first vendor sweep across MSG91, 2Factor.in, Plivo Verify, Twilio Verify, Fast2SMS, Authkey.io, Exotel, SMSCountry, Gupshup, Sinch Verification, Kaleyra/Tata Comms. Two scale points priced (200 SMS/mo MVP, 80,000 SMS/mo at 10k users). Sarvam ruled out (STT/TTS only, no SMS product). Twilio Verify rejected for India-only on cost (60× MSG91 at 10k scale — ~₹880k/mo vs ~₹15k/mo) AND because Convex Auth's built-in Twilio provider doesn't relieve the DLT-DIY burden in India. Full comparison tables, alternatives-considered, and gotchas live in `docs/features/auth-scoping.md` → Sub-decision C.
+
+**Recommendation drafted (pending Rewant lock).** **MSG91 primary, 2Factor.in documented fallback.** MSG91 wins on: (a) 25,000 OTP credits/mo × 6 mo Startup Program = MVP free for the runway (covers ~6,000 users at current cadence); (b) true Verify-style API (vendor manages OTP lifecycle — no DIY brute-force protection); (c) assisted DLT registration. 2Factor wins at 10k scale (~₹9.6k/mo vs MSG91's ~₹14.4–15.2k/mo) and is the named swap target via the `lib/auth/sms-transport.ts` adapter when MSG91's startup credits expire or volume crosses 25k/mo.
+
+**Build plan drafted.** Ten-step plan (C-1 through C-10) inline in `docs/features/auth-scoping.md` → Sub-decision C → "Build plan — MSG91". Covers: DLT + account prerequisites (Day 0 — long pole), schema additions, adapter file with code sketch, Convex Auth wiring, per-IP rate limit (defense-in-depth for the per-phone protection MSG91 already provides), sign-in UI (plain Server Actions per Swap-friendliness pattern), test plan (unit + live-gated integration + manual smoke), env-var registration (per `feedback_vercel_preview_env_pattern.md`), cost monitoring (`authAuditLog` query + monthly dashboard check), ship gates.
+
+**Why deferred.** Rewant chose 2026-05-16 to absorb the research separately from the lock decision. Research is captured so revisiting is a re-read.
+
+**Trigger to revisit.** Any of: (a) decision to begin the auth ship sequence (then C must lock to start the 3–7 business-day DLT clock); (b) a higher-priority lane completing and freeing scoping bandwidth; (c) a US clinical-pilot conversation that would force re-opening the Twilio Verify question on BAA grounds.
+
+**What happens at revisit.** (1) Read Sub-decision C in `auth-scoping.md`. (2) Lock or counter the MSG91-primary recommendation. (3) Append decision-log line in `auth-scoping.md` + drop the `LOCK DEFERRED` markers. (4) Same-day: register `auth@meetsaha.com` on MSG91 + apply to Startup Program + start TRAI DLT entity registration. (5) Resume Decision D (locale detection) or whichever decision is next per the A→B→C→D→F→E→G→H walk order.
+
+**Architectural hook (already in place).** `lib/auth/sms-transport.ts` adapter shape locked in the Swap-friendliness pattern (auth-scoping.md). Whichever vendor wins, the adapter contract (`sendPhoneOtp` → `{ requestId }`, `verifyPhoneOtp` → `boolean`) absorbs it. No architectural rework needed at lock time.
+
+---
+
+## HIPAA compliance / BAA readiness
+
+> Items deferred from MVP because formal HIPAA compliance and Business Associate Agreements (BAAs) are gated on a **threshold-crossing event** — US clinical partnership, scale beyond the first 50 free users, or a deliberate decision to pursue a formal compliance posture for fundraising / enterprise sales. Architecture is HIPAA-*shaped* today (per ADR-035: audit log, soft-delete trail, MFA-ready data model, DPDP-compatible privacy policy); the items below are the operational/legal layer that turns posture into a defensible compliance stance when needed.
+>
+> **Trigger for revisiting this section:** any of (a) US clinical pilot conversation, (b) waitlist demand crosses 50→500 users, (c) enterprise/clinic tier moved into scope (per item #17 — currently out for Saturday pass), (d) regulatory change (DPDP rules tightened, or US-side HIPAA enforcement broadened to D2C health apps).
+
+### H1. BAA-readiness — vendor-by-vendor BAA path comparison
+
+**Why deferred.** Decision A locked Convex Auth (sub-processor minimization). Decision B locked Resend for magic-link email. Decision C will pick an SMS provider for phone OTP. All three vendors handle PII at MVP, but we explicitly accepted "HIPAA-grade architecture, formal BAAs deferred until threshold." The full vendor-BAA comparison was out of scope for the auth sprint walks but needs to be done before any threshold-crossing commitment.
+
+**Scope when revisited.** For each sub-processor in the auth + voice + LLM chain, document:
+- Public BAA availability (Y / N / on-request / Enterprise tier only).
+- Pricing impact of BAA tier vs current tier.
+- Sub-processor flow-through guarantees (does THEIR BAA cover their downstream sub-processors?).
+- Migration cost from current vendor to a BAA-friendly alternative.
+
+**Vendors in scope at the time of revisit (pre-staged from auth sprint):**
+- **Email transport (Decision B = Resend).** Resend BAA path: ask their team — not publicly documented as of 2026-05-10. Alternative: AWS SES (account-wide AWS BAA) or SendGrid (Twilio BAA on request). Migration cost: low (single adapter file at `lib/auth/email-transport.ts`).
+- **SMS transport (Decision C, recommendation drafted 2026-05-16: MSG91 primary, 2Factor.in fallback; lock deferred — see backlog #24).** MSG91 + 2Factor are India-local; BAA is a US legal construct so DPDP-only stance applies — re-evaluate against US-side requirements at threshold time. If a US clinical-pilot trigger fires before C locks, reopen the comparison to include Twilio Verify (BAA available on request, ~60× cost premium accepted as the price of compliance). Migration cost: low — single adapter file at `lib/auth/sms-transport.ts` per Swap-friendliness pattern.
+- **Convex (DB + Auth).** Sub-processor for everything. BAA path: ask Convex directly; their public docs reference SOC 2 but not a published HIPAA tier. Migration cost: catastrophic (whole-app rewrite). Effective lock-in.
+- **OpenAI / Anthropic (LLM extraction).** Both publish enterprise BAA paths gated on tier. ADR-020's data-minimization (2000-token cap) reduces but does not eliminate PII flow. Re-evaluate alongside the LLM data-minimization audit (currently deferred).
+- **Sarvam (STT/TTS, voice).** India-local; same DPDP-vs-HIPAA distinction as MSG91.
+- **Vercel / Razorpay / Stripe (infrastructure + payments).** Vercel publishes BAA on Enterprise tier. Razorpay = India-only (DPDP applies). Stripe BAA available; usually flowed through whoever is the merchant of record.
+
+**Architectural hook.** The Swap-friendliness pattern locked in the auth sprint (`lib/auth/email-transport.ts`, `lib/auth/sms-transport.ts`, plain Server-Action-backed forms) means most vendor swaps at threshold time are single-adapter-file changes. Convex itself is the only deep lock-in.
+
+### H2. Formal HIPAA controls (beyond architecture)
+
+**Why deferred.** ADR-035 locks the *architecture-grade* HIPAA posture (audit log, soft-delete trail, MFA-ready data model, DPDP-compatible privacy policy). Below this line are the *operational* HIPAA controls — workforce training, access reviews, incident response runbooks, breach notification mechanics, risk assessments — none of which earn their keep at first-50-user MVP scale.
+
+**Post-threshold shape.** Set up annually-cadenced controls under a designated HIPAA officer (likely Rewant at start, or a fractional compliance vendor). Workforce training (one-time + annual refresher), quarterly access reviews against the audit log, documented incident-response runbook, breach notification SLAs (60 days HIPAA, 72 hours GDPR, 72 hours DPDP) tested via tabletop.
+
+**Architectural hook.** None — the audit log table from ADR-035 is the substrate for access reviews. Everything else is process, not code.
+
+### H3. Session revocation surface ("log out everywhere")
+
+**Why deferred.** Explicitly out of scope for the auth sprint (ADR-035). At first-50-user scale, account compromise is recoverable via password / magic-link reissue + Convex internal mutation to invalidate sessions.
+
+**Post-threshold shape.** Settings → Sessions surface listing active sessions (device, IP, last-active timestamp) with per-session revoke + "log out everywhere" button. Implemented as a query against Convex Auth's session table + a public mutation that deletes session rows.
+
+**Architectural hook.** Convex Auth maintains the session table internally. Surfacing it requires adding a `sessions:list` query and `sessions:revoke` / `sessions:revokeAll` mutations.
+
+### H4. LLM-extraction data-minimization audit
+
+**Why deferred.** ADR-020 caps `/api/check-in/extract` payloads at 2000 tokens, which is the current minimization stance. A formal audit (what fields actually leave Saha's perimeter, against what extraction value, with what redaction) is post-threshold work.
+
+**Post-threshold shape.** Document the exact payload shape for every external-LLM call, identify any PII that leaves without extraction-value justification, redact or restructure as needed. Couples to BAA scope (H1) — once a BAA is in place with the LLM provider, the calculus shifts from "minimize what crosses" to "minimize what's logged at rest."
+
+**Architectural hook.** All LLM calls go through `lib/checkin/medication-extract.ts` and similar centralized extractors. Single audit point per call site.
+
 ---
 
 ## Review cadence
