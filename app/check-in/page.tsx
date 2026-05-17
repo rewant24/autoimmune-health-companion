@@ -86,6 +86,7 @@ import {
   extractMetrics,
   ExtractDailyCapError,
 } from '@/lib/checkin/extract-metrics'
+import { extractFailureFallback } from '@/lib/checkin/extract-failure-fallback'
 import { coverage } from '@/lib/checkin/coverage'
 import { detectMilestone } from '@/lib/checkin/milestone'
 import { buildAppendPayload } from '@/lib/checkin/same-day-reentry'
@@ -904,37 +905,10 @@ export default function CheckinPage({
         if (err instanceof ExtractDailyCapError) {
           // No-op marker; future telemetry hook can land here.
         }
-        // Voice mode: keep the conversational loop alive even when extract
-        // fails (cap reached / gateway 429 / network / malformed body).
-        // Without this branch, every failure cliff-edges into a silent
-        // Stage 2 form — the user spoke, the assistant fell mute, and a
-        // tap form appeared. Treat the turn as "all 5 missing, unparsed"
-        // and let the per-metric voice loop walk through the list verbally,
-        // matching the success-path behaviour. Tap-only users still fall
-        // back to the scripted Stage 2 form.
-        if (ttsAvailable) {
-          const missingAll: Metric[] = [
-            'pain',
-            'mood',
-            'adherenceTaken',
-            'flare',
-            'energy',
-          ]
-          const next = missingAll[0]
-          if (next === undefined) {
-            dispatch({ type: 'EXTRACTION_FAILED' })
-            return
-          }
-          const q = selectFollowUpQuestion(next, 1, continuityState)
-          dispatch({
-            type: 'ASK_QUESTION',
-            metric: next,
-            text: q.text,
-            seed: { metrics: {}, missing: missingAll, declined: [] },
-          })
-          return
-        }
-        dispatch({ type: 'EXTRACTION_FAILED' })
+        // Voice mode keeps the spoken loop alive; tap-only falls through
+        // to Stage 2. Helper is unit-tested in
+        // tests/check-in/extract-failure-fallback.test.ts.
+        dispatch(extractFailureFallback(ttsAvailable, continuityState))
       }
     })()
   }, [
