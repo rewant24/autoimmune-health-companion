@@ -108,6 +108,8 @@
 
 ## 17. Monetization — first-pass design (for MVP launch)
 
+> **2026-05-09 amendment — DEFERRED until post-launch decision point.** Rewant's call: MVP launches **free for the first 50 users**, then revisit pricing based on willingness-to-pay signals + feature-usage telemetry from those 50. No pricing block on the landing page in this sprint. No Razorpay/Stripe integration. No founder-tier ₹99 skip-the-waitlist gate. Waitlist remains the only conversion CTA. The tier proposal below stands as draft v0 for the post-50-user revisit, not as an MVP-launch artifact. See `~/.claude/projects/-Users-rewantprakash-1/memory/project_saha_mvp_scope.md` § 2026-05-09 amendments.
+
 This is the **only backlog item that needs a first pass before MVP launch**, because the Revenue rubric awards points for *actual revenue generated* (paid signups via Stripe/Razorpay, usage fees, premium upgrades). A clear pricing page on the landing site — even before a single transaction — seeds the story.
 
 ### Target track
@@ -196,6 +198,8 @@ This is the **only backlog item that needs a first pass before MVP launch**, bec
 ---
 
 ## 20. Auth enforcement for check-in endpoints
+
+> **→ moved INTO MVP on 2026-05-09 (Lane B sprint).** No longer post-MVP. Auth is now the final MVP-completion item — needed to identify the "first 50 users" (per item #17 amendment). Lane B scope is broader than this entry described: not just the check-in endpoints, but every Convex mutation/query that takes `userId: v.string()` as a client-trusted arg (~30+ handlers across F01/F02/F04/F05). Plus `clientRequestId` unique-index migration (housekeeping #14), profile data location decision, and onboarding state-machine refactor. Sign-in methods locked: email magic link (all locales) + phone OTP (India only, locale-detected). Provider TBD via `docs/features/auth-scoping.md`. See `docs/sprints/2026-05-09-auth-ui-housekeeping.md` for the full sprint plan.
 
 **Why out of MVP (Cycle 1 only).** Feature 01 Cycle 1 ships the voice check-in flow against Convex without a live identity layer. `createCheckin`, `listCheckins`, and `getCheckin` trust the `userId` arg from the client. This is a *deliberate* Cycle 1 deferral — not a missed requirement. Cycle 2 adds the auth slice (chunk 1.F in `docs/features/01-daily-checkin.md`).
 
