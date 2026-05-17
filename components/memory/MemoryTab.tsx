@@ -129,11 +129,12 @@ export function MemoryTab({
       />
 
       {/*
-        F05 Cycle 1, Chunk 5.B, US-5.B.3 — single "+ Log visit or blood work"
-        affordance at the bottom of the day-view region. <details> popover
-        keeps this trivial: tap to expand, two links inside. Placed once at
-        the bottom of MemoryTab content (rather than per-day) to avoid
-        touching DayView, which is owned by another chunk.
+        F05 Cycle 1, Chunk 5.B, US-5.B.3 — log-visit / log-blood-work
+        affordance at the bottom of the day-view region. Originally a
+        `<details>` popover; replaced with side-by-side CTA pills in Lane D
+        (housekeeping #10, spike doc docs/spikes/journey-bottom-cta.md).
+        Placed once at the bottom of MemoryTab content (rather than per
+        day) to avoid touching DayView, which is owned by another chunk.
       */}
       <LogVisitOrBloodWorkAffordance />
     </main>
@@ -141,51 +142,55 @@ export function MemoryTab({
 }
 
 /**
- * One-shot affordance rendered at the bottom of the Memory day-view region.
- * Uses a native <details> popover for the choice menu so we don't pull in a
- * popover dependency or hand-roll outside-click handling. F05 5.B locked
- * label: "+ Log visit or blood work".
+ * Bottom-of-MemoryTab affordance for manual visit + blood-work logging.
+ *
+ * Lane D (housekeeping #10) replaced the original `<details>` popover with
+ * two side-by-side CTA pills — recommendation B in
+ * `docs/spikes/journey-bottom-cta.md`. Rationale:
+ *   - One tap to flow (popover required two).
+ *   - Zero new dependency, no popover state.
+ *   - Matches Memory's existing pill vocabulary (filter tabs, event chips).
+ *   - Hierarchy is "Log visit" filled (sage-deep, primary) + "Log blood
+ *     work" outline (secondary) — resolves the "neither feels primary"
+ *     two-equal-pills risk noted in § 4 of the spike.
+ *
+ * Test IDs preserved verbatim from the popover era so any downstream
+ * selectors (analytics, e2e, manual smoke notes) keep working:
+ *   - `memory-log-affordance` (container)
+ *   - `memory-log-affordance-visit`
+ *   - `memory-log-affordance-bloodwork`
+ * The popover-era `memory-log-affordance-trigger` testid is intentionally
+ * dropped — the trigger no longer exists.
  */
 function LogVisitOrBloodWorkAffordance(): React.JSX.Element {
   return (
     <div
       data-testid="memory-log-affordance"
-      className="px-3 pt-2 pb-4"
+      className="flex flex-wrap gap-2 px-3 pt-2 pb-4"
     >
-      <details className="rounded-2xl border" style={{ borderColor: 'var(--rule)', background: 'var(--bg-card)' }}>
-        <summary
-          data-testid="memory-log-affordance-trigger"
-          className="cursor-pointer px-5 py-3 text-[15px] font-medium"
-          style={{ color: 'var(--ink)' }}
-        >
-          + Log visit or blood work
-        </summary>
-        <div className="flex flex-wrap gap-2 px-5 pb-4">
-          <Link
-            href="/visits/new"
-            data-testid="memory-log-affordance-visit"
-            className="rounded-full px-5 py-2 text-[14px] font-medium"
-            style={{
-              background: 'var(--sage-deep)',
-              color: 'var(--bg-elevated)',
-            }}
-          >
-            Log visit
-          </Link>
-          <Link
-            href="/blood-work/new"
-            data-testid="memory-log-affordance-bloodwork"
-            className="rounded-full border px-5 py-2 text-[14px] font-medium"
-            style={{
-              borderColor: 'var(--rule)',
-              color: 'var(--ink)',
-              background: 'transparent',
-            }}
-          >
-            Log blood work
-          </Link>
-        </div>
-      </details>
+      <Link
+        href="/visits/new"
+        data-testid="memory-log-affordance-visit"
+        className="min-h-[44px] flex-1 rounded-full px-5 py-3 text-center text-[15px] font-medium"
+        style={{
+          background: 'var(--sage-deep)',
+          color: 'var(--bg-elevated)',
+        }}
+      >
+        + Log visit
+      </Link>
+      <Link
+        href="/blood-work/new"
+        data-testid="memory-log-affordance-bloodwork"
+        className="min-h-[44px] flex-1 rounded-full border px-5 py-3 text-center text-[15px] font-medium"
+        style={{
+          borderColor: 'var(--rule)',
+          color: 'var(--ink)',
+          background: 'transparent',
+        }}
+      >
+        Log blood work
+      </Link>
     </div>
   )
 }
