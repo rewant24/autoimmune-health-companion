@@ -890,3 +890,62 @@ User chose Scope B (full fix, production-ready) and "PLAN THE ENTIRE MODE FIRST"
 - **Six architect feedback memos** captured for future cycles: embedded-vs-relational, memory-aggregation index bounds, pre-flight stub optionality, clientRequestId TOCTOU, cost-guard single-increment invariant, confirm-card stack threshold.
 
 **Next.** Decision pending — F06 (Doctor Report) next OR pivot to MVP closeout (pricing + auth + Razorpay/Stripe). Per `project_saha_mvp_scope.md` the MVP feature set is closed; pricing+auth was always the gating step before launch. Rewant's call.
+
+---
+
+## 2026-05-10 — Session 19: Auth sprint Phase 1 — scoping kickoff (Tab A, paused mid-walk)
+
+**Worktree split.** Sprint plan `docs/sprints/2026-05-09-auth-ui-housekeeping.md` (lives on `main`) calls for two-tab parallel work via git worktrees. This session is **Tab A** at `/Volumes/Coding Projects + Docker/saha-auth/` on branch `feat/auth-scoping`. Tab B (Lane C UI follow-ups) runs separately at `~/saha-ui/` and ships before Tab A's build phase begins. Convex dev singleton conflict is the gating constraint — Tab A is markdown-only this phase.
+
+**What landed in this session.**
+- `docs/features/auth-scoping.md` created — six-section skeleton + §7 H appendix + handler-migration table for all 32 handlers across 9 Convex files (inventoried via Explore subagents).
+- **Hard guardrails locked at top of scoping doc.** Most important: **prod waitlist on `usable-zebra-515` is IMMUTABLE** — first 50 app users come from there. No migration touches it.
+- **Decision A LOCKED — Convex Auth.** Rationale: stack-native `ctx.auth.getUserIdentity()`, sub-processor minimization (no auth-vendor in the chain), zero auth-vendor cost. Trade-off: phone-OTP layer is custom code; mitigated by routing through a single SMS vendor (Twilio Verify likely) so vendor absorbs brute-force/replay/rate-limit risk.
+- **HIPAA-grade architecture posture LOCKED** (architecture only, formal BAAs deferred until threshold). Bake-ins in scope this sprint:
+  1. Audit log table at schema level (`authAuditLog` with `byUserTime` index)
+  2. Soft-delete with audit trail (`deletedBy` + `deletionReason`) across `checkIns`, `intakeEvents`, `medications`, `dosageChanges`, `doctorVisits`, `bloodWork`, `profiles` (if added per Decision F)
+  3. MFA-ready data model (`mfaEnabled` + `mfaMethod` columns; no enforcement at launch)
+  4. Privacy policy in HIPAA/DPDP-compatible language (drafted in Phase 1, constrains Decision H to legal-review-timing only)
+- **Bake-ins NOT in scope this sprint:** session revocation surface, LLM data-minimization audit, formal BAAs.
+- **ADR shape LOCKED:** separate **ADR-035** for HIPAA-grade architecture (not folded into ADR-033). Updated ADR roster: 032 (Convex Auth) · 033 (server-derived userId, supersedes ADR-019) · 034 (`clientRequestId` unique index) · 035 (HIPAA-grade architecture).
+- **Sprint plan §Decision-log update mechanism:** option (b) — accumulate locks in `auth-scoping.md` Decision log; consolidate single batch update to sprint plan at Phase 1 close. Avoids cherry-pick mid-sprint.
+
+**Decisions still open** (walked next session): B → C → D → F → E → G → H.
+
+**Reference notes for next session — Decision B context already gathered.** Three options scanned: Resend (Convex Auth's documented happy-path; lowest friction; ~15 min wire-up), AWS SES (cheapest at $0.10/1000; cleanest BAA path; ~1–2h sandbox exit overhead), SendGrid (consolidation play if Decision C picks Twilio Verify — same vendor account, one BAA path).
+
+**Swap-friendliness analysis added.** Recommended pattern regardless of B's outcome:
+- Wrap email transport in `lib/auth/email-transport.ts` adapter exposing `sendMagicLinkEmail(to, link)`. Single swap point.
+- Use **React Email** for templates — portable across all three transports. Resend renders natively; SES + SendGrid take HTML, which React Email outputs.
+- Same pattern for SMS in Decision C: `lib/auth/sms-transport.ts` with `sendPhoneOtp` + `verifyPhoneOtp`.
+- Build sign-in UI as plain Next.js Server-Action-backed forms, NOT Convex-Auth-specific React primitives. Adds ~30 min today; saves ~6h if you ever swap auth providers (Convex Auth → Clerk swap = JWT-minting change + UI rewire; handlers stay since `ctx.auth.getUserIdentity()` is provider-agnostic).
+- **Caveat:** "plain Server-Action-backed forms" recommendation needs verification against Convex Auth's actual integration patterns at Phase 3 build kickoff.
+
+**Process notes.**
+- Three Explore subagents in parallel surfaced: full handler inventory (32 fns / 9 files / 7 distinct indexes), profile + onboarding shape (localStorage-only today, `saha.profile.v1` schema v2 per ADR-029, no Convex `profiles` table), ADR landscape (31 existing ADRs, ADR-019 the one to supersede, ADR-022 the `clientRequestId` precedent).
+- Plan-mode entry/exit cycle handled the strategy approval. Plan file saved at `~/.claude/plans/recursive-drifting-widget.md` for cross-session reference.
+
+**Next session pickup.** See dedicated session-resume doc below; Decision B walks first with the swap-friendliness pattern in mind.
+
+## 2026-05-16 — Session 20: Auth Decision C researched + deferred (MSG91 recommendation drafted)
+
+**Outcome.** Decision C (phone OTP provider) walked end-to-end in research mode; lock deferred at Rewant's discretion. The prior session's shortlist (Twilio Verify, MSG91, "Sarvam reuse") was wrong: Sarvam ships STT/TTS only, no SMS product; Twilio Verify is ~60× more expensive than India-native providers at 10k scale (~₹880k/mo vs ~₹15k/mo MSG91) AND Convex Auth's built-in Twilio provider doesn't relieve the India DLT-DIY burden. Rewant asked for a price-first sweep of India-friendly options at MVP (200 SMS/mo) and 10k-user steady-state (80k SMS/mo).
+
+**Research scope.** Eleven vendors priced: MSG91, 2Factor.in, Plivo Verify, Twilio Verify, Fast2SMS, Authkey.io, Exotel, SMSCountry, Gupshup, Sinch Verification, Kaleyra/Tata Comms. For each: per-OTP India route price, free tier / startup credits, minimum recharge, DLT registration burden, API style (Verify-style vs raw SMS), sender-ID model, webhook availability, reliability red flags, pricing surface (published vs sales-call). Two cost columns computed per vendor.
+
+**Recommendation drafted (NOT locked).** **MSG91 primary, 2Factor.in documented fallback.** MSG91 wins on (a) Startup Program = 25k OTP credits/mo × 6 mo → MVP free for the runway covering ~6,000 users; (b) true Verify-style API (vendor-managed lifecycle, no DIY brute-force protection); (c) assisted DLT registration. 2Factor wins at 10k scale (~₹9.6k/mo vs MSG91's ~₹14.4–15.2k/mo) — named swap target via the `lib/auth/sms-transport.ts` adapter when MSG91's startup credits expire or volume crosses 25k/mo.
+
+**Build plan drafted (NOT executed).** Ten-step plan (C-1 through C-10) inline in `docs/features/auth-scoping.md` → Sub-decision C → "Build plan — MSG91". Long pole = DLT registration (3–7 business days through TRAI portal). Adapter shape locked; Convex Auth wiring sketch included with caveat to verify against `@convex-dev/auth/providers/Phone` at build kickoff. Per-IP rate limit at the public-mutation layer added as defense-in-depth (MSG91 handles per-phone brute-force; per-IP closes the enumeration-attack vector).
+
+**Files updated.**
+- `docs/features/auth-scoping.md` — header status block reflects 2026-05-16 position; Sub-decision C inserted in full (research tables + recommendation + alternatives-considered + gotchas + 10-step MSG91 build plan); ADR-032 slot updated to note C pending; Decision log entry appended.
+- `docs/post-mvp-backlog.md` — H1 (HIPAA/BAA) entry updated to reflect MSG91 + 2Factor as the standing recommendation; new backlog item #24 added covering the deferred Decision C lock + MSG91 build with revisit-trigger criteria.
+- `docs/build-log.md` — this entry.
+
+**No code changed.** Three uncommitted edits + new file (`docs/features/auth-scoping.md`, `docs/post-mvp-backlog.md`, `docs/build-log.md`) on `feat/auth-scoping`. Not committed.
+
+**Process notes.**
+- Used general-purpose Agent for the vendor research (parallel web-fetches + table compilation in ~3 min). The agent returned a clean structured comparison; pasted-through to the scoping doc with light reframing. Worth repeating for any future vendor-comparison decision.
+- The "Sarvam not applicable" correction came from Rewant on session entry. Worth flagging that the prior session's recap was overconfident on the constrained shortlist — Sarvam was a name-recognition error (we use Sarvam for voice; the model conflated it with "any vendor we already pay"). Lesson noted in flow, not memorialized as a feedback memory — surfaces naturally next time a Decision C revisit happens.
+
+**Next session pickup.** Either (a) Rewant revisits Decision C lock + DLT kickoff, or (b) walk Decision D (India locale detection) in parallel — D is C-independent. See `docs/features/auth-scoping.md` header status block for current position.
