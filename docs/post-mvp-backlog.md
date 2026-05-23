@@ -263,6 +263,30 @@ Surfaced during F05 C1 smoke. The Memory header had a search icon that was a no-
 
 ---
 
+## 25. Voice loop survives extract-429 — second attempt (added 2026-05-23, after PR #21 closed unmerged)
+
+**Status:** PR #21 (`fix/voice-loop-survives-extract-failure`, branch retained on origin) closed without merge on 2026-05-23 after live smoke surfaced a provider-lifecycle integration gap. Original silent-Stage-2 cliff-edge on extract-429 still lives in `main`.
+
+**Symptom that closed PR #21.** On the preview, the 6th voice turn 429'd (daily cap), Saha spoke "How is your pain today, 1 to 10?" once, then the UI froze. No follow-up TTS, no mic restart, no further extract calls — user couldn't tap-stop, couldn't speak. HAR confirms exactly one POST to `/api/check-in/extract` returning 429 and zero follow-up `/api/speak` or `/api/transcribe` activity. React error #418 (hydration mismatch) co-fired.
+
+**Root cause hypothesis.** PR #21 dispatched `ASK_QUESTION` (with all-5-missing seed) from the `extracting`-state catch block. The reducer routed `extracting + ASK_QUESTION → speaking-question`, but the page's voice-provider lifecycle was never designed to be re-entered from that direction. The orb-tap → opener → listening path is what normally arms the provider; arriving at `speaking-question` via the freeform-extract catch leaves the provider unarmed. The TTS effect either no-ops on a provider-state guard, or even when TTS plays, the `QUESTION_PLAYED → listening-answer` step can't restart the mic. Vitest 913/913 passed because the unit suite only exercised the reducer contract, not the page-level orchestration around it — the unit-tests-pass / integration-fails trap that `feedback_ship_day_manual_smoke.md` calls out.
+
+**What's salvageable from the closed PR.** `lib/checkin/extract-failure-fallback.ts` + its three unit tests — the dispatch contract is fine, just dispatched from the wrong place. Branch `fix/voice-loop-survives-extract-failure` retained on origin for reference.
+
+**Why deferred (not retried inline).** The fix is no longer the one-line catch-branch swap PR #21 attempted. A proper next attempt has to treat the freeform-extract catch as a provider-lifecycle transition, not just a state-machine event. Scoping that, building the integration-test harness for it, and re-smoking on the live URL is enough work that bundling it with the next PR train (#25 Lane D, telemetry) would dilute both.
+
+**Post-MVP shape (next iteration).**
+- Arm the voice provider explicitly before dispatching `ASK_QUESTION` from the catch branch — or route the dispatch through `speaking-opener` first, since opener-entry is the only currently-tested path into `speaking-question`.
+- Add an integration test that walks the actual flow: tap orb → speak → force-429 → expect TTS to play follow-up AND mic to restart for `listening-answer`. Not a unit test of the dispatch helper.
+- Ship-day live-smoke checklist (per `feedback_ship_day_manual_smoke.md`) must include the 429-fallback path before the next merge attempt. Cap-reset helper documented in PR #21 description.
+- Investigate the React #418 hydration error that co-fired — possibly unrelated (longstanding) but worth eliminating to avoid noise during the next smoke.
+
+**Trigger to revisit.** Either (a) a real user hits the extract-429 cliff-edge in prod and the silent-Stage-2 fallthrough is rated unacceptable; (b) the auth/pricing track lands and a polish pass on voice-edge-cases is scheduled; (c) Layer 2 voice telemetry (Sentry/PostHog decision pending) reveals the 429-fallthrough is more common than expected.
+
+**Architectural hook (already in place).** Reducer transitions and the salvaged helper are in place. The missing piece is the page-level orchestration that arms the provider on this entry path.
+
+---
+
 ## HIPAA compliance / BAA readiness
 
 > Items deferred from MVP because formal HIPAA compliance and Business Associate Agreements (BAAs) are gated on a **threshold-crossing event** — US clinical partnership, scale beyond the first 50 free users, or a deliberate decision to pursue a formal compliance posture for fundraising / enterprise sales. Architecture is HIPAA-*shaped* today (per ADR-035: audit log, soft-delete trail, MFA-ready data model, DPDP-compatible privacy policy); the items below are the operational/legal layer that turns posture into a defensible compliance stance when needed.
