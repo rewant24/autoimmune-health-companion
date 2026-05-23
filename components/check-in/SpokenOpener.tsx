@@ -27,7 +27,7 @@
  * A short tap is a normal replay click.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { getTtsProvider } from '@/lib/voice/provider'
 import type { TtsProvider } from '@/lib/voice/types'
@@ -100,10 +100,18 @@ export function SpokenOpener({
   const ttsRef = useRef<TtsProvider | null>(null)
   if (ttsRef.current === null) ttsRef.current = getTtsProvider()
 
-  // Capture availability once per mount — provider availability is stable
-  // across renders for both adapters (Web Speech reads
-  // `globalThis.speechSynthesis`; Sarvam always returns true).
-  const available = useMemo(() => ttsRef.current?.isAvailable() ?? false, [])
+  // SSR-safe availability: always start `false` so server and first
+  // client render match, then flip to the real value in an effect.
+  // Web Speech's `isAvailable()` reads `globalThis.speechSynthesis`,
+  // which is `undefined` during SSR and defined in the browser — using
+  // it directly in render produces a hydration mismatch (React #418)
+  // whenever the active TTS provider is web-speech (i.e. any preview
+  // branch missing `NEXT_PUBLIC_VOICE_TTS_PROVIDER`). The mismatch is
+  // silent in dev (full error text) but minifies to #418 in prod.
+  const [available, setAvailable] = useState(false)
+  useEffect(() => {
+    setAvailable(ttsRef.current?.isAvailable() ?? false)
+  }, [])
 
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFired = useRef(false)

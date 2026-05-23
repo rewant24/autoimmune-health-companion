@@ -97,6 +97,26 @@ describe('<SpokenOpener /> rendering', () => {
       screen.queryByRole('button', { name: 'Replay' }),
     ).not.toBeInTheDocument()
   })
+
+  // Hydration safety: server-rendered HTML must not include the Replay
+  // button even when the provider would report available in the
+  // browser. The button is gated on a state set inside `useEffect`, so
+  // `renderToString` (which does not run effects) keeps `available =
+  // false` and omits the button — matching what the SSR-time tree
+  // produces in Next.js App Router. Without this gate, server SSR
+  // (where `globalThis.speechSynthesis` is undefined → web-speech
+  // adapter reports `isAvailable=false`) and client (`true`) disagreed,
+  // producing React error #418 on /check-in. See preview smoke
+  // 2026-05-23 + the comment in SpokenOpener.tsx for the bug history.
+  it('SSR markup omits the replay button (hydration safety)', async () => {
+    isAvailableMock.mockReturnValue(true)
+    const { renderToString } = await import('react-dom/server')
+    const html = renderToString(
+      <SpokenOpener text="Welcome back." variantKey="cold-start" />,
+    )
+    expect(html).not.toMatch(/aria-label="Replay"/)
+    expect(html).not.toMatch(/aria-label="Tap to hear greeting"/)
+  })
 })
 
 describe('<SpokenOpener /> auto-speak behaviour', () => {
