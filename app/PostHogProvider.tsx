@@ -53,10 +53,15 @@ export function PostHogProvider({ children }: { children: ReactNode }) {
         maskAllInputs: true,
         maskTextSelector: '[data-ph-mask="true"]',
       },
-      // Default autocapture catches clicks + form submits. Page-views
-      // are explicitly captured per route below (App Router + posthog-js
-      // history hooks aren't auto-wired pre-2024).
-      capture_pageview: true,
+      // Next.js App Router: posthog-js's default `capture_pageview: true`
+      // causes a React hydration mismatch (React error #418) because the
+      // SDK's history-hook injects DOM state before reconciliation
+      // completes. Disable here; voice telemetry is what we care about,
+      // and autocapture still catches clicks/form-submits. If we later
+      // need page-views, follow PostHog's documented App Router pattern
+      // (separate <PageviewTracker> client component using
+      // usePathname/useSearchParams).
+      capture_pageview: false,
       // Avoid noisy capture in dev consoles when key is local-only.
       loaded: () => {
         // D4: stitch sessions to the existing localStorage stub if
