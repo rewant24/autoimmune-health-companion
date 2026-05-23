@@ -25,7 +25,8 @@
  * See `docs/features/01-daily-checkin.md` US-1.C.1 for acceptance.
  */
 
-import { useEffect, useReducer, useRef } from 'react'
+import { useEffect, useLayoutEffect, useReducer, useRef } from 'react'
+import { voiceLog } from '@/lib/voice/log'
 import type { Transcript, VoiceError, VoiceProvider } from '@/lib/voice/types'
 import type {
   CheckinMetrics,
@@ -857,8 +858,22 @@ export function useCheckinMachine(
     // racing a second stop() call.
     p.onSilence?.(() => {
       if (stopInitiatedRef.current) return
+      // Fix F.3: silence VAD can fire after a re-arm has already
+      // landed but before the adapter is fully `started` (the recorder
+      // is being constructed inside an async start()). Calling stop()
+      // here would throw stop()-before-start() the same way a stale
+      // tap does. Skip cleanly so the next legitimate silence event
+      // (after start() resolves) does the work.
+      const adapter = providerRef.current
+      if (typeof adapter.isStarted === 'function' && !adapter.isStarted()) {
+        voiceLog('guard', {
+          event: 'silence_stop_skipped_not_started',
+          source: 'useCheckinMachine',
+        })
+        return
+      }
       stopInitiatedRef.current = true
-      providerRef.current
+      adapter
         .stop()
         .then((transcript) =>
           dispatch({ type: 'PROVIDER_STOPPED', transcript }),
@@ -889,9 +904,24 @@ export function useCheckinMachine(
   // follow-up turn. Permission is already granted; we swallow the resolution
   // since the reducer is already past `requesting-permission` and a stray
   // PERMISSION_GRANTED would no-op anyway.
-  useEffect(() => {
+  //
+  // Fix F.3: `useLayoutEffect` (not `useEffect`) so the synchronous
+  // `started = true` flip inside `provider.start()` lands before the
+  // browser paints the listening-answer UI. A useEffect-deferred start
+  // left a paint-visible window where the stop button was rendered but
+  // the adapter was not yet started; tapping in that window threw
+  // `stop() called before start()` and stranded the user with
+  // "Something got in the way. aborted." The tap-handler guard
+  // (`isStarted()` check above) is defence-in-depth — useLayoutEffect
+  // is the primary close.
+  useLayoutEffect(() => {
     if (state.kind !== 'listening-answer') return
     let cancelled = false
+    voiceLog('lifecycle', {
+      event: 'rearm_fired',
+      source: 'useCheckinMachine',
+      metric: state.metric,
+    })
     providerRef.current.start().catch((err: unknown) => {
       if (cancelled) return
       const ve = normaliseVoiceError(err)
@@ -996,14 +1026,35 @@ export function useCheckinMachine(
         // Fix F.1: dedupe with the silence-VAD branch. If silence has
         // already kicked off stop() for this turn, swallow the tap.
         if (stopInitiatedRef.current) return
+        // Fix F.3: between a state transition into `listening-answer`
+        // and the re-arm useLayoutEffect calling `start()`, the adapter
+        // can be `!started` for a tick. A user tap in that window used
+        // to throw `stop() called before start()` and surface as
+        // "Something got in the way. aborted." Skip cleanly — the
+        // re-arm will land and the next tap will work.
+        const adapter = providerRef.current
+        if (typeof adapter.isStarted === 'function' && !adapter.isStarted()) {
+          voiceLog('guard', {
+            event: 'tap_stop_skipped_not_started',
+            source: 'useCheckinMachine',
+            state: current.kind,
+          })
+          return
+        }
         stopInitiatedRef.current = true
-        providerRef.current
+        adapter
           .stop()
           .then((transcript) =>
             dispatch({ type: 'PROVIDER_STOPPED', transcript }),
           )
           .catch((err: unknown) => {
             const ve = normaliseVoiceError(err)
+            voiceLog('error', {
+              event: 'tap_stop_threw',
+              source: 'useCheckinMachine',
+              state: current.kind,
+              kind: ve.kind,
+            })
             dispatch({ type: 'VOICE_ERROR', error: ve })
           })
         return

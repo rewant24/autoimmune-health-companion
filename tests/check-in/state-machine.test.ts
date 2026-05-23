@@ -1044,6 +1044,9 @@ interface FakeProvider extends VoiceProvider {
   stop: VoiceProvider['stop'] & { mock: { calls: unknown[][] } }
   /** Test seam: fire the captured silence listener (Fix F.1). */
   fireSilence: () => void
+  /** Test seam: flip the isStarted() return value (Fix F.3). */
+  setStarted: (next: boolean) => void
+  isStarted: () => boolean
 }
 
 function makeFakeProvider(): FakeProvider {
@@ -1057,6 +1060,10 @@ function makeFakeProvider(): FakeProvider {
     durationMs: 1500,
   } as Transcript)
   let silenceCb: (() => void) | null = null
+  // Default to `true` so existing tests (which don't care about Fix F.3
+  // timing) keep passing — the guard only swallows taps when the adapter
+  // explicitly reports !started.
+  let startedFlag = true
   return {
     start: start as FakeProvider['start'],
     stop: stop as FakeProvider['stop'],
@@ -1066,6 +1073,10 @@ function makeFakeProvider(): FakeProvider {
       silenceCb = cb
     }) as VoiceProvider['onSilence'],
     fireSilence: () => silenceCb?.(),
+    setStarted: (next: boolean) => {
+      startedFlag = next
+    },
+    isStarted: () => startedFlag,
     capabilities: caps,
   }
 }
@@ -1264,5 +1275,120 @@ describe('useCheckinMachine — Fix F.1 silence VAD ownership', () => {
     await waitFor(() => {
       expect(result.current.state.kind).toBe('processing')
     })
+  })
+})
+
+describe('useCheckinMachine — Fix F.3 tap-during-rearm race (listening-answer)', () => {
+  /**
+   * Regression for the "Something got in the way. aborted — stop() called
+   * before start()" symptom on every voice-loop turn:
+   *
+   *   1. Reducer transitions into `listening-answer` (start of an answer turn).
+   *   2. React schedules the re-arm effect that will call `provider.start()`.
+   *   3. The page paints the new state and exposes the stop button.
+   *   4. User taps stop in the window before the effect runs.
+   *   5. TAP_ORB handler calls `provider.stop()` while the adapter has not
+   *      yet had `started = true` flipped — adapter throws aborted.
+   *
+   * Fix F.3 layers two closes: (a) the re-arm effect is `useLayoutEffect`
+   * so the synchronous `started = true` flip lands before paint; (b) the
+   * TAP_ORB handler consults `adapter.isStarted()` and swallows the tap
+   * if false. This test exercises (b) by driving the reducer to
+   * `listening-answer` and toggling the fake's `isStarted()` return value.
+   */
+  function driveToListeningAnswer(
+    result: { current: ReturnType<typeof useCheckinMachine> },
+  ): void {
+    act(() => {
+      result.current.dispatch({ type: 'TAP_ORB' })
+    })
+    act(() => {
+      result.current.dispatch({ type: 'PERMISSION_GRANTED' })
+    })
+    act(() => {
+      result.current.dispatch({
+        type: 'PROVIDER_STOPPED',
+        transcript: { text: 'freeform turn', durationMs: 2000 } as Transcript,
+      })
+    })
+    act(() => {
+      result.current.dispatch({ type: 'EXTRACTION_START' })
+    })
+    act(() => {
+      result.current.dispatch({
+        type: 'ASK_QUESTION',
+        metric: 'pain',
+        text: 'How is your pain today?',
+        seed: { metrics: {}, missing: ['pain'], declined: [] },
+      })
+    })
+    act(() => {
+      result.current.dispatch({ type: 'QUESTION_PLAYED' })
+    })
+  }
+
+  it('tap during re-arm window: provider.isStarted=false → no stop() call, no VOICE_ERROR', async () => {
+    const provider = makeFakeProvider()
+    const { result } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined)),
+    )
+    driveToListeningAnswer(result)
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('listening-answer')
+    })
+
+    // Pretend the adapter has not yet had `started = true` flipped (the
+    // useLayoutEffect re-arm has not landed). Tap should be swallowed
+    // by the isStarted guard.
+    provider.setStarted(false)
+    const startCallsBefore = (provider.start as unknown as ReturnType<typeof vi.fn>).mock.calls.length
+    const stopCallsBefore = (provider.stop as unknown as ReturnType<typeof vi.fn>).mock.calls.length
+
+    act(() => {
+      result.current.dispatch({ type: 'TAP_ORB' })
+    })
+
+    // Reducer did not transition; no stop call landed; no error dispatched.
+    expect(result.current.state.kind).toBe('listening-answer')
+    expect(
+      (provider.stop as unknown as ReturnType<typeof vi.fn>).mock.calls.length,
+    ).toBe(stopCallsBefore)
+    // Sanity: start was not called again either — guard returned early.
+    expect(
+      (provider.start as unknown as ReturnType<typeof vi.fn>).mock.calls.length,
+    ).toBe(startCallsBefore)
+  })
+
+  it('tap after re-arm lands: provider.isStarted=true → stop() fires and turn completes', async () => {
+    const provider = makeFakeProvider()
+    // Pin a per-turn transcript so the assertion below reads cleanly.
+    ;(provider.stop as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      text: 'pain is 5',
+      durationMs: 1800,
+    } as Transcript)
+
+    const { result } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined)),
+    )
+    driveToListeningAnswer(result)
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('listening-answer')
+    })
+
+    // Re-arm landed; adapter reports started.
+    provider.setStarted(true)
+    act(() => {
+      result.current.dispatch({ type: 'TAP_ORB' })
+    })
+
+    await waitFor(() => {
+      expect(provider.stop).toHaveBeenCalled()
+    })
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('extracting-answer')
+    })
+    if (result.current.state.kind === 'extracting-answer') {
+      expect(result.current.state.answerTranscript.text).toBe('pain is 5')
+    }
   })
 })
