@@ -56,14 +56,15 @@ export function PostHogProvider({ children }: { children: ReactNode }) {
 
       posthog.init(key, {
         api_host: host,
-        // D3: session replay enabled with masking defaults. PostHog masks
-        // <input> + <textarea> + [contenteditable] by default; the extra
-        // selector covers per-element opt-ins for transcript captions /
-        // check-in card values that render plain text.
-        session_recording: {
-          maskAllInputs: true,
-          maskTextSelector: '[data-ph-mask="true"]',
-        },
+        // D3: session replay DEFERRED. Initial smoke (2026-05-23) showed
+        // session_recording's DOM observer conflicts with App Router
+        // hydration on /check-in (React error #418 on every load). Voice
+        // event funnels — the real reason PostHog won over Sentry — work
+        // without replay. Re-enable in a follow-up PR once we have a
+        // reliable repro and either delay-start replay after hydration
+        // (`posthog.startSessionRecording()` from a useEffect with a
+        // timeout) or scope replay to non-/check-in routes.
+        disable_session_recording: true,
         // Next.js App Router: posthog-js's default `capture_pageview: true`
         // hooks history events in a way that collides with App Router
         // hydration. Voice telemetry is what we care about; autocapture
