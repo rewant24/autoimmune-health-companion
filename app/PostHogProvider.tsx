@@ -19,12 +19,18 @@
  *    convention so sessions stitch across check-ins; identify-forward
  *    when auth lands
  *
+ * SSR safety: posthog-js is imported dynamically inside the effect so
+ * Next.js App Router never evaluates the module during SSR. A static
+ * `import posthog from 'posthog-js'` at module top causes React error
+ * #418 (hydration mismatch) on App Router — confirmed in PR #28's
+ * preview smoke. The dynamic-import pattern is PostHog's documented
+ * Next.js App Router recommendation.
+ *
  * Swap-friendliness: the sink itself is installed via `setVoiceLogSink`
  * (lib/voice/log.ts). Replacing PostHog later means replacing this file
  * + the sink adapter; no other call sites touch.
  */
 import { useEffect, type ReactNode } from "react"
-import posthog from "posthog-js"
 
 import { setVoiceLogSink, resetVoiceLogSink } from "@/lib/voice/log"
 import { makePosthogVoiceSink } from "@/lib/voice/sink-posthog"
@@ -43,43 +49,50 @@ export function PostHogProvider({ children }: { children: ReactNode }) {
     const host =
       process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com"
 
-    posthog.init(key, {
-      api_host: host,
-      // D3: session replay enabled with masking defaults. PostHog masks
-      // <input> + <textarea> + [contenteditable] by default; the extra
-      // selector covers per-element opt-ins for transcript captions /
-      // check-in card values that render plain text.
-      session_recording: {
-        maskAllInputs: true,
-        maskTextSelector: '[data-ph-mask="true"]',
-      },
-      // Next.js App Router: posthog-js's default `capture_pageview: true`
-      // causes a React hydration mismatch (React error #418) because the
-      // SDK's history-hook injects DOM state before reconciliation
-      // completes. Disable here; voice telemetry is what we care about,
-      // and autocapture still catches clicks/form-submits. If we later
-      // need page-views, follow PostHog's documented App Router pattern
-      // (separate <PageviewTracker> client component using
-      // usePathname/useSearchParams).
-      capture_pageview: false,
-      // Avoid noisy capture in dev consoles when key is local-only.
-      loaded: () => {
-        // D4: stitch sessions to the existing localStorage stub if
-        // present. We do not create a stub here — voice pages already
-        // own that lifecycle. If absent, PostHog keeps its own
-        // auto-generated anon ID and aliases forward whenever auth /
-        // testUser writes one.
-        const stub = window.localStorage.getItem(TEST_USER_KEY)
-        if (stub) {
-          posthog.identify(stub)
-        }
-        // Install the voice-logger sink so `voiceLog(...)` calls in
-        // sarvam-adapter + state-machine route to PostHog.
-        setVoiceLogSink(makePosthogVoiceSink(posthog))
-      },
+    let cancelled = false
+
+    void import("posthog-js").then(({ default: posthog }) => {
+      if (cancelled) return
+
+      posthog.init(key, {
+        api_host: host,
+        // D3: session replay enabled with masking defaults. PostHog masks
+        // <input> + <textarea> + [contenteditable] by default; the extra
+        // selector covers per-element opt-ins for transcript captions /
+        // check-in card values that render plain text.
+        session_recording: {
+          maskAllInputs: true,
+          maskTextSelector: '[data-ph-mask="true"]',
+        },
+        // Next.js App Router: posthog-js's default `capture_pageview: true`
+        // hooks history events in a way that collides with App Router
+        // hydration. Voice telemetry is what we care about; autocapture
+        // still picks up clicks/form-submits.
+        capture_pageview: false,
+        loaded: () => {
+          // D4: stitch sessions to the existing localStorage stub if
+          // present. We do not create a stub here — voice pages already
+          // own that lifecycle. If absent, PostHog keeps its own
+          // auto-generated anon ID and aliases forward whenever auth /
+          // testUser writes one.
+          const stub = window.localStorage.getItem(TEST_USER_KEY)
+          if (stub) {
+            posthog.identify(stub)
+          }
+          // Stash on window for live debugging / Playwright smokes.
+          // posthog-js v1 does not attach the instance to window by
+          // default; without this the SDK is reachable only through the
+          // bundled module reference, which can't be inspected externally.
+          ;(window as unknown as { posthog: typeof posthog }).posthog = posthog
+          // Install the voice-logger sink so `voiceLog(...)` calls in
+          // sarvam-adapter + state-machine route to PostHog.
+          setVoiceLogSink(makePosthogVoiceSink(posthog))
+        },
+      })
     })
 
     return () => {
+      cancelled = true
       // Restore the default console sink on unmount. In practice the
       // provider lives at the layout root so this only fires on a full
       // app teardown (HMR, tests).
