@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Fraunces, Geist_Mono, Inter, Inter_Tight } from "next/font/google";
 import "./globals.css";
 import { ConvexClientProvider } from "./ConvexClientProvider";
+import { PostHogProvider } from "./PostHogProvider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -48,7 +49,9 @@ export default function RootLayout({
       className={`${inter.variable} ${interTight.variable} ${fraunces.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        <ConvexClientProvider>{children}</ConvexClientProvider>
+        <PostHogProvider>
+          <ConvexClientProvider>{children}</ConvexClientProvider>
+        </PostHogProvider>
       </body>
     </html>
   );
