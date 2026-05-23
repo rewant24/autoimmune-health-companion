@@ -400,6 +400,38 @@ describe('SarvamAdapter — start() (US-V.B.2)', () => {
     expect(headers['Content-Type']).toBe('audio/wav')
   })
 
+  it('isStarted() lifecycle: false initially, true after start, false after stop completes (Fix F.3)', async () => {
+    const { stream } = makeFakeStream()
+    const recorder = makeFakeRecorder()
+    const ctrl = makeStreamingResponse()
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(ctrl.response) as unknown as typeof fetch
+
+    const a = new SarvamAdapter({
+      language_code: 'en-IN',
+      getUserMediaImpl: vi.fn().mockResolvedValue(stream),
+      recorderFactory: () => recorder,
+      fetchImpl,
+    })
+
+    // Before start: not started.
+    expect(a.isStarted()).toBe(false)
+
+    await a.start()
+    // After start resolves: started flag is true and stopped is false.
+    expect(a.isStarted()).toBe(true)
+
+    // Push a final and complete the SSE stream so stop() resolves.
+    setTimeout(() => {
+      ctrl.push('event: final\ndata: {"text":"hi","durationMs":1000}\n\n')
+      ctrl.end()
+    }, 0)
+    await a.stop()
+    // After stop's resetTurnState: started flag flips back to false.
+    expect(a.isStarted()).toBe(false)
+  })
+
   it('forwards onSilence to listeners in buffered mode — Fix F.1', async () => {
     const { stream } = makeFakeStream()
     const recorder = makeFakeRecorder()

@@ -75,6 +75,17 @@ export interface VoiceProvider {
    * manual tap. Adapters without VAD (web-speech) omit this. Fix F.1.
    */
   onSilence?(cb: () => void): void
+  /**
+   * Optional. Synchronous check: is the adapter currently capturing
+   * (post-`start()`, pre-`stop()` completion)? The hook uses this to
+   * skip a stale `stop()` call that would otherwise throw
+   * `stop() called before start()` — fired when the user taps the
+   * stop button in the React-effect window between a state transition
+   * into a listening turn and the re-arm effect calling `start()`.
+   * Adapters that omit this are assumed always-started (web-speech
+   * holds its own `recognition` handle internally).
+   */
+  isStarted?(): boolean
   capabilities: VoiceCapabilities
 }
 

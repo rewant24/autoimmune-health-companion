@@ -50,6 +50,7 @@
 
 import { SarvamRecorder } from './sarvam-recorder'
 import { writeWavHeader } from './wav-header'
+import { voiceLog } from './log'
 import type {
   Transcript,
   VoiceCapabilities,
@@ -244,18 +245,40 @@ export class SarvamAdapter implements VoiceProvider {
     this.silenceListeners.push(cb)
   }
 
+  /**
+   * Fix F.3: synchronous lifecycle check for the hook's TAP_ORB /
+   * silence-VAD branches. Returns true between `start()` (sync flag
+   * flip at line ~256) and the moment `resetTurnState()` runs at the
+   * end of `runStopFlow()`. Lets the hook swallow a stale tap that
+   * lands in the React-effect window between a `listening-answer`
+   * transition and the re-arm effect firing.
+   */
+  isStarted(): boolean {
+    return this.started && !this.stopped
+  }
+
   async start(): Promise<void> {
     if (this.started) {
       const err: VoiceError = {
         kind: 'aborted',
         message: 'SarvamAdapter.start: already started',
       }
+      voiceLog('guard', {
+        event: 'start_skipped_already_started',
+        source: 'SarvamAdapter',
+      })
       this.emitError(err)
       throw err
     }
     this.started = true
     this.startedAt = Date.now()
     this.resolvedMode = this.resolveMode()
+    voiceLog('lifecycle', {
+      event: 'start_called',
+      source: 'SarvamAdapter',
+      mode: this.resolvedMode,
+      language_code: this.language_code,
+    })
 
     // Pre-arm the final-settled promise BEFORE any awaits. The hook
     // re-arms start() for the answer turn while the reducer is already
@@ -410,10 +433,21 @@ export class SarvamAdapter implements VoiceProvider {
 
   async stop(): Promise<Transcript> {
     if (!this.started) {
+      // Defence-in-depth: the hook's TAP_ORB / silence-VAD branches
+      // should both consult `isStarted()` and skip the call entirely
+      // (Fix F.3). If a caller still reaches here we surface a typed
+      // error AND emit a guard log so the regression is detectable
+      // from the next session's console capture rather than waiting
+      // on another user report.
       const err: VoiceError = {
         kind: 'aborted',
         message: 'SarvamAdapter.stop: stop() called before start()',
       }
+      voiceLog('guard', {
+        event: 'stop_skipped_not_started',
+        source: 'SarvamAdapter',
+        stopped: this.stopped,
+      })
       throw err
     }
     if (this.errored) throw this.errored
@@ -426,6 +460,12 @@ export class SarvamAdapter implements VoiceProvider {
     // calls progress past the guard and fire duplicate POSTs.
     if (this.stopPromise) return this.stopPromise
     this.stopped = true
+    voiceLog('lifecycle', {
+      event: 'stop_called',
+      source: 'SarvamAdapter',
+      durationMs: this.startedAt ? Date.now() - this.startedAt : 0,
+      mode: this.resolvedMode,
+    })
     this.stopPromise = this.runStopFlow()
     return this.stopPromise
   }
