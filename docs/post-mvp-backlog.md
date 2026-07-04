@@ -287,6 +287,18 @@ Surfaced during F05 C1 smoke. The Memory header had a search icon that was a no-
 
 ---
 
+## 26. Client-side TTS prefetch for catalog audio (added 2026-07-04, Q3 deferred slice)
+
+**Status:** The 2026-07-04 voice-humanness assessment's Q3 (prefetch the 22 catalog question audios at session start, removing the TTS POST from the mid-loop silence gap) shipped only its server-side slice: `SARVAM_TTS_CACHED_RESPONSES=1` env-gates Sarvam's `enable_cached_responses` beta flag in `lib/voice/sarvam-tts-server.ts` (identical requests return provider-cached audio). Client-side prefetch was deliberately deferred.
+
+**Why deferred.** Two reasons. (1) Q1 (Pattern A acks) changed the math the assessment was written against: mid-loop questions are now usually ack-prefixed ("Got it — pain at 7. And your energy today, 1 to 10?"), making their text value-unique — a prefetch of the 22 bare strings misses exactly the turns that dominate the loop. Still-fixed strings (openers, re-asks, decline acks, closers, give-up lines) do hit, which is what the server-side flag now covers without client complexity. (2) A client cache rewires every `speak()` call in `SarvamTtsAdapter` (blob lifetime, `cancel()` races, autoplay-policy edges) — the exact vitest-green-≠-live-audio class of change the PR #21 postmortem gates on live verification.
+
+**Post-MVP shape.** Design alongside Pattern C / the A2 e2e harness: either (a) prefetch ack-variant × question combinations for the finite non-boundary value space (~24 ack + 22 question strings; combinations only if two-element playback proves seamless), or (b) keep single-utterance synthesis and rely on provider-side caching + streaming TTS if Sarvam's streaming endpoint matures. Measure first: the A2 harness + PostHog Layer 2 latency events should say how much of the 2.5–5 s gap is TTS synth vs upload/STT/extract before more engineering goes here.
+
+**Trigger to revisit.** A2 harness lands (playback seams become verifiable), or telemetry shows TTS synth is the dominant slice of the mid-loop gap.
+
+---
+
 ## HIPAA compliance / BAA readiness
 
 > Items deferred from MVP because formal HIPAA compliance and Business Associate Agreements (BAAs) are gated on a **threshold-crossing event** — US clinical partnership, scale beyond the first 50 free users, or a deliberate decision to pursue a formal compliance posture for fundraising / enterprise sales. Architecture is HIPAA-*shaped* today (per ADR-035: audit log, soft-delete trail, MFA-ready data model, DPDP-compatible privacy policy); the items below are the operational/legal layer that turns posture into a defensible compliance stance when needed.

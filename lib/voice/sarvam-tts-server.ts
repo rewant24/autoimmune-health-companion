@@ -90,6 +90,14 @@ export async function synthesize(
 
   const speaker = args.voice ?? process.env.SARVAM_TTS_SPEAKER ?? DEFAULT_SPEAKER;
   const model = process.env.SARVAM_TTS_MODEL ?? DEFAULT_MODEL;
+  // Q3 slice (2026-07-04): opt-in Sarvam-side response cache — identical
+  // requests return cached audio instead of re-synthesizing, cutting the
+  // TTS leg of the mid-loop silence for the catalog strings that are
+  // still fixed (openers, re-asks, decline acks, closers). Beta flag,
+  // so env-gated default-off; flip SARVAM_TTS_CACHED_RESPONSES=1 to try.
+  const cachedResponses =
+    process.env.SARVAM_TTS_CACHED_RESPONSES === "1" ||
+    process.env.SARVAM_TTS_CACHED_RESPONSES === "true";
 
   const client = buildClient(apiKey);
 
@@ -103,6 +111,7 @@ export async function synthesize(
       speaker: speaker as never,
       model: model as never,
       ...(args.pace !== undefined ? { pace: args.pace } : {}),
+      ...(cachedResponses ? { enable_cached_responses: true } : {}),
     })) as { audios?: string[] };
   } catch (err) {
     const message =

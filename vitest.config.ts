@@ -28,6 +28,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),
+      // Next resolves the bare `server-only` marker through its compiler;
+      // Vite can't. Tests that import server-only modules directly
+      // (e.g. lib/voice/sarvam-tts-server) need the inert stub.
+      'server-only': path.resolve(__dirname, 'tests/stubs/server-only.ts'),
     },
   },
 })
