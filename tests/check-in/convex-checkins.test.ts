@@ -374,11 +374,12 @@ describe('listCheckinsHandler', () => {
 })
 
 describe('getCheckinHandler', () => {
-  it('returns a row by id', async () => {
+  it('returns a row by id for its owner', async () => {
     const { ctx } = makeCtx()
     const created = await createCheckinHandler(ctx as unknown as Parameters<typeof createCheckinHandler>[0], baseArgs())
     const row = await getCheckinHandler(ctx as unknown as Parameters<typeof createCheckinHandler>[0], {
       id: created.id,
+      userId: 'user_A',
     })
     expect(row).not.toBeNull()
     expect(row?.date).toBe('2026-04-25')
@@ -388,6 +389,7 @@ describe('getCheckinHandler', () => {
     const { ctx } = makeCtx()
     const row = await getCheckinHandler(ctx as unknown as Parameters<typeof createCheckinHandler>[0], {
       id: 'id_does_not_exist',
+      userId: 'user_A',
     })
     expect(row).toBeNull()
   })
@@ -398,6 +400,17 @@ describe('getCheckinHandler', () => {
     rows[0].deletedAt = Date.now()
     const row = await getCheckinHandler(ctx as unknown as Parameters<typeof createCheckinHandler>[0], {
       id: created.id,
+      userId: 'user_A',
+    })
+    expect(row).toBeNull()
+  })
+
+  it('returns null when the requesting user does not own the row (IDOR guard)', async () => {
+    const { ctx } = makeCtx()
+    const created = await createCheckinHandler(ctx as unknown as Parameters<typeof createCheckinHandler>[0], baseArgs())
+    const row = await getCheckinHandler(ctx as unknown as Parameters<typeof createCheckinHandler>[0], {
+      id: created.id,
+      userId: 'user_B',
     })
     expect(row).toBeNull()
   })

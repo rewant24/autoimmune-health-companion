@@ -293,11 +293,15 @@ export async function listCheckinsHandler(
 
 export async function getCheckinHandler(
   ctx: QueryHandlerCtx,
-  args: { id: string },
+  args: { id: string; userId: string },
 ): Promise<CheckinRow | null> {
   const row = await ctx.db.get(args.id);
   if (row === null) return null;
   if (row.deletedAt !== undefined) return null;
+  // Ownership: return null (not an error) on mismatch so a probing client
+  // can't distinguish "not yours" from "doesn't exist". Matches the
+  // defense-in-depth userId checks on every other read/mutate path.
+  if (row.userId !== args.userId) return null;
   return row;
 }
 
@@ -355,7 +359,7 @@ export const listCheckins = query({
 });
 
 export const getCheckin = query({
-  args: { id: v.string() },
+  args: { id: v.string(), userId: v.string() },
   handler: async (ctx, args) => {
     return getCheckinHandler(ctx as unknown as QueryHandlerCtx, args);
   },
