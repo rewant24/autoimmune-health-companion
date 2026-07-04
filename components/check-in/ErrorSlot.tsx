@@ -17,6 +17,64 @@
 
 import { useEffect, useRef } from 'react'
 
+/**
+ * Per-kind plain-language copy (2026-07-04 assessment, quick win Q5).
+ * A chronically ill user mid-check-in used to be shown a debug slug
+ * (`permission-denied`) as the explanation. Each known kind now gets a
+ * human headline + a sentence that owns the failure and points at the
+ * recovery path; the slug survives only as a demoted detail line for
+ * bug reports. Register: first person where natural, blame-absorbing
+ * ("our side, not you" — the Wysa lesson), taps always named as the
+ * way forward.
+ */
+export const ERROR_COPY: Record<string, { title: string; body: string }> = {
+  'permission-denied': {
+    title: "Saha can't hear you yet.",
+    body:
+      'Your browser is blocking the microphone. Allow mic access in ' +
+      'your browser settings, or finish today with taps.',
+  },
+  'no-speech': {
+    title: "I didn't catch anything.",
+    body:
+      'It was quiet on this end. Try again a little closer to the ' +
+      'phone, or switch to taps.',
+  },
+  network: {
+    title: 'The connection dropped.',
+    body:
+      'Something broke up mid-sentence — the network or our side, not ' +
+      'you. Check your connection and try again.',
+  },
+  unsupported: {
+    title: "Voice doesn't work in this browser.",
+    body:
+      'Everything still works with taps — or open Saha in another ' +
+      'browser for voice.',
+  },
+  aborted: {
+    title: 'Voice input stopped.',
+    body: 'The session ended before anything was captured. Try again when ready.',
+  },
+  'rate-limited': {
+    title: 'Voice is over its limit right now.',
+    body:
+      "Nothing you said is lost. Give it a little while and try again, " +
+      'or finish with taps.',
+  },
+  'save-failed': {
+    title: "That didn't save.",
+    body:
+      'Your check-in is still right here — nothing is lost. Try again ' +
+      'in a moment.',
+  },
+}
+
+const FALLBACK_COPY = {
+  title: 'Something got in the way.',
+  body: 'An unexpected hiccup on our side. Try again in a moment.',
+}
+
 export interface ErrorSlotProps {
   kind: string
   message?: string
@@ -50,10 +108,10 @@ export function ErrorSlot({
       }
     >
       <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-        Something got in the way.
+        {(ERROR_COPY[kind] ?? FALLBACK_COPY).title}
       </h2>
       <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        <span className="font-mono text-xs text-zinc-400">{kind}</span>
+        {(ERROR_COPY[kind] ?? FALLBACK_COPY).body}
         {message ? <span className="block pt-2">{message}</span> : null}
       </p>
       {onRetry ? (
@@ -71,6 +129,10 @@ export function ErrorSlot({
           Try again
         </button>
       ) : null}
+      {/* Debug slug, demoted to a detail line — kept for bug reports. */}
+      <span className="font-mono text-[10px] text-zinc-300 dark:text-zinc-600">
+        {kind}
+      </span>
     </section>
   )
 }
