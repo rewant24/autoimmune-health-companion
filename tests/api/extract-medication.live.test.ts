@@ -370,7 +370,7 @@ describe("POST /api/check-in/extract-medication — live LLM contract", () => {
 
       // Hard invariant: medication-extract burns ZERO attempts. The
       // metric-extract route owns the single increment per check-in;
-      // doubling that here would halve the daily cap (5 → 2.5 / day).
+      // doubling that here would halve the daily cap (30 → 15 / day).
       expect(after).toBe(before);
     },
   );

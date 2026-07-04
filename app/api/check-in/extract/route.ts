@@ -7,7 +7,8 @@
  *   1. Validate the request body shape.
  *   2. Hit the Convex `extractAttempts:incrementAndCheck` mutation —
  *      this both increments the per-user-per-day counter and tells us
- *      whether the daily cap (5/user/day, ADR-020) has been reached.
+ *      whether the daily cap (30/user/day, ADR-020 as amended 2026-07-04)
+ *      has been reached.
  *   3. If capped, return 429 with code `extract.daily_cap_reached`.
  *   4. Otherwise call the Vercel AI SDK `generateObject` with a zod
  *      schema, the system prompt, and a truncated transcript.

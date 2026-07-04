@@ -9,7 +9,7 @@
  *   The metric extract route (`/api/check-in/extract`) increments the
  *   `extractAttempts` counter exactly ONCE per check-in. This route does
  *   NOT increment the counter — calling `incrementAndCheck` here would
- *   burn two attempts per check-in and halve the daily cap (5 → 2.5).
+ *   burn two attempts per check-in and halve the daily cap (30 → 15).
  *   The check-in flow enforces ordering: medication extraction is invoked
  *   only after metric extraction returns a non-429 response.
  *

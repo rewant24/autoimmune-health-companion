@@ -346,6 +346,8 @@
 
 **Amendment 2026-04-30 (F04 C1 fix-pass).** Dev/preview cap raised to 50 to support smoke replay (`process.env.NODE_ENV === 'production' ? 5 : 50` in `convex/extractAttempts.ts`). Production cap unchanged at 5. Rationale: post-MVP backlog item 22.4 — smoke testing was being interrupted by the cap during integration. Production behaviour and ADR-020's hard ceiling are unchanged.
 
+**Amendment 2026-07-04 (session 24, Rewant decision).** Production cap raised 5 → 30 (`process.env.NODE_ENV === 'production' ? 30 : 50`). The original ceiling was set before the per-metric follow-up answer loop existed and no longer fits the loop's real call shape: one clean voice check-in is 5 extract calls (freeform + 4 answers), so a single re-ask, decline, or mishear pushed a user over the cap mid-loop — surfaced live during the session-24 voice smoke, where the happy-path run itself tripped the banner. 30 ≈ five clean loops or one high-friction day. The cap remains a hard per-user-per-day ceiling; the guard mechanism, the single-increment-per-check-in invariant, and the medication-route zero-increment invariant are unchanged. Revisit when auth re-keys the cost guard to server-derived identity (roadmap Phase 3).
+
 ---
 
 ## ADR-021 — `stage` enum semantics for `checkIns` records

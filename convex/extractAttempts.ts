@@ -3,7 +3,7 @@
  *
  * Every call to POST /api/check-in/extract first invokes
  * `incrementAndCheck` here. The mutation increments the per-user-per-day
- * row in `extractAttempts` and returns whether the daily cap (5 attempts)
+ * row in `extractAttempts` and returns whether the daily cap (30 attempts)
  * has been reached. The route returns 429 with code
  * `extract.daily_cap_reached` when it has.
  *
@@ -17,16 +17,20 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 
 /**
- * Daily attempt cap per ADR-020. The (cap + 1)th call returns 429.
+ * Daily attempt cap per ADR-020 (amended 2026-07-04). The (cap + 1)th
+ * call returns 429.
  *
- * Production stays at 5 (the original ADR-020 cost ceiling). Non-production
- * runtimes (local dev + Vercel preview deploys) use 50 so smoke passes can
- * re-run the voice flow without hitting `extract.daily_cap_reached` and
- * dropping to the manual reset script. Bumped per post-MVP backlog item 22.4
- * (Voice C1 deferred polish, 2026-04-30).
+ * Production raised 5 → 30: the original ceiling predates the follow-up
+ * answer loop's real call shape — one clean voice loop is 5 extracts
+ * (freeform + 4 answers), so any single re-ask, decline, or mishear
+ * pushed a first-day user over the cap mid-loop (surfaced by the
+ * 2026-07-04 session-24 live smoke). 30 ≈ five clean loops or one very
+ * rough day; still a hard ceiling against runaway cost. Non-production
+ * runtimes (local dev + Vercel preview deploys) stay at 50 so smoke
+ * passes can re-run the voice flow freely (backlog item 22.4).
  */
 export const DAILY_CAP =
-  process.env.NODE_ENV === "production" ? 5 : 50;
+  process.env.NODE_ENV === "production" ? 30 : 50;
 
 export type ExtractAttemptRow = {
   _id: string;
