@@ -1,8 +1,19 @@
 /**
  * One-shot smoke for PR #28 PostHog wiring against the live Vercel preview.
  *
+ * Run with env loaded (raw node does NOT read .env files like Next.js does):
+ *   node --env-file=.env.local scripts/posthog-smoke.mjs
+ *
+ * Required env:
+ *   NEXT_PUBLIC_POSTHOG_KEY          — expected PostHog project key
+ *   VERCEL_AUTOMATION_BYPASS_SECRET  — only when targeting a protected
+ *                                      *.vercel.app preview (not needed for
+ *                                      prod meetsaha.com or local next start)
+ * Optional:
+ *   PREVIEW_URL — target origin (defaults to prod https://www.meetsaha.com)
+ *
  * What this proves:
- *  - PostHog SDK loads on the preview build
+ *  - PostHog SDK loads on the target build
  *  - posthog.init runs (env var threaded through)
  *  - At least one capture POST fires to us.i.posthog.com
  *  - the project API key in the capture body matches the expected one
@@ -15,9 +26,32 @@
  */
 import { chromium } from '@playwright/test'
 
-const PREVIEW = process.env.PREVIEW_URL || 'https://saha-health-companion-git-feat-voice-7c690a-rewant24s-projects.vercel.app'
-const BYPASS = 'ZmFXG9aJ1qRh9FOajINruF3ntawYfPNI'
-const EXPECTED_KEY = 'phc_t8ADaD4v6EbCpGngg2K8sVY9vFS6pmoKfYnNj7AXMcC8'
+function requireEnv(name, hint) {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(
+      `Missing required env var ${name}. ${hint} ` +
+        `Run via: node --env-file=.env.local scripts/posthog-smoke.mjs`,
+    )
+  }
+  return value
+}
+
+const PREVIEW = process.env.PREVIEW_URL || 'https://www.meetsaha.com'
+const EXPECTED_KEY = requireEnv(
+  'NEXT_PUBLIC_POSTHOG_KEY',
+  'Set it in .env.local (same key the app uses).',
+)
+// The bypass secret defeats Vercel deployment protection — only protected
+// *.vercel.app previews need it. Never hardcode it; it must live only in
+// .env.local (gitignored) / Vercel env.
+const needsBypass = /saha-health-companion.*\.vercel\.app/.test(PREVIEW)
+const BYPASS = needsBypass
+  ? requireEnv(
+      'VERCEL_AUTOMATION_BYPASS_SECRET',
+      'Copy it from Vercel → Project Settings → Deployment Protection → Protection Bypass for Automation.',
+    )
+  : null
 const TEST_USER = 'qa-smoke-' + Date.now()
 
 const captures = []
@@ -31,10 +65,12 @@ const context = await browser.newContext({})
 // leak into cross-origin requests (e.g. posthog assets), which then
 // fail CORS preflights and prevent the SDK from loading surveys/replay
 // scripts.
-await context.route(/saha-health-companion.*\.vercel\.app/, async (route) => {
-  const headers = { ...route.request().headers(), 'x-vercel-protection-bypass': BYPASS }
-  await route.continue({ headers })
-})
+if (BYPASS !== null) {
+  await context.route(/saha-health-companion.*\.vercel\.app/, async (route) => {
+    const headers = { ...route.request().headers(), 'x-vercel-protection-bypass': BYPASS }
+    await route.continue({ headers })
+  })
+}
 
 const page = await context.newPage()
 page.on('console', (m) => {

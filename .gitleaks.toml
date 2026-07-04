@@ -1,0 +1,19 @@
+# Gitleaks config for the pre-commit hook (.githooks/pre-commit).
+# Extends the default ruleset — needed because the default generic-api-key
+# rule keys on words like "secret"/"token", which is exactly why the two
+# `BYPASS = '<value>'` leaks slipped through unnoticed.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "vercel-protection-bypass"
+description = "Vercel Deployment Protection bypass secret (32-char alnum assigned to a *bypass* name)"
+regex = '''(?i)bypass[a-z_-]*['"]?\s*[:=]\s*['"]?([a-zA-Z0-9]{32})['"]?'''
+keywords = ["bypass"]
+
+[[rules]]
+id = "posthog-project-api-key"
+description = "PostHog project API key"
+regex = '''phc_[a-zA-Z0-9]{40,}'''
+keywords = ["phc_"]

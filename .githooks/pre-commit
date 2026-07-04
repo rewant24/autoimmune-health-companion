@@ -1,0 +1,13 @@
+#!/bin/sh
+# Blocks commits containing secrets (2nd bypass-token leak — see
+# docs/build-log.md). Wired via `git config core.hooksPath .githooks`,
+# which the package.json `prepare` script sets on every pnpm install.
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks is not installed — refusing to commit unscanned." >&2
+  echo "Install it:  brew install gitleaks" >&2
+  echo "(bypass once with git commit --no-verify if you must)" >&2
+  exit 1
+fi
+
+gitleaks git --pre-commit --staged --redact --verbose

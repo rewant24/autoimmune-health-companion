@@ -11,7 +11,8 @@
     "test:integration": "vitest --config vitest.integration.config.ts tests/integration --run",
     "test:api:live": "vitest --config vitest.integration.config.ts tests/api --run",
     "test:e2e": "playwright test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.53",
