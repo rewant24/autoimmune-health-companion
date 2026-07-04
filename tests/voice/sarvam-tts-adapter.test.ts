@@ -243,6 +243,41 @@ describe("SarvamTtsAdapter.speak — happy path (US-V.C.3 / US-V.C.5)", () => {
     });
   });
 
+  it("forwards constructor `pace` in the request body (Q2 plumb)", async () => {
+    const fetchSpy = installFetch();
+    const t = new SarvamTtsAdapter({
+      language_code: "en-IN",
+      pace: 0.85,
+    });
+    const speakP = t.speak("Morning.");
+    for (let i = 0; i < 10 && audioInstances.length === 0; i++) {
+      await Promise.resolve();
+    }
+    audioInstances[0].__triggerEnd();
+    await speakP;
+
+    const body = JSON.parse(fetchSpy.spy.mock.calls[0][1].body as string);
+    expect(body).toEqual({
+      text: "Morning.",
+      language_code: "en-IN",
+      pace: 0.85,
+    });
+  });
+
+  it("omits `pace` from the body when not configured (default unchanged)", async () => {
+    const fetchSpy = installFetch();
+    const t = new SarvamTtsAdapter({ language_code: "en-IN" });
+    const speakP = t.speak("Morning.");
+    for (let i = 0; i < 10 && audioInstances.length === 0; i++) {
+      await Promise.resolve();
+    }
+    audioInstances[0].__triggerEnd();
+    await speakP;
+
+    const body = JSON.parse(fetchSpy.spy.mock.calls[0][1].body as string);
+    expect("pace" in body).toBe(false);
+  });
+
   it("language_code flows through on every speak() call (US-V.C.5)", async () => {
     const fetchSpy = installFetch();
     const t = new SarvamTtsAdapter({ language_code: "en-IN" });

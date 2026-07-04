@@ -45,6 +45,14 @@ export interface SarvamTtsAdapterError {
 export interface SarvamTtsAdapterOptions {
   language_code: string
   voice?: string
+  /**
+   * Speech pace multiplier forwarded to `/api/speak` (bulbul:v2 range
+   * 0.3–3.0; 1.0 = default). Constructor-level like `voice` — one pace
+   * per adapter instance keeps the request body deterministic and maps
+   * onto Pattern C's apply-once-at-mount scoping. Q2 (2026-07-04): plumb
+   * only, nothing constructs with a pace yet.
+   */
+  pace?: number
 }
 
 interface PendingSession {
@@ -64,6 +72,7 @@ function isAbortError(err: unknown): boolean {
 export class SarvamTtsAdapter implements TtsProvider {
   private readonly language_code: string
   private readonly voice?: string
+  private readonly pace?: number
   private pending: PendingSession | null = null
 
   constructor(opts: SarvamTtsAdapterOptions) {
@@ -77,6 +86,9 @@ export class SarvamTtsAdapter implements TtsProvider {
     this.language_code = opts.language_code.trim()
     if (typeof opts.voice === 'string' && opts.voice.trim().length > 0) {
       this.voice = opts.voice.trim()
+    }
+    if (typeof opts.pace === 'number' && Number.isFinite(opts.pace)) {
+      this.pace = opts.pace
     }
   }
 
@@ -136,11 +148,12 @@ export class SarvamTtsAdapter implements TtsProvider {
           message: 'Audio playback failed',
         })
 
-      const body: Record<string, string> = {
+      const body: Record<string, string | number> = {
         text,
         language_code: this.language_code,
       }
       if (this.voice) body.voice = this.voice
+      if (this.pace !== undefined) body.pace = this.pace
 
       void (async (): Promise<void> => {
         let response: Response

@@ -107,6 +107,27 @@ describe("POST /api/speak — request validation (US-V.C.1 / US-V.C.2)", () => {
     const body = await res.json();
     expect(body.error.code).toBe("voice.bad_request");
   });
+
+  it("returns 400 when `pace` is not a number (Q2)", async () => {
+    const res = await POST(
+      jsonRequest({ text: "hi", language_code: "en-IN", pace: "fast" }),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe("voice.bad_request");
+    expect(synthesizeMock).not.toHaveBeenCalled();
+  });
+
+  it.each([0.2, 3.5])(
+    "returns 400 when `pace` is outside 0.3–3.0 (%s)",
+    async (pace) => {
+      const res = await POST(
+        jsonRequest({ text: "hi", language_code: "en-IN", pace }),
+      );
+      expect(res.status).toBe(400);
+      expect(synthesizeMock).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("POST /api/speak — provider integration (US-V.C.1)", () => {
@@ -154,6 +175,23 @@ describe("POST /api/speak — provider integration (US-V.C.1)", () => {
       voice: "manisha",
     });
   });
+
+  it.each([0.3, 0.85, 3.0])(
+    "forwards in-range `pace` %s to synthesize() (Q2)",
+    async (pace) => {
+      synthesizeMock.mockResolvedValue({
+        audio: new Uint8Array([1, 2]),
+        contentType: "audio/wav",
+      });
+
+      const res = await POST(
+        jsonRequest({ text: "hi", language_code: "en-IN", pace }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(synthesizeMock.mock.calls[0][0]).toMatchObject({ pace });
+    },
+  );
 
   it("returns 503 when synthesize throws missing_key", async () => {
     synthesizeMock.mockRejectedValue(

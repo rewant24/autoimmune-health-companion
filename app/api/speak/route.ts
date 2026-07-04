@@ -31,11 +31,19 @@ export const runtime = "nodejs";
 export const MAX_TEXT_CHARS = 1000;
 /** Cheap prompt-injection-via-multiline guard (US-V.C.2). */
 export const MAX_NEWLINES = 5;
+/**
+ * Sarvam bulbul:v2 accepts `pace` in [0.3, 3.0] as a plain request field
+ * (2026-07-04 assessment, quick win Q2 — Pattern C enabler). Bounds are
+ * enforced here at the boundary, same as the text caps.
+ */
+export const PACE_MIN = 0.3;
+export const PACE_MAX = 3.0;
 
 interface RequestBody {
   text: string;
   language_code: string;
   voice?: string;
+  pace?: number;
 }
 
 function isRequestBody(value: unknown): value is RequestBody {
@@ -46,6 +54,7 @@ function isRequestBody(value: unknown): value is RequestBody {
     return false;
   }
   if (v.voice !== undefined && typeof v.voice !== "string") return false;
+  if (v.pace !== undefined && typeof v.pace !== "number") return false;
   return true;
 }
 
@@ -94,7 +103,18 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  const { text, language_code, voice } = raw;
+  const { text, language_code, voice, pace } = raw;
+
+  if (
+    pace !== undefined &&
+    (!Number.isFinite(pace) || pace < PACE_MIN || pace > PACE_MAX)
+  ) {
+    return errorResponse(
+      400,
+      "voice.bad_request",
+      `\`pace\` must be a number between ${PACE_MIN} and ${PACE_MAX}`,
+    );
+  }
 
   if (text.length > MAX_TEXT_CHARS) {
     return errorResponse(
@@ -122,7 +142,7 @@ export async function POST(req: Request): Promise<Response> {
 
   let result: { audio: Uint8Array; contentType: string };
   try {
-    result = await synthesize({ text, language_code, voice });
+    result = await synthesize({ text, language_code, voice, pace });
   } catch (err) {
     if (err instanceof SarvamTtsError && err.kind === "missing_key") {
       return errorResponse(

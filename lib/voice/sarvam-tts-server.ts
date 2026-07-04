@@ -46,6 +46,12 @@ export interface SynthesizeArgs {
   text: string;
   language_code: string;
   voice?: string;
+  /**
+   * Speech pace multiplier. bulbul:v2 accepts this as a plain request
+   * field (0.3–3.0, 1.0 = default) — no SSML needed. Omitted = provider
+   * default. Range validation happens at the route boundary.
+   */
+  pace?: number;
 }
 
 export interface SynthesizeResult {
@@ -96,6 +102,7 @@ export async function synthesize(
       target_language_code: args.language_code as never,
       speaker: speaker as never,
       model: model as never,
+      ...(args.pace !== undefined ? { pace: args.pace } : {}),
     })) as { audios?: string[] };
   } catch (err) {
     const message =
