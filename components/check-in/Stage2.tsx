@@ -43,6 +43,12 @@ export interface Stage2Props {
   missing: Metric[]
   declined: Metric[]
   /**
+   * Honest copy about why the user landed here (e.g. the daily AI
+   * extraction cap vs a transient failure). Rendered as a banner above
+   * the recap when set.
+   */
+  notice?: string | null
+  /**
    * Day-1 mode: render all 5 controls regardless of `missing`. Wired by
    * chunk 2.F (`continuityState.isFirstEverCheckin`).
    */
@@ -60,6 +66,7 @@ export function Stage2({
   metrics,
   missing,
   declined,
+  notice,
   forceAllControls,
   onMetricUpdate,
   onMetricDeclined,
@@ -75,6 +82,16 @@ export function Stage2({
       data-force-all={forceAllControls ? 'true' : 'false'}
       className="flex w-full max-w-md flex-col gap-6 px-2 pb-8"
     >
+      {notice ? (
+        <p
+          data-testid="stage-2-notice"
+          role="status"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          {notice}
+        </p>
+      ) : null}
+
       <Stage2Recap
         metrics={metrics}
         missing={missing}

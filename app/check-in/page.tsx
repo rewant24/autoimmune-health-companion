@@ -82,10 +82,13 @@ import {
   selectDeclineAcknowledgement,
 } from '@/lib/saha/follow-up-engine'
 import { detectDecline } from '@/lib/saha/decline-detector'
+import { extractMetrics } from '@/lib/checkin/extract-metrics'
 import {
-  extractMetrics,
-  ExtractDailyCapError,
-} from '@/lib/checkin/extract-metrics'
+  classifyExtractError,
+  extractFailureNotice,
+  shouldBailAnswerLoop,
+  type ExtractFailureKind,
+} from '@/lib/checkin/extract-failure'
 import { coverage } from '@/lib/checkin/coverage'
 import { detectMilestone } from '@/lib/checkin/milestone'
 import { buildAppendPayload } from '@/lib/checkin/same-day-reentry'
@@ -442,6 +445,16 @@ export default function CheckinPage({
   // the metric as declined and advances the loop. Keyed per metric so
   // the counter resets when the next missing metric is asked.
   const reaskCountRef = useRef<Partial<Record<Metric, number>>>({})
+  // Interim extract-429 fix (2026-07-04): consecutive extract *failures*
+  // in the answer loop (exceptions, not unparseable answers). Tracked
+  // separately from `reaskCountRef` so a failing extraction service can
+  // never fold into the decline path and save metrics as "declined".
+  const answerExtractFailureCountRef = useRef(0)
+  // When set, Stage 2 renders honest copy about why voice capture stopped
+  // (daily AI cap vs transient failure). Cleared when a fresh extraction
+  // cycle starts.
+  const [extractFailureKind, setExtractFailureKind] =
+    useState<ExtractFailureKind | null>(null)
 
   const onSave = async (): Promise<void> => {
     const snapshot = confirmingRef.current
@@ -832,6 +845,8 @@ export default function CheckinPage({
     // Reset per-turn re-ask counter — a fresh extraction starts a new
     // voice-loop attempt for each metric.
     reaskCountRef.current = {}
+    answerExtractFailureCountRef.current = 0
+    setExtractFailureKind(null)
     dispatch({ type: 'EXTRACTION_START' })
     void (async () => {
       try {
@@ -900,11 +915,10 @@ export default function CheckinPage({
         })
       } catch (err) {
         if (runId !== extractionRunIdRef.current) return
-        // ExtractDailyCapError + ExtractFailedError both fall through to
-        // a fully-scripted Stage 2 — user can still complete the check-in.
-        if (err instanceof ExtractDailyCapError) {
-          // No-op marker; future telemetry hook can land here.
-        }
+        // Both error classes fall through to a fully-scripted Stage 2 so
+        // the user can still complete the check-in — but the failure kind
+        // drives honest copy there (daily cap ≠ generic hiccup).
+        setExtractFailureKind(classifyExtractError(err))
         dispatch({ type: 'EXTRACTION_FAILED' })
       }
     })()
@@ -1025,19 +1039,37 @@ export default function CheckinPage({
     const answerText = state.answerTranscript.text
     void (async () => {
       let extracted: Partial<CheckinMetrics> = {}
+      let failure: ExtractFailureKind | null = null
       try {
         extracted = await extractMetrics({
           transcript: answerText,
           userId,
           date: todayIso,
         })
-      } catch {
-        // Treat extract failure as no value — falls through to re-ask /
-        // decline path below. No state change to error here; the user is
-        // mid-loop and we'd rather degrade gracefully than throw them
-        // out of voice mode.
+      } catch (err) {
+        failure = classifyExtractError(err)
       }
       if (runId !== answerExtractionRunIdRef.current) return
+      if (failure !== null) {
+        // Extraction *failed* — this is our failure, not the user's
+        // answer. It must never fall through to the re-ask/decline path:
+        // that used to save metrics as "declined" after two failures,
+        // and a daily-cap 429 fails every subsequent call. Bail to taps
+        // (captured metrics carry over; the rest stay missing, not
+        // declined) — or re-ask once for a transient blip.
+        answerExtractFailureCountRef.current += 1
+        if (
+          shouldBailAnswerLoop(failure, answerExtractFailureCountRef.current)
+        ) {
+          setExtractFailureKind(failure)
+          dispatch({ type: 'BAIL_TO_TAPS' })
+          return
+        }
+        const reask = selectFollowUpQuestion(metric, 2, continuityState)
+        dispatch({ type: 'ASK_QUESTION', metric, text: reask.text })
+        return
+      }
+      answerExtractFailureCountRef.current = 0
       const captured = extracted[metric]
       const isDecline =
         captured == null && detectDecline(answerText)
@@ -1283,6 +1315,11 @@ export default function CheckinPage({
             metrics={state.metrics}
             missing={state.missing}
             declined={state.declined}
+            notice={
+              extractFailureKind !== null
+                ? extractFailureNotice(extractFailureKind)
+                : null
+            }
             forceAllControls={isDay1}
             onMetricUpdate={(metric, value) =>
               dispatch({ type: 'METRIC_UPDATED', metric, value })
