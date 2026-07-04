@@ -45,7 +45,11 @@ export const FOLLOW_UP_VARIANTS: Record<FollowUpVariantKey, string> = {
   "mood.attempt1.default":
     "And how are you feeling — heavy, flat, okay, bright, or great?",
   "adherenceTaken.attempt1.default": "Did you take your medication today?",
-  "flare.attempt1.default": "Any flare today — yes, no, or still ongoing?",
+  // 2026-07-04 polish (Q6): ask the question, not the schema. The LLM
+  // extractor parses freeform answers, so the yes/no/ongoing enum
+  // recital is over-insurance on attempt 1 — it survives only in the
+  // attempt-2 re-ask, where parsing has actually failed once.
+  "flare.attempt1.default": "Anything flaring today?",
   "energy.attempt1.default": "And your energy today, 1 to 10?",
 
   // attempt 1 — continuity tone (flare with ongoing days > 0)
@@ -57,7 +61,9 @@ export const FOLLOW_UP_VARIANTS: Record<FollowUpVariantKey, string> = {
   "mood.attempt2":
     "Sorry — could you say how you're feeling? Heavy, flat, okay, bright, or great?",
   "adherenceTaken.attempt2": "Sorry — meds today, yes or no?",
-  "flare.attempt2": "Sorry — flare today: yes, no, or ongoing?",
+  // 2026-07-04 polish (Q6): a re-ask is Saha's failure, not the user's,
+  // so the retry gets MORE human ("I missed that"), not telegraphic.
+  "flare.attempt2": "Sorry, I missed that — was there a flare today? Yes, no, or ongoing.",
   "energy.attempt2": "Sorry — energy today, 1 to 10?",
 };
 
@@ -72,13 +78,17 @@ export type DeclineAckKey =
 /**
  * Decline-acknowledgement copy keyed by `DeclineAckKey`. Played as a short
  * TTS line confirming a metric was skipped before the engine moves on.
+ *
+ * 2026-07-04 polish (Q6): a decline-ack should grant permission, not log
+ * a command — "OK, skipping X" was a system confirming input; "that's
+ * fine" is a person letting it go.
  */
 export const DECLINE_ACK_VARIANTS: Record<DeclineAckKey, string> = {
-  "pain.decline": "OK, skipping pain.",
-  "mood.decline": "OK, skipping mood.",
-  "adherenceTaken.decline": "OK, skipping medication.",
-  "flare.decline": "OK, skipping flare.",
-  "energy.decline": "OK, skipping energy.",
+  "pain.decline": "That's fine — skipping pain today.",
+  "mood.decline": "That's fine — skipping mood today.",
+  "adherenceTaken.decline": "That's fine — skipping medication today.",
+  "flare.decline": "That's fine — skipping flare today.",
+  "energy.decline": "That's fine — skipping energy today.",
 };
 
 /** Resolve a metric to its decline-ack key. Pure mapping. */

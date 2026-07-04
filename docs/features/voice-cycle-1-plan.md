@@ -459,15 +459,15 @@ All four prompts dispatched in a single message. File ownership is disjoint. Int
 
 - **DeclineDetector.US-V.D.3** — `detectDecline(answerTranscript: string): boolean`. Regex over `/skip|next|don'?t (want|know)|not sure|move on|pass|none|nothing/i`. Conservative — false positives become "user declined" which is OK. Tests cover the allowlist + a handful of false-negative-prone phrases ("I'm fine" should NOT match decline; "that's all" should match).
 
-**Variant catalog (locked, copy verbatim):**
+**Variant catalog (locked, copy verbatim). Revised 2026-07-04 per the voice-humanness assessment §3 (Q6 polish): flare attempt-1 drops the enum recital, flare attempt-2 gets more human, decline acks grant permission instead of logging a command.**
 
 | Metric | Attempt 1 (default) | Attempt 1 (continuity-tone variant — only for `flare` when `flareOngoingDays > 0`) | Attempt 2 (re-ask) | Decline ack |
 |---|---|---|---|---|
-| `pain` | "How's the pain today on a 1 to 10?" | — | "Sorry — missed that. The pain today, 1 to 10?" | "OK, skipping pain." |
-| `mood` | "And how are you feeling — heavy, flat, okay, bright, or great?" | — | "Sorry — could you say how you're feeling? Heavy, flat, okay, bright, or great?" | "OK, skipping mood." |
-| `adherenceTaken` | "Did you take your medication today?" | — | "Sorry — meds today, yes or no?" | "OK, skipping medication." |
-| `flare` | "Any flare today — yes, no, or still ongoing?" | "And the flare today — still ongoing, or different?" | "Sorry — flare today: yes, no, or ongoing?" | "OK, skipping flare." |
-| `energy` | "And your energy today, 1 to 10?" | — | "Sorry — energy today, 1 to 10?" | "OK, skipping energy." |
+| `pain` | "How's the pain today on a 1 to 10?" | — | "Sorry — missed that. The pain today, 1 to 10?" | "That's fine — skipping pain today." |
+| `mood` | "And how are you feeling — heavy, flat, okay, bright, or great?" | — | "Sorry — could you say how you're feeling? Heavy, flat, okay, bright, or great?" | "That's fine — skipping mood today." |
+| `adherenceTaken` | "Did you take your medication today?" | — | "Sorry — meds today, yes or no?" | "That's fine — skipping medication today." |
+| `flare` | "Anything flaring today?" | "And the flare today — still ongoing, or different?" | "Sorry, I missed that — was there a flare today? Yes, no, or ongoing." | "That's fine — skipping flare today." |
+| `energy` | "And your energy today, 1 to 10?" | — | "Sorry — energy today, 1 to 10?" | "That's fine — skipping energy today." |
 
 All 22 strings copied verbatim into `follow-up-variants.ts` as a TypeScript record. Reviewers verify exact match.
 

@@ -45,11 +45,13 @@ export function shouldBailAnswerLoop(
  * after an extraction failure dropped the user out of voice mode.
  */
 export function extractFailureNotice(kind: ExtractFailureKind): string {
+  // 2026-07-04 polish (Q6): Saha speaks as "I" everywhere else — the
+  // third-person self-reference plus the mechanism reveal ("with AI")
+  // broke register exactly where trust is most fragile.
   if (kind === "daily-cap") {
     return (
-      "Saha has hit today's limit for understanding answers with AI, " +
-      "so voice capture is paused until tomorrow. Nothing you said is " +
-      "lost — finish today's check-in with the taps below."
+      "I've hit today's limit for understanding voice answers — that's " +
+      "back tomorrow. Nothing you said is lost; finish below with taps."
     );
   }
   return (

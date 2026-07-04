@@ -62,7 +62,7 @@ describe("selectFollowUpQuestion — attempt 1 default per metric", () => {
       baseState({ flareOngoingDays: 0 }),
     );
     expect(result.variantKey).toBe("flare.attempt1.default");
-    expect(result.text).toBe("Any flare today — yes, no, or still ongoing?");
+    expect(result.text).toBe("Anything flaring today?");
   });
 
   it("energy attempt 1 default", () => {
@@ -139,9 +139,11 @@ describe("selectFollowUpQuestion — attempt 2 re-ask per metric", () => {
     );
     expect(withOngoing.variantKey).toBe("flare.attempt2");
     expect(withoutOngoing.variantKey).toBe("flare.attempt2");
-    expect(withOngoing.text).toBe("Sorry — flare today: yes, no, or ongoing?");
+    expect(withOngoing.text).toBe(
+      "Sorry, I missed that — was there a flare today? Yes, no, or ongoing.",
+    );
     expect(withoutOngoing.text).toBe(
-      "Sorry — flare today: yes, no, or ongoing?",
+      "Sorry, I missed that — was there a flare today? Yes, no, or ongoing.",
     );
   });
 
@@ -154,11 +156,11 @@ describe("selectFollowUpQuestion — attempt 2 re-ask per metric", () => {
 
 describe("selectDeclineAcknowledgement — one variant per metric", () => {
   const cases: Array<[Metric, string]> = [
-    ["pain", "OK, skipping pain."],
-    ["mood", "OK, skipping mood."],
-    ["adherenceTaken", "OK, skipping medication."],
-    ["flare", "OK, skipping flare."],
-    ["energy", "OK, skipping energy."],
+    ["pain", "That's fine — skipping pain today."],
+    ["mood", "That's fine — skipping mood today."],
+    ["adherenceTaken", "That's fine — skipping medication today."],
+    ["flare", "That's fine — skipping flare today."],
+    ["energy", "That's fine — skipping energy today."],
   ];
 
   it.each(cases)("%s decline ack copy", (metric, expectedText) => {
@@ -209,9 +211,9 @@ describe("Locked catalog integrity", () => {
     }
   });
 
-  it("every decline ack starts with 'OK, skipping'", () => {
+  it("every decline ack grants permission rather than logging a command (Q6)", () => {
     for (const text of Object.values(DECLINE_ACK_VARIANTS)) {
-      expect(text.startsWith("OK, skipping")).toBe(true);
+      expect(text.startsWith("That's fine — skipping")).toBe(true);
     }
   });
 
