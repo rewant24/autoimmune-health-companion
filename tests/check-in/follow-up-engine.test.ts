@@ -13,10 +13,12 @@ import { describe, it, expect } from "vitest";
 import {
   selectDeclineAcknowledgement,
   selectFollowUpQuestion,
+  selectGiveUpAcknowledgement,
 } from "@/lib/saha/follow-up-engine";
 import {
   DECLINE_ACK_VARIANTS,
   FOLLOW_UP_VARIANTS,
+  GIVE_UP_ACK_VARIANTS,
 } from "@/lib/saha/follow-up-variants";
 import type { ContinuityState, Metric } from "@/lib/checkin/types";
 
@@ -161,6 +163,34 @@ describe("selectDeclineAcknowledgement — one variant per metric", () => {
 
   it.each(cases)("%s decline ack copy", (metric, expectedText) => {
     expect(selectDeclineAcknowledgement(metric).text).toBe(expectedText);
+  });
+});
+
+describe("selectGiveUpAcknowledgement — one variant per metric (Q4)", () => {
+  const cases: Array<[Metric, string]> = [
+    ["pain", "Couldn't quite get that — I'll leave pain for the form at the end."],
+    ["mood", "Couldn't quite get that — I'll leave mood for the form at the end."],
+    [
+      "adherenceTaken",
+      "Couldn't quite get that — I'll leave medication for the form at the end.",
+    ],
+    ["flare", "Couldn't quite get that — I'll leave flare for the form at the end."],
+    ["energy", "Couldn't quite get that — I'll leave energy for the form at the end."],
+  ];
+
+  it.each(cases)("%s give-up ack copy", (metric, expectedText) => {
+    expect(selectGiveUpAcknowledgement(metric).text).toBe(expectedText);
+  });
+
+  it("every give-up ack owns the failure as Saha's, not the user's", () => {
+    for (const text of Object.values(GIVE_UP_ACK_VARIANTS)) {
+      expect(text.startsWith("Couldn't quite get that")).toBe(true);
+      expect(text).toContain("the form at the end");
+    }
+  });
+
+  it("GIVE_UP_ACK_VARIANTS has exactly 5 entries", () => {
+    expect(Object.keys(GIVE_UP_ACK_VARIANTS).length).toBe(5);
   });
 });
 

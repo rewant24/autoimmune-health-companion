@@ -80,6 +80,7 @@ import { readProfile } from '@/lib/profile/storage'
 import {
   selectFollowUpQuestion,
   selectDeclineAcknowledgement,
+  selectGiveUpAcknowledgement,
 } from '@/lib/saha/follow-up-engine'
 import {
   selectAcknowledgement,
@@ -1125,6 +1126,19 @@ export default function CheckinPage({
       const prev = reaskCountRef.current[metric] ?? 0
       reaskCountRef.current[metric] = prev + 1
       if (prev >= 1) {
+        // Q4 (2026-07-04): the give-up used to be silent — the user
+        // answered twice, was understood zero times, and was told
+        // nothing. Speak it: bundled into the next question's TTS when
+        // one follows (same zero-POST ride as Pattern A acks); spoken
+        // directly when this was the last metric, since nothing follows
+        // to carry the line and no TTS competes with it there.
+        const giveUp = selectGiveUpAcknowledgement(metric)
+        const remaining = state.missing.filter((m) => m !== metric)
+        if (remaining.length > 0) {
+          pendingAckRef.current = giveUp.text
+        } else {
+          void tts.speak(giveUp.text).catch(() => {})
+        }
         dispatch({
           type: 'ANSWER_EXTRACTED',
           metrics: {},

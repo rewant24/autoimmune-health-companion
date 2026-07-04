@@ -18,8 +18,10 @@ import type { ContinuityState, Metric } from "@/lib/checkin/types";
 import {
   DECLINE_ACK_VARIANTS,
   FOLLOW_UP_VARIANTS,
+  GIVE_UP_ACK_VARIANTS,
   type FollowUpVariantKey,
   declineAckKeyForMetric,
+  giveUpAckKeyForMetric,
 } from "@/lib/saha/follow-up-variants";
 
 export interface FollowUpQuestionSelection {
@@ -72,4 +74,16 @@ export function selectDeclineAcknowledgement(
 ): DeclineAckSelection {
   const key = declineAckKeyForMetric(metric);
   return { text: DECLINE_ACK_VARIANTS[key] };
+}
+
+/**
+ * Resolve the TTS line spoken when two answer attempts produced neither
+ * a value nor a decline and the loop gives up on a metric (Q4,
+ * 2026-07-04). One variant per metric — no continuity influence.
+ */
+export function selectGiveUpAcknowledgement(
+  metric: Metric,
+): DeclineAckSelection {
+  const key = giveUpAckKeyForMetric(metric);
+  return { text: GIVE_UP_ACK_VARIANTS[key] };
 }

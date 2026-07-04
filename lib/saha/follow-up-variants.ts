@@ -85,3 +85,37 @@ export const DECLINE_ACK_VARIANTS: Record<DeclineAckKey, string> = {
 export function declineAckKeyForMetric(metric: Metric): DeclineAckKey {
   return `${metric}.decline` as DeclineAckKey;
 }
+
+/** Stable key for the per-metric give-up acknowledgement. */
+export type GiveUpAckKey =
+  | "pain.giveup"
+  | "mood.giveup"
+  | "adherenceTaken.giveup"
+  | "flare.giveup"
+  | "energy.giveup";
+
+/**
+ * Give-up acknowledgement copy (2026-07-04 assessment, quick win Q4).
+ * Spoken when two answer attempts produced neither a value nor a decline
+ * and the loop moves on. Before this line existed, the give-up was the
+ * loop's worst anti-heard moment: the user answered twice, was understood
+ * zero times, and was told nothing. Owns the failure as Saha's ("Couldn't
+ * quite get that"), and points at the recovery path (the review form).
+ */
+export const GIVE_UP_ACK_VARIANTS: Record<GiveUpAckKey, string> = {
+  "pain.giveup":
+    "Couldn't quite get that — I'll leave pain for the form at the end.",
+  "mood.giveup":
+    "Couldn't quite get that — I'll leave mood for the form at the end.",
+  "adherenceTaken.giveup":
+    "Couldn't quite get that — I'll leave medication for the form at the end.",
+  "flare.giveup":
+    "Couldn't quite get that — I'll leave flare for the form at the end.",
+  "energy.giveup":
+    "Couldn't quite get that — I'll leave energy for the form at the end.",
+};
+
+/** Resolve a metric to its give-up-ack key. Pure mapping. */
+export function giveUpAckKeyForMetric(metric: Metric): GiveUpAckKey {
+  return `${metric}.giveup` as GiveUpAckKey;
+}
