@@ -81,6 +81,10 @@ import {
   selectFollowUpQuestion,
   selectDeclineAcknowledgement,
 } from '@/lib/saha/follow-up-engine'
+import {
+  selectAcknowledgement,
+  selectFreeformAcknowledgement,
+} from '@/lib/saha/ack-engine'
 import { detectDecline } from '@/lib/saha/decline-detector'
 import { extractMetrics } from '@/lib/checkin/extract-metrics'
 import {
@@ -450,6 +454,12 @@ export default function CheckinPage({
   // separately from `reaskCountRef` so a failing extraction service can
   // never fold into the decline path and save metrics as "declined".
   const answerExtractFailureCountRef = useRef(0)
+  // Pattern A (2026-07-04 Q1): receipt line for the value the answer loop
+  // just captured. The answer-loop driver (3e) prepends it to the NEXT
+  // question's text so the ack rides the same TTS POST — zero extra
+  // round-trips. Null when policy skipped the ack (boundary value,
+  // decline, re-ask, failure) or after the driver consumed it.
+  const pendingAckRef = useRef<string | null>(null)
   // When set, Stage 2 renders honest copy about why voice capture stopped
   // (daily AI cap vs transient failure). Cleared when a fresh extraction
   // cycle starts.
@@ -846,6 +856,10 @@ export default function CheckinPage({
     // voice-loop attempt for each metric.
     reaskCountRef.current = {}
     answerExtractFailureCountRef.current = 0
+    // A receipt staged for the loop's final metric is never consumed
+    // (no next question follows) — drop it so it can't leak into a
+    // same-mount re-entry's first answer turn.
+    pendingAckRef.current = null
     setExtractFailureKind(null)
     dispatch({ type: 'EXTRACTION_START' })
     void (async () => {
@@ -893,10 +907,14 @@ export default function CheckinPage({
           const next = cov.missing[0]
           if (next === undefined) return
           const q = selectFollowUpQuestion(next, 1, continuityState)
+          // Pattern A: when the freeform utterance yielded exactly one
+          // metric, bundle its receipt into the first question's TTS
+          // ("Got it — pain at 7. And your energy today, 1 to 10?").
+          const ack = selectFreeformAcknowledgement(metrics)
           dispatch({
             type: 'ASK_QUESTION',
             metric: next,
-            text: q.text,
+            text: ack === null ? q.text : `${ack.text} ${q.text}`,
             seed: { metrics, missing: cov.missing, declined: [] },
           })
           return
@@ -1087,6 +1105,14 @@ export default function CheckinPage({
         return
       }
       if (captured !== undefined) {
+        // Pattern A: stage the receipt line; the answer-loop driver (3e)
+        // bundles it into the next question's TTS. Null when the value
+        // is at a boundary (pain/energy 1 or 9–10) per the T4 caveat —
+        // a mis-heard extreme must not be casually confirmed aloud.
+        pendingAckRef.current =
+          captured === null
+            ? null
+            : (selectAcknowledgement(metric, captured)?.text ?? null)
         dispatch({
           type: 'ANSWER_EXTRACTED',
           metrics: { [metric]: captured } as Partial<CheckinMetrics>,
@@ -1137,10 +1163,14 @@ export default function CheckinPage({
     const next = state.missing[0]
     if (next === undefined || next === state.metric) return
     const q = selectFollowUpQuestion(next, 1, continuityState)
+    // Pattern A: consume any staged receipt from the turn that just
+    // resolved and speak it in the same breath as the next question.
+    const ack = pendingAckRef.current
+    pendingAckRef.current = null
     dispatch({
       type: 'ASK_QUESTION',
       metric: next,
-      text: q.text,
+      text: ack === null ? q.text : `${ack} ${q.text}`,
     })
   }, [
     state.kind,
