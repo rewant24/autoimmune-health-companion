@@ -55,3 +55,6 @@ docs/research/spike-out/
 /test-results/
 /playwright-report/
 /.playwright/
+
+# TTS bake-off audio output (vendor-strategy spike)
+bakeoff-output/
