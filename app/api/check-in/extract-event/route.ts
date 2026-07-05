@@ -33,12 +33,12 @@ import {
   buildSystemPrompt,
   buildUserMessage,
 } from '@/lib/checkin/event-extract'
+import { getExtractModelId } from '@/lib/checkin/model-config'
 
 export const runtime = 'nodejs'
 
 const MAX_TRANSCRIPT_CHARS = 5400
 const MAX_OUTPUT_TOKENS = 500 // arrays of objects with arrays of objects
-const DEFAULT_MODEL_ID = 'openai/gpt-4o-mini'
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 interface RequestBody {
@@ -106,7 +106,7 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     const result = await generateObject({
-      model: gateway(DEFAULT_MODEL_ID),
+      model: gateway(getExtractModelId()),
       schema: EventExtractionSchema,
       system: buildSystemPrompt(body.checkInDate),
       prompt: buildUserMessage(transcript),

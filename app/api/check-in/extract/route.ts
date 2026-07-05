@@ -31,9 +31,9 @@ import {
   truncateTranscript,
   MAX_OUTPUT_TOKENS,
   MAX_TRANSCRIPT_CHARS,
-  DEFAULT_MODEL_ID,
   type ExtractedMetrics,
 } from "@/lib/checkin/extract-prompt";
+import { getExtractModelId } from "@/lib/checkin/model-config";
 
 export const runtime = "nodejs";
 
@@ -157,7 +157,7 @@ export async function POST(req: Request): Promise<Response> {
   let metrics: ExtractedMetrics;
   try {
     const result = await generateObject({
-      model: gateway(DEFAULT_MODEL_ID),
+      model: gateway(getExtractModelId()),
       schema: ExtractedMetricsSchema,
       system: SYSTEM_PROMPT,
       prompt: buildUserMessage(body.transcript),

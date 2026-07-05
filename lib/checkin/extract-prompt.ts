@@ -7,9 +7,10 @@
  * up cleanly in code review.
  *
  * Locked decisions baked in here:
- * - Model id: `openai/gpt-4o-mini` via Vercel AI Gateway (ADR-020).
- *   Resolved at call site so the runtime can opt for a different gateway
- *   model id during ops if needed without touching this file.
+ * - Model id lives in `lib/checkin/model-config.ts` (env-driven via
+ *   `EXTRACT_MODEL_ID`, ADR-020 default `openai/gpt-4o-mini`) — moved
+ *   there 2026-07-05 (vendor-strategy spike Track 3) so all three
+ *   extraction routes share one owner.
  * - Transcript truncation: 5400 characters (≈ 2000 tokens at gpt-4o-mini's
  *   ~2.7 chars/token estimate).
  * - Output cap: 200 tokens.
@@ -23,9 +24,6 @@ export const MAX_TRANSCRIPT_CHARS = 5400;
 
 /** `maxOutputTokens` cap for the AI SDK call. */
 export const MAX_OUTPUT_TOKENS = 200;
-
-/** Default Vercel AI Gateway model id (ADR-020). */
-export const DEFAULT_MODEL_ID = "openai/gpt-4o-mini";
 
 /**
  * Truncate a transcript to `MAX_TRANSCRIPT_CHARS` characters. We keep the
