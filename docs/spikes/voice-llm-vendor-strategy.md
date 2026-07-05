@@ -1,6 +1,6 @@
 # Spike — Multi-vendor voice + LLM strategy
 
-**Date:** 2026-07-05 · **Status:** DRAFT — awaiting Rewant decisions (§8) · **Owner:** Fable session 25
+**Date:** 2026-07-05 · **Status:** PARTIALLY LOCKED — Q1/Q4 answered same day, Q2/Q3/Q5 open (§8) · **Owner:** Fable session 25
 
 ## 1. Context & trigger
 
@@ -78,6 +78,14 @@ error in the ₹89/user/mo COGS), so the driver here is *optionality*, not savin
 
 **Principle:** one new concept — a **voice route** derived from the user's language
 setting — resolved in the existing factories. Not a new abstraction layer.
+
+**Scope note (Rewant, 2026-07-05):** "plug-and-play" applies to the *voice* vendors
+(Sarvam and its alternates) as much as to the LLM — i.e., the check-in voice loop,
+which is today's only voice surface. Track 2 IS that: once the route table exists,
+Sarvam is one row in it, swappable per-locale (or wholesale, in an outage) the same
+way the LLM becomes swappable via `EXTRACT_MODEL_ID` in Track 3. The asymmetry to
+respect: the LLM swap is config-only; a voice-vendor swap always crosses the
+live-audio boundary and takes a per-vendor manual smoke (or the A2 harness).
 
 1. **User-facing setting:** `voiceLocale` (e.g. `en-IN` | `en-US` | future `hi-IN`),
    default `en-IN`, stored with the profile (post-auth: users table; pre-auth: the
@@ -174,10 +182,10 @@ wrong next step.
 
 ## 8. Open questions for Rewant
 
-1. Bake-off vendor shortlist: Google + ElevenLabs + Gemini TTS confirmed? Add Reverie (Hinglish-fallback angle) in the same pass?
+1. ~~Bake-off vendor shortlist~~ — **ANSWERED 2026-07-05: locked as Google + ElevenLabs + Gemini TTS + Reverie** (Reverie carried for the Hinglish-fallback angle in the same pass).
 2. Is `en-US` routing gated on auth (profile-stored locale) or shippable pre-auth on the localStorage stub?
 3. Budget appetite for ElevenLabs if it wins naturalness but costs a multiple of Google/Sarvam for the English route?
-4. Does the international cohort matter for *revenue* now (₹/$ pricing already scoped), or is this demo-polish for prospective clients? Changes priority vs CI/auth lanes.
+4. ~~Revenue vs demo-polish~~ — **ANSWERED 2026-07-05: international cohort is a revenue priority NOW.** Consequence: this spike's cycle (Track 3 → bake-off → Track 2 adapter) is scheduled ahead of, or parallel to, roadmap Lane 1A (CI) rather than behind it. The S-sized CI workflow slice is still worth landing alongside — the adapter cycle is exactly the kind of multi-vendor change a PR gate protects.
 5. OK to enable AI Gateway fallback chains once the env-driven model ID lands?
 
 ## 9. Sources
