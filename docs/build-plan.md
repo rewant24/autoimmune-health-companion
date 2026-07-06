@@ -1,7 +1,7 @@
 # Saha — Wholesome Build Plan
 
-> **Status:** Plan ready for review.
-> **Date:** 2026-04-25
+> **Status:** Living plan. The original 2026-04-25 plan (Sections 1–9) carried the MVP to its scope-close (2026-05-09) and stays as the record of conventions + F01/F02 breakdowns. **Section 7.1 (added 2026-07-06) is the active post-MVP strategy** — it supersedes Section 7's P1–P12 schedule.
+> **Date:** 2026-04-25 · strategy refresh 2026-07-06
 > **Project:** Autoimmune Health Companion (Saha)
 > **Location:** `/Volumes/Coding Projects + Docker/autoimmune-health-companion/`
 
@@ -137,13 +137,15 @@ Each reviewer returns: findings list, severity, suggested fix, file:line pointer
 
 Build order is dependency-driven. Features marked `parallel-safe` in the "Can run with" column can be dispatched alongside the current primary feature without file conflict.
 
+> **Status refresh 2026-07-06:** F01 (incl. Sarvam voice C1 + quick-wins + Pattern A), F02, F04 C1, and F05 C1 are **shipped live** at meetsaha.com; the onboarding shell shipped via PR #6. MVP feature scope closed 2026-05-09 with F05 C1. F03 and F06–F10 remain spec'd-only. Statuses in the table below are updated; the rest of Sections 4–7 is kept as the historical MVP record.
+
 | # | Name | File | Status | Depends on | Blocks | Can run with | Intent (1-line) |
 |---|---|---|---|---|---|---|---|
-| 01 | Daily Voice Check-in | `docs/features/01-daily-checkin.md` | chunked | — | 02, 06, 07 | 10 | Hybrid open-first voice + scripted fallback; 5 required metrics. |
-| 02 | Memory | `docs/features/02-memory.md` | chunked | 01 | 06 | 10, 09 | 30-day scroll + filters + calendar scrubber + edit/delete. |
+| 01 | Daily Voice Check-in | `docs/features/01-daily-checkin.md` | **shipped** | — | 02, 06, 07 | 10 | Hybrid open-first voice + scripted fallback; 5 required metrics. |
+| 02 | Memory | `docs/features/02-memory.md` | **shipped** | 01 | 06 | 10, 09 | 30-day scroll + filters + calendar scrubber + edit/delete. |
 | 03 | Patterns | `docs/features/03-patterns.md` | scoped | 01 (≥14d data) | 05, 06 | 04, 09, 10 | Multi-metric line chart; visual 1–14, verbal 14+. |
-| 04 | Medications | `docs/features/04-medications.md` | scoped | 01 | 05 | 03, 09, 10 | Regimen tracker: dosage + frequency + adherence. |
-| 05 | Doctor Visits & Blood Work | `docs/features/05-doctor-visits.md` | scoped | 01 | 06, 08 | 09, 10 | First-class events; manual + voice-extracted; timeline markers. |
+| 04 | Medications | `docs/features/04-medications.md` | **shipped** (C1) | 01 | 05 | 03, 09, 10 | Regimen tracker: dosage + frequency + adherence. |
+| 05 | Doctor Visits & Blood Work | `docs/features/05-doctor-visits.md` | **shipped** (C1) | 01 | 06, 08 | 09, 10 | First-class events; manual + voice-extracted; timeline markers. |
 | 06 | Doctor Report (Hybrid PDF) | `docs/features/06-doctor-report.md` | scoped | 01, 02, 03, 04, 05 | 08 | 09 | Summary + appendix PDF; patient + doctor views; WhatsApp share. |
 | 07 | Prepare-for-Visit | `docs/features/07-prepare-for-visit.md` | scoped | 05, 06 | — | 09 | Tripartite: checklists + annotations + Questions in PDF. |
 | 08 | Journey | `docs/features/08-journey.md` | scoped | 02, 03, 05, 06 | — | 09 | Unified "looking back" pillar aggregating Memory + Reports + Patterns + timelines. |
@@ -660,6 +662,59 @@ Each row is one cycle. A cycle is a single multi-tool-call build dispatch + its 
 3. Fix pass (solo).
 4. One `Agent` invocation (second-pass reviewer). Prompt includes "decisions already locked: [list] — don't re-litigate".
 5. Append to `architecture-changelog.md` and flip feature MD status to `shipped`.
+
+---
+
+## Section 7.1 — Post-MVP unified strategy (2026-07-06 — ACTIVE; supersedes Section 7)
+
+Section 7's P1–P12 schedule was written for the MVP and is done or overtaken. This section is the active plan. It merges four sources into one sequence — the Fable assessment roadmap (`docs/assessment/2026-07-04-roadmap.md`), the voice/LLM vendor spike (`docs/spikes/voice-llm-vendor-strategy.md`), the auth scoping walk (`docs/features/auth-scoping.md`), and the housekeeping backlog (memory) — plus the session-26 CI ship. Conflict rule unchanged: `docs/scoping.md` wins; where this section and the roadmap doc disagree on sequencing, this section is newer and wins.
+
+### 7.1.1 Ground truth (as of 2026-07-06)
+
+- **Shipped live** (meetsaha.com, `main` = `d69b1e6`): onboarding shell, F01 + Sarvam voice C1 + quick-wins Q1–Q6 + Pattern A acks, F02, F04 C1, F05 C1. 1161/1161 vitest.
+- **Guardrails live:** PR CI gate (frozen install + typecheck + vitest + build, ~51s; `ci` required on `main`), gitleaks pre-commit hook, `getCheckin` ownership check, interim extract-429 fix, extract cap 30/day.
+- **Live but inert:** Track 3 `EXTRACT_MODEL_ID` (extraction LLM swappable via Vercel env edit + redeploy).
+- **Not built:** auth (localStorage `saha.testUser.v1` stub on live health data — DPDP risk #2), F03, F06–F10, all billing (pricing deferred 2026-05-09; free for first 50).
+- **Top scale risk:** Sarvam concentration (~89% of voice COGS, no SLA, no Hinglish substitute). The Track 2 route table below is also the outage-insurance answer.
+
+### 7.1.2 Wave plan
+
+Waves are dependency-ordered; a wave can start before the prior one fully closes if its gate is met. W0/W2 are agent-solo; W1/W3 gates sit with Rewant; W3+ follows the playbook build-cycle pattern (Section 2.4 conventions still apply).
+
+| Wave | Contents | Gate to enter | Notes |
+|---|---|---|---|
+| **W0 — Solo hardening** (now) | ① local `pnpm build` fix (`.env.production.local`) · ② eslint flat-config wired into CI · ③ e2e webServer fix (`next build && next start`) · ④ nightly-integration workflow (lands disarmed; arms when `SARVAM_API_KEY` becomes a GitHub Actions secret) · ⑤ housekeeping #8 stale-memo audit · ⑥ housekeeping #15 confirm-card UX spike doc | none | Closes Lane 1A. ⑥ is load-bearing: its recommendation feeds W2's `ConfirmCard` merge, which must land before F06 clones the pattern a 4th time. |
+| **W1 — Voice vendor cycle** | 4-vendor TTS bake-off rerun + blind listening → en-US winner · bulbul:v3 tuning (6a) same cycle · Track 2 route-table adapter (`en-IN → sarvam`, `en-US → winner`, unknown → sarvam) · per-vendor manual smoke at cutover | Rewant: vendor keys + listening pass + **Q2** (locale storage pre/post-auth) | Q4 answered: international cohort is revenue-priority NOW → W1 runs ahead of / parallel to everything below. Q3 (ElevenLabs budget) decides a naturalness-vs-cost tie. Q5 (AI Gateway fallback chains) rides Track 3 when approved. |
+| **W2 — Foundation completion** (parallel with W1) | Lane 1B auth seams (`useUserId()`, `useOnboardingGuard()`, kill `(api as any)` casts, `error.tsx`/`not-found.tsx`) · Lane 1C query hardening (date-bound the six list/range queries into `withIndex`) · Lane 1D design system (`ConfirmCard`+`ConfirmCardStack` per #15 spike, `Card`/`PillButton`/`Field` primitives, zinc→token palette) · Lane 1E remainder (reconcile `scoping.md`, refresh `system-map.md` + feature-MD front-matter, close/re-spike body-map C3) | none | 1B converts auth from a 12-file swap to a 1-file swap. 1C and 1D are hard prerequisites for F06/F08. This §7.1 write-up is the build-plan slice of 1E. |
+| **W3 — Auth** | Convex Auth + Resend **email magic link only** (phone OTP/DLT parked 2026-07-04 → the old MSG91 DLT long pole is gone) · `ctx.auth.getUserIdentity()` across the 32 handlers · `users`/`profiles` table + stub-userId migration (snapshot prod first) · cost guard re-keyed on server identity · `(userId, clientRequestId)` unique indexes (ADR-034) · re-gate `devSeed.wipeUser` · PostHog `identify` swap · seed-helper updates | W2 Lane 1B done · Rewant: decisions **F → E**, D, G | Owns the Convex dev singleton — no other convex-touching lane runs in parallel. Parallel-safe alongside: A2 voice harness, F03/F06 chunking cycles (markdown only), voice M-tier patterns. Blocks revenue, first-50, per-user limits, cross-table search (#23). |
+| **W3∥ — A2 voice harness** | A2.2–A2.7 e2e voice harness incl. stubbed-429 → fallback → `voice_rearm_fired` scenario | none (runs beside W3) | Unblocks Pattern B+D bundle, M4 barge-in, 6b streaming TTS, backlog #26 client prefetch. Pattern C stays post-pricing. |
+| **W4 — Revenue** | Onboard first 50 (free, from immutable waitlist) · **F03 Patterns C1 → F06 Doctor Report** (fork decision: F03-first recommended so the PDF gets its patterns summary) · core-funnel PostHog events · pricing revisit post-50 (backlog #17) · Razorpay + Stripe + paywall gates (Memory 30d clamp, report 1/mo quota, Patterns paid-only) | W3 shipped · Rewant: F06 fork + pricing call | F03+F06 **are** the paid-tier value prop — this is the real revenue work, not the billing wiring. Needs seed fixtures (prod has ~5 dormant waitlist rows; F03 needs 14d, F06 30d windows). F06 also needs the intake dose/name snapshot fix. |
+| **W5 — Remaining pillars** | F07 Prepare-for-Visit (after F06) · F08 Journey (after `bloodWork.markers[]` → relational `bloodWorkMarkers` flatten migration + 1C date bounds) · F09 Community (parallel-safe, de-facto post-launch) · F10 edge-case finalization cycle · backlog promotions: 22.6 Memory tap-to-detail, 22.7 medication-clarification turn, #23 cross-table search | W4 in flight | Leave in backlog: HIPAA H1–H4 (threshold-gated), flare↔dose chart (#19), wearables (#13), native apps (#15). DPDP consent/notice/erasure build starts ~Q4 2026 (enforceable 2027-05-13), inside the auth/onboarding surface. |
+
+### 7.1.3 Technical architecture spine
+
+The strategy hangs on seven seams. Every wave either builds a seam or builds on one — nothing below bypasses them.
+
+1. **Voice routing** — the existing env-driven factories (`getVoiceProvider()`/`getTtsProvider()` in `lib/voice/provider.ts`) grow a locale route table (Track 2). One row per locale; outage fallback = flip the `en-IN` row. Locale source is Q2's answer (localStorage pre-auth vs `profiles` post-auth).
+2. **Extraction LLM** — `lib/checkin/model-config.ts` + `EXTRACT_MODEL_ID` (Track 3, shipped). Swap = env edit + redeploy. Per-swap guardrails: `.nullable()` not `.optional()`, `rate_limited` code survives, one-increment cap counting, extract suite against the live candidate. Q5 adds AI Gateway fallback chains on top.
+3. **Identity** — localStorage stub → `useUserId()` hook (W2) → `ctx.auth.getUserIdentity()` in all 32 handlers (W3). The hook is the single seam that makes W3 mechanical.
+4. **Data layer** — date-bounded `withIndex` predicates (W2) → `(userId, clientRequestId)` unique indexes (inside W3) → `bloodWorkMarkers` flatten with canonical marker names (before F08, while prod data is small).
+5. **Design system** — one `ConfirmCard`/`ConfirmCardStack` + shared primitives + token palette (W2, shaped by the #15 spike) before F06 reuses the confirm-card vocabulary heavily.
+6. **Quality gates** — PR CI (live) + eslint (W0) + honest e2e (W0) + nightly integration (W0, armed on secret) + A2 voice harness (W3∥) + the standing rule: **per-vendor manual smoke at every voice cutover** (vitest green ≠ live audio, PR #21 postmortem).
+7. **Cost/scale posture** — Sarvam concentration mitigations layer up: route table (W1) = outage insurance; server TTS cache shipped behind `SARVAM_TTS_CACHED_RESPONSES`; client prefetch (#26) after A2; free-tier voice-minute caps + per-user voice-seconds/TTS-chars instrumentation before scale; enterprise conversation with Sarvam at ~5k DAU.
+
+### 7.1.4 Decision queue (Rewant, ordered by unblock value)
+
+1. **Vendor keys** (Google / ElevenLabs / Gemini / Reverie) → bake-off rerun + blind listening pass — unblocks W1.
+2. **S1–S5 live voice smoke** — owed since session 24; doubles as the bake-off "before" reference.
+3. **Spike §8 Q2** (en-US locale storage pre/post-auth) — blocks Track 2's start. Then Q3 (ElevenLabs budget), Q5 (AI Gateway chains).
+4. **Auth decisions D / F / G** (F before E: profile location determines migration scope) — blocks W3 build.
+5. **F06 fork** (F03-first vs F06-without-patterns) — blocks W4 feature order.
+6. **Pricing revisit** — after the first 50 are on.
+
+### 7.1.5 Maintenance rule
+
+This section is the living schedule: when a wave item ships, strike it through with the date + PR; when a decision in 7.1.4 is made, move it into the relevant wave row. Section 7 below stays frozen as the MVP record.
 
 ---
 
