@@ -2,9 +2,10 @@
  * Playwright config — Layer 4 of the QA pass for F04 (Medications).
  *
  * Single chromium project, sequential execution, no retries — we want
- * deterministic signal, not flake-tolerance. Webserver auto-spawns
- * `pnpm dev` against the dev Convex (`hardy-hamster-888`) so the spec
- * exercises the real frontend↔dev-Convex round-trip; no mocking.
+ * deterministic signal, not flake-tolerance. Webserver builds and serves
+ * the production bundle against the dev Convex (`hardy-hamster-888`) so
+ * the specs exercise the real frontend↔dev-Convex round-trip without
+ * dev-mode compile latency or dev-only behaviors; no mocking.
  */
 
 import { defineConfig, devices } from '@playwright/test'
@@ -23,7 +24,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: 'pnpm exec next dev -p 3001',
+    command: 'pnpm build && pnpm exec next start -p 3001',
     url: 'http://localhost:3001',
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
