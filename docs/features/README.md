@@ -26,7 +26,7 @@
 |---|---|---|---|---|---|
 | 01 | Daily Voice Check-in | [`01-daily-checkin.md`](01-daily-checkin.md) | chunked | — | 02, 06, 07 |
 | 02 | Memory | [`02-memory.md`](02-memory.md) | chunked | 01 | 06 |
-| 03 | Patterns | [`03-patterns.md`](03-patterns.md) | scoped | 01 (≥14d data) | 05, 06 |
+| 03 | Patterns | [`03-patterns.md`](03-patterns.md) | chunked | 01 (≥14d data), 02, 04 | 06, 08 |
 | 04 | Medications | [`04-medications.md`](04-medications.md) | scoped | 01 | 05 |
 | 05 | Doctor Visits & Blood Work | [`05-doctor-visits.md`](05-doctor-visits.md) | scoped | 01 | 06, 08 |
 | 06 | Doctor Report (Hybrid PDF) | [`06-doctor-report.md`](06-doctor-report.md) | scoped | 01, 02, 03, 04, 05 | 08 |
