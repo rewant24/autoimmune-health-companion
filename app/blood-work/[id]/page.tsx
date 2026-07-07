@@ -17,18 +17,13 @@ import { useMutation, useQuery } from 'convex/react'
 import { useParams, useRouter } from 'next/navigation'
 
 import { api } from '@/convex/_generated/api'
+import type { Id } from '@/convex/_generated/dataModel'
+import { useUserId } from '@/lib/auth/use-user-id'
 import { BottomNav } from '@/components/nav/BottomNav'
 import {
   BloodWorkForm,
   type BloodWorkFormValues,
 } from '@/components/blood-work/BloodWorkForm'
-
-const TEST_USER_KEY = 'saha.testUser.v1'
-
-function getTestUserId(): string | null {
-  if (typeof window === 'undefined') return null
-  return window.localStorage.getItem(TEST_USER_KEY)
-}
 
 type BloodWorkDoc = {
   _id: string
@@ -61,29 +56,20 @@ export default function BloodWorkDetailPage(): React.JSX.Element {
   const router = useRouter()
   const params = useParams<{ id: string }>()
   const bloodWorkId = params?.id ?? null
-  const [userId, setUserId] = useState<string | null>(null)
+  // Detail pages read the existing stub without minting one — a missing
+  // id just means "no rows", which renders the not-found state.
+  const userId = useUserId({ create: false })
   const [editing, setEditing] = useState<boolean>(false)
   const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    setUserId(getTestUserId())
-  }, [])
-
   const rows = useQuery(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).bloodWork?.listBloodWork,
+    api.bloodWork.listBloodWork,
     userId === null ? 'skip' : { userId },
   ) as BloodWorkDoc[] | undefined
 
-  const updateBloodWork = useMutation(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).bloodWork?.updateBloodWork,
-  )
-  const softDeleteBloodWork = useMutation(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).bloodWork?.softDeleteBloodWork,
-  )
+  const updateBloodWork = useMutation(api.bloodWork.updateBloodWork)
+  const softDeleteBloodWork = useMutation(api.bloodWork.softDeleteBloodWork)
 
   const row = useMemo<BloodWorkDoc | null>(() => {
     if (!rows || !bloodWorkId) return null
@@ -96,7 +82,9 @@ export default function BloodWorkDetailPage(): React.JSX.Element {
     try {
       await updateBloodWork({
         userId,
-        bloodWorkId: row._id,
+        // Narrow brand cast at the boundary — local BloodWorkDoc keeps plain
+        // strings, decoupled from generated Id<> types (PR #23 precedent).
+        bloodWorkId: row._id as Id<'bloodWork'>,
         date: values.date,
         markers: values.markers,
         notes: values.notes.length > 0 ? values.notes : undefined,
@@ -113,7 +101,10 @@ export default function BloodWorkDetailPage(): React.JSX.Element {
     if (!row || !userId) return
     setError(null)
     try {
-      await softDeleteBloodWork({ userId, bloodWorkId: row._id })
+      await softDeleteBloodWork({
+        userId,
+        bloodWorkId: row._id as Id<'bloodWork'>,
+      })
       router.push('/blood-work')
     } catch (err) {
       setError(

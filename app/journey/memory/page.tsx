@@ -14,14 +14,13 @@
  * 90 days lands in C2.
  */
 
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
+import { useUserId } from '@/lib/auth/use-user-id'
 import type { MemoryFilter } from '@/components/memory/_types'
 import { MemoryTab } from '@/components/memory/MemoryTab'
-
-const TEST_USER_KEY = 'saha.testUser.v1'
 
 const FILTER_VALUES: ReadonlySet<MemoryFilter> = new Set([
   'all',
@@ -73,23 +72,8 @@ function JourneyMemoryInner(): React.JSX.Element {
   const searchParams = useSearchParams()
   const initialFilter = parseFilter(searchParams?.get('filter') ?? null)
 
-  // userId comes from localStorage until F01 C2 lands auth (ADR-019).
-  // Same key + same provisioning as the F01-era /memory page.
-  const [userId, setUserId] = useState<string | null>(null)
-
-  useEffect(() => {
-    const existing = window.localStorage.getItem(TEST_USER_KEY)
-    if (existing) {
-      setUserId(existing)
-      return
-    }
-    const fresh =
-      typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `u_${Math.random().toString(36).slice(2)}_${Date.now()}`
-    window.localStorage.setItem(TEST_USER_KEY, fresh)
-    setUserId(fresh)
-  }, [])
+  // userId comes from localStorage until W3 lands auth (ADR-019).
+  const userId = useUserId()
 
   // Stable date range — recomputed on first render only. Re-mounts pick a
   // fresh window if the user reloads, which is fine for C1.

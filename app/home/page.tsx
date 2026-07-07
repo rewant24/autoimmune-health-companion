@@ -17,34 +17,18 @@
  * localStorage; first paint shows nothing while we decide.
  */
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-
+import { useOnboardingGuard } from '@/lib/auth/use-onboarding-guard'
 import { BottomNav } from '@/components/nav/BottomNav'
 import { CheckInPromptCard } from '@/components/home/CheckInPromptCard'
 import { HomeGreeting } from '@/components/home/HomeGreeting'
 import { IntakeTapList } from '@/components/home/IntakeTapList'
 import { MedsSetupNudgeCard } from '@/components/home/MedsSetupNudgeCard'
 import { MetricVizPlaceholder } from '@/components/home/MetricVizPlaceholder'
-import { readProfile } from '@/lib/profile/storage'
 
 export default function HomePage(): React.JSX.Element {
-  const router = useRouter()
-  const [allowed, setAllowed] = useState<boolean>(false)
-  const [checked, setChecked] = useState<boolean>(false)
+  const allowed = useOnboardingGuard()
 
-  useEffect(() => {
-    const profile = readProfile()
-    if (!profile || profile.onboarded !== true) {
-      router.replace('/onboarding/1')
-      setChecked(true)
-      return
-    }
-    setAllowed(true)
-    setChecked(true)
-  }, [router])
-
-  if (!checked || !allowed) {
+  if (!allowed) {
     // Blank shell while the guard runs — avoids a flash of content for
     // un-onboarded users.
     return (

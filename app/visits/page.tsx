@@ -5,36 +5,18 @@
  *
  * F05 Cycle 1, Chunk 5.B, US-5.B.3. Lists visits newest-first via
  * `api.doctorVisits.listVisits`. Tri-state loading / empty / populated.
- *
- * The Convex module exports for chunk 5.A may not yet be visible on this
- * branch's generated `api.d.ts`; we cast through `as any` at the call site
- * (mirroring the medications page) so the build is stable today and picks
- * up real types after `npx convex dev` regenerates.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useQuery } from 'convex/react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 import { api } from '@/convex/_generated/api'
+import { useUserId } from '@/lib/auth/use-user-id'
 import { BottomNav } from '@/components/nav/BottomNav'
 import { VisitCard, type VisitCardData } from '@/components/visits/VisitCard'
 import type { VisitType } from '@/components/visits/VisitForm'
-
-const TEST_USER_KEY = 'saha.testUser.v1'
-
-function getOrCreateTestUserId(): string | null {
-  if (typeof window === 'undefined') return null
-  const existing = window.localStorage.getItem(TEST_USER_KEY)
-  if (existing) return existing
-  const fresh =
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : `u_${Math.random().toString(36).slice(2)}_${Date.now()}`
-  window.localStorage.setItem(TEST_USER_KEY, fresh)
-  return fresh
-}
 
 type VisitDoc = {
   _id: string
@@ -47,15 +29,10 @@ type VisitDoc = {
 
 export default function VisitsPage(): React.JSX.Element {
   const router = useRouter()
-  const [userId, setUserId] = useState<string | null>(null)
-
-  useEffect(() => {
-    setUserId(getOrCreateTestUserId())
-  }, [])
+  const userId = useUserId()
 
   const visits = useQuery(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).doctorVisits?.listVisits,
+    api.doctorVisits.listVisits,
     userId === null ? 'skip' : { userId },
   ) as VisitDoc[] | undefined
 
