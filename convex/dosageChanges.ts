@@ -11,7 +11,10 @@
  *
  * Validation rules (per US-4.A.3 acceptance):
  *   - oldDose !== newDose; otherwise throws `dosage.no_change`.
- *   - source 'check-in' requires `checkInId`; source 'module' must omit it.
+ *   - source 'check-in' MAY omit `checkInId` — confirm cards are
+ *     non-blocking, so the check-in row may not exist yet when the user
+ *     confirms; the linkage is best-effort (F04 chunk 4.C). Source
+ *     'module' must omit it.
  *   - Defense-in-depth (ADR-019): the medication's userId must match the
  *     userId on the request before any write happens.
  */
@@ -116,13 +119,9 @@ export async function recordDosageChangeHandler(
     });
   }
 
-  // Source / checkInId well-formedness.
-  if (args.source === "check-in" && args.checkInId === undefined) {
-    throw new ConvexError({
-      code: "dosage.checkin_id_required",
-      message: "checkInId is required when source is 'check-in'.",
-    });
-  }
+  // Source / checkInId well-formedness. 'check-in' accepts an absent
+  // checkInId: the confirm card is non-blocking, so the check-in row may
+  // not be saved yet when the user taps Save (see file header).
   if (args.source === "module" && args.checkInId !== undefined) {
     throw new ConvexError({
       code: "dosage.checkin_id_forbidden",

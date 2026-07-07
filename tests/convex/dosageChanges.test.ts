@@ -176,14 +176,17 @@ describe("recordDosageChangeHandler — validation", () => {
     ).rejects.toMatchObject({ data: { code: "dosage.invalid_dose" } });
   });
 
-  it("rejects source 'check-in' without checkInId", async () => {
-    const { ctx } = makeCtx();
-    await expect(
-      recordDosageChangeHandler(
-        ctx as unknown as Ctx,
-        baseChange({ source: "check-in" }),
-      ),
-    ).rejects.toMatchObject({ data: { code: "dosage.checkin_id_required" } });
+  it("accepts source 'check-in' without checkInId (best-effort linkage)", async () => {
+    // Confirm cards are non-blocking: the check-in row may not be saved
+    // yet when the user taps Save. The old checkin_id_required rule made
+    // every dose-change card confirm throw (W2-4 regression find).
+    const { ctx, changes } = makeCtx();
+    await recordDosageChangeHandler(
+      ctx as unknown as Ctx,
+      baseChange({ source: "check-in" }),
+    );
+    expect(changes[0].source).toBe("check-in");
+    expect(changes[0].checkInId).toBeUndefined();
   });
 
   it("rejects source 'module' with checkInId", async () => {
