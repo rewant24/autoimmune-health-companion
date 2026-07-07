@@ -176,7 +176,6 @@ afterEach(async () => {
     try {
       await client.mutation(api.devSeed.wipeUser, { userId: activeUserId });
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.warn(
         `[extract-medication] wipeUser failed for ${activeUserId}; rows may persist on dev:`,
         err,
@@ -193,7 +192,6 @@ afterEach(async () => {
 describe("POST /api/check-in/extract-medication — live LLM contract", () => {
   beforeAll(() => {
     if (!CONVEX_URL) return;
-    // eslint-disable-next-line no-console
     console.log(
       `[extract-medication] target Convex deployment: ${CONVEX_URL}; live LLM=${HAS_LIVE}`,
     );

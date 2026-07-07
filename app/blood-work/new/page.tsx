@@ -51,7 +51,6 @@ export default function NewBloodWorkPage(): React.JSX.Element {
     setUserId(getOrCreateTestUserId())
   }, [])
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const createBloodWork = useMutation(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).bloodWork?.createBloodWork,

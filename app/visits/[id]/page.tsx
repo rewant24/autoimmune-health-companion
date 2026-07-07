@@ -78,19 +78,16 @@ export default function VisitDetailPage(): React.JSX.Element {
     setUserId(getTestUserId())
   }, [])
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const visits = useQuery(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).doctorVisits?.listVisits,
     userId === null ? 'skip' : { userId },
   ) as VisitDoc[] | undefined
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateVisit = useMutation(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).doctorVisits?.updateVisit,
   )
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const softDeleteVisit = useMutation(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).doctorVisits?.softDeleteVisit,

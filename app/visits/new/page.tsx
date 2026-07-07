@@ -51,7 +51,6 @@ export default function NewVisitPage(): React.JSX.Element {
     setUserId(getOrCreateTestUserId())
   }, [])
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const createVisit = useMutation(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).doctorVisits?.createVisit,

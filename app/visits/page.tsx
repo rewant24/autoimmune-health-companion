@@ -53,7 +53,6 @@ export default function VisitsPage(): React.JSX.Element {
     setUserId(getOrCreateTestUserId())
   }, [])
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const visits = useQuery(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).doctorVisits?.listVisits,

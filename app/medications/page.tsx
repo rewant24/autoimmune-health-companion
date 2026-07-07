@@ -136,22 +136,18 @@ export default function MedicationsPage(): React.JSX.Element {
     userId === null ? 'skip' : { userId },
   ) as MedicationDoc[] | undefined
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const createMedication = useMutation(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).medications?.createMedication,
   )
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateMedication = useMutation(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).medications?.updateMedication,
   )
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const deactivateMedication = useMutation(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).medications?.deactivateMedication,
   )
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recordDosageChange = useMutation(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).dosageChanges?.recordDosageChange,

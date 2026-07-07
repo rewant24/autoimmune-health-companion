@@ -92,9 +92,7 @@ describe('/home page', () => {
     for (let i = 1; i < positions.length; i++) {
       const prev = positions[i - 1]!
       const curr = positions[i]!
-      // eslint-disable-next-line no-bitwise
       const flags = prev.compareDocumentPosition(curr)
-      // eslint-disable-next-line no-bitwise
       expect(flags & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     }
   })

@@ -36,12 +36,10 @@ test('full F04 flow: empty home → setup → intake list → tap → cross-rout
   // instead of being silently swallowed by the catch block.
   page.on('console', (msg) => {
     if (msg.type() === 'error' || msg.type() === 'warning') {
-      // eslint-disable-next-line no-console
       console.log(`[browser:${msg.type()}] ${msg.text()}`)
     }
   })
   page.on('pageerror', (err) => {
-    // eslint-disable-next-line no-console
     console.log(`[browser:pageerror] ${err.message}`)
   })
 

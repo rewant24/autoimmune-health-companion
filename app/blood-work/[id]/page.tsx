@@ -70,19 +70,16 @@ export default function BloodWorkDetailPage(): React.JSX.Element {
     setUserId(getTestUserId())
   }, [])
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = useQuery(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).bloodWork?.listBloodWork,
     userId === null ? 'skip' : { userId },
   ) as BloodWorkDoc[] | undefined
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateBloodWork = useMutation(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).bloodWork?.updateBloodWork,
   )
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const softDeleteBloodWork = useMutation(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).bloodWork?.softDeleteBloodWork,
