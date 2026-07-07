@@ -282,7 +282,7 @@ describe('SpokenOpener — highlightSpeaker prop (Voice C1 Fix C)', () => {
     const button = screen.getByRole('button', { name: 'Replay' })
     expect(button.dataset.highlight).toBeUndefined()
     expect(button.className).not.toMatch(/animate-pulse/)
-    expect(button.className).not.toMatch(/ring-teal-400 ring-offset-2/)
+    expect(button.className).not.toMatch(/ring-sage ring-offset-2/)
   })
 
   it('renders the speaker button with attention ring when highlightSpeaker is true', () => {
@@ -297,7 +297,7 @@ describe('SpokenOpener — highlightSpeaker prop (Voice C1 Fix C)', () => {
     const button = screen.getByRole('button', { name: 'Tap to hear greeting' })
     expect(button.dataset.highlight).toBe('true')
     expect(button.className).toMatch(/ring-2/)
-    expect(button.className).toMatch(/ring-teal-400/)
+    expect(button.className).toMatch(/ring-sage/)
     // motion-safe variant compiles to the unprefixed class so the
     // animation runs by default in jsdom (no reduced-motion query
     // matches). The ring + pulse together are the cue.

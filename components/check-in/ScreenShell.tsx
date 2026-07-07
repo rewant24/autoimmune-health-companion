@@ -30,8 +30,7 @@ export function ScreenShell({ children }: ScreenShellProps): React.JSX.Element {
       data-testid="checkin-screen"
       className={
         'flex min-h-[100svh] w-full flex-col items-center justify-center ' +
-        'gap-8 overflow-hidden bg-zinc-50 px-6 text-center text-zinc-900 ' +
-        'dark:bg-zinc-950 dark:text-zinc-50 ' +
+        'gap-8 overflow-hidden bg-bg px-6 text-center text-ink ' +
         // Safe-area padding — respects notch + home indicator on mobile.
         '[padding-top:max(1.5rem,env(safe-area-inset-top))] ' +
         '[padding-bottom:calc(8rem+env(safe-area-inset-bottom))]'

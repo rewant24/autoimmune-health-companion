@@ -73,44 +73,32 @@ export function HeardYouOn({
   if (state === 'covered') {
     body = (
       <>
-        <span aria-hidden="true" className="text-teal-600 dark:text-teal-400">
+        <span aria-hidden="true" className="text-sage">
           ✓
         </span>
-        <span className="font-medium text-zinc-800 dark:text-zinc-100">
-          {label}
-        </span>
-        <span className="text-zinc-500 dark:text-zinc-400">—</span>
-        <span className="text-zinc-700 dark:text-zinc-200">
-          {formatValue(metric, value)}
-        </span>
+        <span className="font-medium text-ink">{label}</span>
+        <span className="text-ink-subtle">—</span>
+        <span className="text-ink-muted">{formatValue(metric, value)}</span>
       </>
     )
   } else if (state === 'tapped') {
     body = (
       <>
-        <span className="font-medium text-zinc-800 dark:text-zinc-100">
-          {label}
-        </span>
-        <span className="text-zinc-500 dark:text-zinc-400">—</span>
-        <span className="text-zinc-700 dark:text-zinc-200">
-          {formatValue(metric, value)}
-        </span>
+        <span className="font-medium text-ink">{label}</span>
+        <span className="text-ink-subtle">—</span>
+        <span className="text-ink-muted">{formatValue(metric, value)}</span>
       </>
     )
   } else if (state === 'declined') {
     body = (
       <>
-        <span className="font-medium text-zinc-800 dark:text-zinc-100">
-          {label}
-        </span>
-        <span className="text-zinc-500 dark:text-zinc-400">— skipped today</span>
+        <span className="font-medium text-ink">{label}</span>
+        <span className="text-ink-subtle">— skipped today</span>
       </>
     )
   } else {
     body = (
-      <span className="font-medium text-zinc-400 dark:text-zinc-600">
-        {label}
-      </span>
+      <span className="font-medium text-ink-subtle opacity-70">{label}</span>
     )
   }
 
@@ -124,9 +112,8 @@ export function HeardYouOn({
       onClick={onTap}
       className={
         'flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1 text-left ' +
-        'text-sm transition hover:bg-zinc-100 focus-visible:outline-none ' +
-        'focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 ' +
-        'dark:hover:bg-zinc-800'
+        'text-sm transition hover:bg-sage-soft focus-visible:outline-none ' +
+        'focus-visible:ring-2 focus-visible:ring-sage focus-visible:ring-offset-2'
       }
     >
       {body}

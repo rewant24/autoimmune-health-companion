@@ -108,13 +108,15 @@ import {
   type RegimenMedication,
   type ResolvedDosageChange,
 } from '@/lib/checkin/medication-extract'
-import { MedicationConfirmCard } from '@/components/check-in/MedicationConfirmCard'
+import {
+  ConfirmCardStack,
+  type ConfirmCardStackItem,
+} from '@/components/check-in/ConfirmCardStack'
 import {
   extractEvents,
   type BloodWorkCandidate,
   type VisitCandidate,
 } from '@/lib/checkin/event-extract'
-import { EventConfirmCard } from '@/components/check-in/EventConfirmCard'
 import type { Id } from '@/convex/_generated/dataModel'
 import type { CheckinRow } from '@/convex/checkIns'
 import type {
@@ -382,6 +384,11 @@ export default function CheckinPage({
   // above.
   const createVisitMutation = useMutation(api.doctorVisits.createVisit)
   const createBloodWorkMutation = useMutation(api.bloodWork.createBloodWork)
+  // W2-4 P1 undo — soft deletes for the row a confirm card just wrote.
+  const softDeleteVisitMutation = useMutation(api.doctorVisits.softDeleteVisit)
+  const softDeleteBloodWorkMutation = useMutation(
+    api.bloodWork.softDeleteBloodWork,
+  )
 
   // Resolved dosage-change cards we render alongside ConfirmSummary. One
   // entry per detected mention; user confirms or dismisses each card
@@ -391,10 +398,11 @@ export default function CheckinPage({
     ResolvedDosageChange[]
   >([])
   // F05 chunk 5.C — extracted-candidate state for visit + blood-work confirm
-  // cards. Same vocabulary as `pendingDoseChanges`: array of candidates;
-  // each EventConfirmCard mount on Save → mutation + remove; on Not now →
-  // just remove. Stable identity by index because candidates are pure data
-  // (no _id yet — they're not persisted until the user confirms).
+  // cards. Same vocabulary as `pendingDoseChanges`: array of candidates.
+  // Since W2-4 (P1 undo) cards are NOT removed on Save / Not now — they
+  // stay mounted as status rows with Undo chips until the flow unmounts.
+  // Stable identity by index because candidates are pure data (no _id yet
+  // — they're not persisted until the user confirms).
   const [pendingVisits, setPendingVisits] = useState<VisitCandidate[]>([])
   const [pendingBloodWork, setPendingBloodWork] = useState<
     BloodWorkCandidate[]
@@ -609,6 +617,8 @@ export default function CheckinPage({
       // Reset medication-extraction memo so the next check-in re-extracts.
       medicationExtractedTranscriptRef.current = null
       setPendingDoseChanges([])
+      // Undo chips are final once the flow unmounts (P1 semantics).
+      savedCardWritesRef.current.clear()
     }
   }, [state.kind])
 
@@ -625,8 +635,8 @@ export default function CheckinPage({
   //       regimen med NOT in `skippedMedications`. Logs run in parallel;
   //       individual rejects are swallowed (the home-tap path reconciles).
   //   (b) `dosageChanges` → resolved against the regimen, stored in
-  //       `pendingDoseChanges` so `MedicationConfirmCard` renders them
-  //       above ConfirmSummary. User confirms each independently.
+  //       `pendingDoseChanges` so `ConfirmCardStack` renders a confirm
+  //       card per change. User confirms each independently.
   //   (c) Errors (network / 429 / malformed) → silent fallback to empty
   //       result. Save flow is unaffected (acceptance: non-blocking).
   useEffect(() => {
@@ -697,17 +707,27 @@ export default function CheckinPage({
     logIntakeRaw,
   ])
 
+  // W2-4 P1: confirmed cards stay mounted (saved row + Undo chip) until
+  // the flow unmounts, so nothing is removed from the pending arrays on
+  // confirm or dismiss anymore. This map remembers what each card wrote —
+  // the row id for visits/blood-work (undo = soft delete), a marker for
+  // dose changes (undo = compensating reverse record). It also makes the
+  // confirm handlers idempotent per card: if the stack ever remounts a
+  // card (N-rule presentation switch) a second Save can't double-write.
+  const savedCardWritesRef = useRef(new Map<string, string>())
+
   /**
-   * Confirm a dose-change card. Records the change against Convex and
-   * removes the card from the pending list. `checkInId` is intentionally
-   * undefined — the check-in row may not yet be saved when the user
-   * confirms (cards are non-blocking), and the Convex validator accepts
-   * `v.optional(v.id("checkIns"))` so the linkage is best-effort.
+   * Confirm a dose-change card. `checkInId` is intentionally undefined —
+   * the check-in row may not yet be saved when the user confirms (cards
+   * are non-blocking); the linkage is best-effort and the mutation
+   * accepts the omission.
    */
   async function handleDosageConfirm(
     card: ResolvedDosageChange,
+    cardKey: string,
   ): Promise<void> {
     if (userId === null) throw new Error('userId not yet resolved')
+    if (savedCardWritesRef.current.has(cardKey)) return
     await recordDosageChange({
       userId,
       // See note above: `card.medication._id` is the lib's string
@@ -715,16 +735,32 @@ export default function CheckinPage({
       medicationId: card.medication._id as Id<'medications'>,
       oldDose: card.medication.dose,
       newDose: card.newDose,
-      changedAt: Date.now(),
+      // changedAt omitted — the mutation stamps server time by default.
       ...(card.reason !== undefined ? { reason: card.reason } : {}),
       source: 'check-in',
     })
+    savedCardWritesRef.current.set(cardKey, 'dose-change')
   }
 
-  function handleDosageDismiss(card: ResolvedDosageChange): void {
-    setPendingDoseChanges((prev) =>
-      prev.filter((c) => c.medication._id !== card.medication._id),
-    )
+  /**
+   * Undo a confirmed dose change. There is no delete on the audit trail
+   * (history is not erased) — undo records the compensating reverse
+   * change, which also patches `medications.dose` back.
+   */
+  async function handleDosageUndo(
+    card: ResolvedDosageChange,
+    cardKey: string,
+  ): Promise<void> {
+    if (userId === null) throw new Error('userId not yet resolved')
+    await recordDosageChange({
+      userId,
+      medicationId: card.medication._id as Id<'medications'>,
+      oldDose: card.newDose,
+      newDose: card.medication.dose,
+      reason: 'Undo from check-in',
+      source: 'check-in',
+    })
+    savedCardWritesRef.current.delete(cardKey)
   }
 
   // ---- F05 chunk 5.C — voice event extraction wiring ----------------------
@@ -734,7 +770,7 @@ export default function CheckinPage({
   //   - posts transcript to `/api/check-in/extract-event` (NO cap increment —
   //     see route file for invariant comment),
   //   - on success → seed `pendingVisits` / `pendingBloodWork` so
-  //     `EventConfirmCard` renders below the medication cards in ConfirmSummary,
+  //     `ConfirmCardStack` renders their confirm cards,
   //   - on error → silent fallback (matches medication path).
   useEffect(() => {
     if (state.kind !== 'confirming') return
@@ -773,14 +809,18 @@ export default function CheckinPage({
   }, [state.kind])
 
   /**
-   * Confirm a visit-candidate card. Calls `createVisit` and removes the
-   * card from `pendingVisits`. `checkInId` is intentionally omitted —
+   * Confirm a visit-candidate card. `checkInId` is intentionally omitted —
    * the check-in row may not yet be saved when the user confirms (cards
-   * are non-blocking); the Convex validator accepts the omission.
+   * are non-blocking); the Convex validator accepts the omission. The
+   * created row id is remembered for undo.
    */
-  async function handleVisitConfirm(card: VisitCandidate): Promise<void> {
+  async function handleVisitConfirm(
+    card: VisitCandidate,
+    cardKey: string,
+  ): Promise<void> {
     if (userId === null) throw new Error('userId not yet resolved')
-    await createVisitMutation({
+    if (savedCardWritesRef.current.has(cardKey)) return
+    const { visitId } = await createVisitMutation({
       source: 'check-in',
       userId,
       date: card.date,
@@ -790,24 +830,34 @@ export default function CheckinPage({
       ...(card.notes !== null ? { notes: card.notes } : {}),
       clientRequestId: newRequestId(),
     })
-    setPendingVisits((prev) => prev.filter((c) => c !== card))
+    savedCardWritesRef.current.set(cardKey, visitId)
   }
 
-  function handleVisitDismiss(card: VisitCandidate): void {
-    setPendingVisits((prev) => prev.filter((c) => c !== card))
+  async function handleVisitUndo(cardKey: string): Promise<void> {
+    if (userId === null) throw new Error('userId not yet resolved')
+    const visitId = savedCardWritesRef.current.get(cardKey)
+    if (visitId === undefined) throw new Error('no saved visit to undo')
+    await softDeleteVisitMutation({
+      visitId: visitId as Id<'doctorVisits'>,
+      userId,
+    })
+    savedCardWritesRef.current.delete(cardKey)
   }
 
   /**
-   * Confirm a blood-work-candidate card. The unit picker in
-   * `EventConfirmCard` resolves any null marker units before calling
-   * back; the resolved markers come in as `resolved` here.
+   * Confirm a blood-work-candidate card. The unit picker in `ConfirmCard`
+   * resolves any null marker units before calling back; the resolved
+   * markers come in as `resolved` here. The created row id is remembered
+   * for undo.
    */
   async function handleBloodWorkConfirm(
     card: BloodWorkCandidate,
     resolved: Array<{ name: string; value: number; unit: string }>,
+    cardKey: string,
   ): Promise<void> {
     if (userId === null) throw new Error('userId not yet resolved')
-    await createBloodWorkMutation({
+    if (savedCardWritesRef.current.has(cardKey)) return
+    const { bloodWorkId } = await createBloodWorkMutation({
       source: 'check-in',
       userId,
       date: card.date,
@@ -815,11 +865,18 @@ export default function CheckinPage({
       ...(card.notes !== null ? { notes: card.notes } : {}),
       clientRequestId: newRequestId(),
     })
-    setPendingBloodWork((prev) => prev.filter((c) => c !== card))
+    savedCardWritesRef.current.set(cardKey, bloodWorkId)
   }
 
-  function handleBloodWorkDismiss(card: BloodWorkCandidate): void {
-    setPendingBloodWork((prev) => prev.filter((c) => c !== card))
+  async function handleBloodWorkUndo(cardKey: string): Promise<void> {
+    if (userId === null) throw new Error('userId not yet resolved')
+    const bloodWorkId = savedCardWritesRef.current.get(cardKey)
+    if (bloodWorkId === undefined) throw new Error('no saved blood work to undo')
+    await softDeleteBloodWorkMutation({
+      bloodWorkId: bloodWorkId as Id<'bloodWork'>,
+      userId,
+    })
+    savedCardWritesRef.current.delete(cardKey)
   }
 
   // 3. Kick extraction when the machine enters `processing`. ADR-005:
@@ -1214,6 +1271,51 @@ export default function CheckinPage({
 
   // ---- Render ----
 
+  // W2-4: one descriptor per pending confirm card, shared by the
+  // save-failed + confirming render branches below. ConfirmCardStack owns
+  // the render order (dose changes → summary → visits → blood work) and
+  // the N-rule (N≥4 → grouped presentation).
+  const confirmItems: ConfirmCardStackItem[] = [
+    ...pendingDoseChanges.map((card) => {
+      const key = `dose-${card.medication._id}`
+      return {
+        key,
+        kind: 'dose-change' as const,
+        medicationName: card.medication.name,
+        oldDose: card.medication.dose,
+        newDose: card.newDose,
+        ...(card.reason !== undefined ? { reason: card.reason } : {}),
+        onConfirm: () => handleDosageConfirm(card, key),
+        onUndoSave: () => handleDosageUndo(card, key),
+      }
+    }),
+    ...pendingVisits.map((card, i) => {
+      const key = `visit-${i}-${card.date}-${card.doctorName}`
+      return {
+        key,
+        kind: 'visit' as const,
+        date: card.date,
+        doctorName: card.doctorName,
+        visitType: card.visitType,
+        onConfirm: () => handleVisitConfirm(card, key),
+        onUndoSave: () => handleVisitUndo(key),
+      }
+    }),
+    ...pendingBloodWork.map((card, i) => {
+      const key = `bloodwork-${i}-${card.date}`
+      return {
+        key,
+        kind: 'blood-work' as const,
+        date: card.date,
+        markers: card.markers,
+        onConfirm: (
+          resolved: Array<{ name: string; value: number; unit: string }>,
+        ) => handleBloodWorkConfirm(card, resolved, key),
+        onUndoSave: () => handleBloodWorkUndo(key),
+      }
+    }),
+  ]
+
   // Save-failed branch: re-render ConfirmSummary with `saveError` so the
   // user gets the "Try again" + "Keep this for later" affordances.
   if (
@@ -1224,26 +1326,7 @@ export default function CheckinPage({
     const snapshot = confirmingRef.current
     return (
       <ScreenShell>
-        {/*
-          Render order (set 2026-05-09): dose changes → ConfirmSummary →
-          visit cards → blood-work cards. The summary sits ABOVE the
-          visit/blood-work confirm cards so the user reads their captured
-          metrics first; visit + blood-work cards are extractor side-events
-          that come after. Dose-change cards remain at the top per the F05
-          chunk 5.C invariant ("dosage-change cards from F04 appear above
-          event cards from F05").
-        */}
-        {pendingDoseChanges.map((card) => (
-          <MedicationConfirmCard
-            key={card.medication._id}
-            medicationName={card.medication.name}
-            oldDose={card.medication.dose}
-            newDose={card.newDose}
-            reason={card.reason}
-            onConfirm={() => handleDosageConfirm(card)}
-            onDismiss={() => handleDosageDismiss(card)}
-          />
-        ))}
+        <ConfirmCardStack items={confirmItems}>
         <ConfirmSummary
           metrics={snapshot.metrics}
           declined={snapshot.declined}
@@ -1280,27 +1363,7 @@ export default function CheckinPage({
           isSaving={false}
           saveError={state.error.message ?? 'save-failed'}
         />
-        {pendingVisits.map((card, i) => (
-          <EventConfirmCard
-            key={`visit-${i}-${card.date}-${card.doctorName}`}
-            kind="visit"
-            date={card.date}
-            doctorName={card.doctorName}
-            visitType={card.visitType}
-            onConfirm={() => handleVisitConfirm(card)}
-            onDismiss={() => handleVisitDismiss(card)}
-          />
-        ))}
-        {pendingBloodWork.map((card, i) => (
-          <EventConfirmCard
-            key={`bloodwork-${i}-${card.date}`}
-            kind="blood-work"
-            date={card.date}
-            markers={card.markers}
-            onConfirm={(resolved) => handleBloodWorkConfirm(card, resolved)}
-            onDismiss={() => handleBloodWorkDismiss(card)}
-          />
-        ))}
+        </ConfirmCardStack>
       </ScreenShell>
     )
   }
@@ -1389,18 +1452,7 @@ export default function CheckinPage({
     }
     return (
       <ScreenShell>
-        {/* See render-order rationale comment in the save-failed branch above. */}
-        {pendingDoseChanges.map((card) => (
-          <MedicationConfirmCard
-            key={card.medication._id}
-            medicationName={card.medication.name}
-            oldDose={card.medication.dose}
-            newDose={card.newDose}
-            reason={card.reason}
-            onConfirm={() => handleDosageConfirm(card)}
-            onDismiss={() => handleDosageDismiss(card)}
-          />
-        ))}
+        <ConfirmCardStack items={confirmItems}>
         <ConfirmSummary
           metrics={snapshot.metrics}
           declined={snapshot.declined}
@@ -1424,27 +1476,7 @@ export default function CheckinPage({
           isSaving={state.kind === 'saving'}
           saveError={null}
         />
-        {pendingVisits.map((card, i) => (
-          <EventConfirmCard
-            key={`visit-${i}-${card.date}-${card.doctorName}`}
-            kind="visit"
-            date={card.date}
-            doctorName={card.doctorName}
-            visitType={card.visitType}
-            onConfirm={() => handleVisitConfirm(card)}
-            onDismiss={() => handleVisitDismiss(card)}
-          />
-        ))}
-        {pendingBloodWork.map((card, i) => (
-          <EventConfirmCard
-            key={`bloodwork-${i}-${card.date}`}
-            kind="blood-work"
-            date={card.date}
-            markers={card.markers}
-            onConfirm={(resolved) => handleBloodWorkConfirm(card, resolved)}
-            onDismiss={() => handleBloodWorkDismiss(card)}
-          />
-        ))}
+        </ConfirmCardStack>
       </ScreenShell>
     )
   }
@@ -1481,7 +1513,7 @@ export default function CheckinPage({
               state.kind === 'idle-ready' && state.greetingBlocked === true
             }
           />
-          <p className="text-base text-zinc-600 dark:text-zinc-400">
+          <p className="text-base text-ink-muted">
             {state.kind === 'idle-ready' && state.greetingBlocked === true
               ? 'Tap the speaker to hear how Saha greets you, then tap the orb to begin.'
               : 'Tap the orb and tell me in your own words.'}
@@ -1491,7 +1523,7 @@ export default function CheckinPage({
 
       {state.kind === 'speaking-opener' ? (
         <header className="flex flex-col gap-3">
-          <h1 className="text-center text-base font-normal text-zinc-800 dark:text-zinc-100">
+          <h1 className="text-center text-base font-normal text-ink">
             {state.text}
           </h1>
         </header>
@@ -1499,7 +1531,7 @@ export default function CheckinPage({
 
       {state.kind === 'speaking-question' ? (
         <header className="flex flex-col gap-3">
-          <h2 className="text-center text-base font-normal text-zinc-800 dark:text-zinc-100">
+          <h2 className="text-center text-base font-normal text-ink">
             {state.text}
           </h2>
         </header>
@@ -1513,7 +1545,7 @@ export default function CheckinPage({
 
       <p
         aria-live="polite"
-        className="min-h-6 text-sm text-zinc-600 dark:text-zinc-400"
+        className="min-h-6 text-sm text-ink-muted"
       >
         {transientCopyFor(state)}
       </p>

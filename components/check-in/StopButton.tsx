@@ -69,11 +69,10 @@ export function StopButton({ onStop }: StopButtonProps): React.JSX.Element {
         }}
         className={
           'pointer-events-auto inline-flex min-h-11 items-center justify-center ' +
-          'rounded-full bg-teal-700 px-6 py-2 text-sm font-medium text-white ' +
-          'shadow-md transition-opacity hover:bg-teal-800 ' +
+          'rounded-full bg-sage-deep px-6 py-2 text-sm font-medium text-bg-elevated ' +
+          'shadow-md transition-opacity hover:bg-sage ' +
           'focus-visible:outline-none focus-visible:ring-2 ' +
-          'focus-visible:ring-teal-400 focus-visible:ring-offset-2 ' +
-          'dark:bg-teal-600 dark:hover:bg-teal-700'
+          'focus-visible:ring-sage focus-visible:ring-offset-2'
         }
       >
         Tap when done

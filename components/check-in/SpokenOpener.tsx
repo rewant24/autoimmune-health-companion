@@ -196,7 +196,7 @@ export function SpokenOpener({
 
   return (
     <div className="relative flex flex-col items-center gap-2">
-      <h1 className="text-center text-base font-normal text-zinc-800 dark:text-zinc-100">
+      <h1 className="text-center text-base font-normal text-ink">
         <span data-testid="spoken-opener-text">{text}</span>
         {available ? (
           <button
@@ -210,16 +210,15 @@ export function SpokenOpener({
             onClick={onReplayClick}
             className={
               'ml-2 inline-flex h-7 w-7 items-center justify-center rounded-full ' +
-              'align-middle text-zinc-500 hover:bg-zinc-100 ' +
+              'align-middle text-ink-subtle hover:bg-sage-soft ' +
               'focus-visible:outline-none focus-visible:ring-2 ' +
-              'focus-visible:ring-teal-400 focus-visible:ring-offset-2 ' +
-              'dark:hover:bg-zinc-800' +
+              'focus-visible:ring-sage focus-visible:ring-offset-2' +
               // Fix C — attention ring when greeting autoplay was blocked.
               // Animate the pulse only when reduced-motion is NOT set;
               // fall back to a static ring otherwise so the cue is still
               // visible without motion.
               (highlightSpeaker
-                ? ' ring-2 ring-teal-400 ring-offset-2 motion-safe:animate-pulse'
+                ? ' ring-2 ring-sage ring-offset-2 motion-safe:animate-pulse'
                 : '')
             }
           >
@@ -234,8 +233,7 @@ export function SpokenOpener({
           aria-label="Voice settings"
           className={
             'absolute top-full z-20 mt-2 flex flex-col gap-2 rounded-xl ' +
-            'border border-zinc-200 bg-white p-3 shadow-lg ' +
-            'dark:border-zinc-800 dark:bg-zinc-900'
+            'border border-rule bg-bg-elevated p-3 shadow-lg'
           }
         >
           {muted ? (
@@ -243,8 +241,8 @@ export function SpokenOpener({
               type="button"
               onClick={onConfirmUnmute}
               className={
-                'rounded-md bg-teal-700 px-3 py-2 text-xs font-medium text-white ' +
-                'hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-700'
+                'rounded-md bg-sage-deep px-3 py-2 text-xs font-medium ' +
+                'text-bg-elevated transition-colors hover:bg-sage'
               }
             >
               Un-mute Saha&apos;s voice
@@ -254,9 +252,8 @@ export function SpokenOpener({
               type="button"
               onClick={onConfirmMute}
               className={
-                'rounded-md bg-zinc-900 px-3 py-2 text-xs font-medium text-white ' +
-                'hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 ' +
-                'dark:hover:bg-zinc-200'
+                'rounded-md bg-ink px-3 py-2 text-xs font-medium ' +
+                'text-bg-elevated transition-colors hover:opacity-90'
               }
             >
               Mute Saha&apos;s voice
@@ -266,9 +263,8 @@ export function SpokenOpener({
             type="button"
             onClick={onDismissMute}
             className={
-              'rounded-md border border-zinc-300 px-3 py-2 text-xs text-zinc-700 ' +
-              'hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 ' +
-              'dark:hover:bg-zinc-800'
+              'rounded-md border border-rule px-3 py-2 text-xs text-ink-muted ' +
+              'transition-colors hover:bg-sage-soft'
             }
           >
             Cancel

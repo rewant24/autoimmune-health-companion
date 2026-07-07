@@ -44,10 +44,7 @@ export function Day1Tutorial({
           data-testid="day-1-tutorial-ribbon"
           role="note"
           aria-live="polite"
-          className={
-            'rounded-md bg-teal-50 px-3 py-1.5 text-xs text-teal-900 ' +
-            'dark:bg-teal-950 dark:text-teal-100'
-          }
+          className="rounded-md bg-sage-soft px-3 py-1.5 text-xs text-sage-deep"
         >
           {DAY1_TUTORIAL_COPY}
         </p>

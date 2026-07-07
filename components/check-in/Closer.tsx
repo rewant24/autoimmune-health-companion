@@ -30,7 +30,7 @@ export interface CloserProps {
 
 export function Closer({ text, onSpeak }: CloserProps): React.JSX.Element {
   return (
-    <p className="flex items-center justify-center gap-2 text-sm text-zinc-700 dark:text-zinc-200">
+    <p className="flex items-center justify-center gap-2 text-sm text-ink-muted">
       <span data-testid="closer-text">{text}</span>
       {onSpeak !== undefined ? (
         <button
@@ -39,7 +39,7 @@ export function Closer({ text, onSpeak }: CloserProps): React.JSX.Element {
           onClick={onSpeak}
           className={
             'inline-flex h-7 w-7 items-center justify-center rounded-full ' +
-            'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+            'text-ink-subtle transition-colors hover:bg-sage-soft'
           }
         >
           {/* Inline speaker glyph — no icon-library dependency. */}
