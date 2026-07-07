@@ -1,0 +1,71 @@
+name: Voice harness
+
+# A2 e2e voice-telemetry harness (build-plan W3∥ / roadmap item 4).
+# Runs the Playwright voice-loop spec against a production-mode server
+# (same webServer as the rest of e2e: `pnpm build && next start -p 3001`).
+#
+# NON-required by standing policy — e2e stays out of the `ci` PR gate.
+# Path-gated to the voice loop's actual surface: adapters + telemetry
+# sink (lib/voice), the check-in page effects + state machine
+# (app/check-in, lib/checkin), the three stubbed API routes, the PostHog
+# bootstrap, and the harness files themselves.
+#
+# Everything external is stubbed inside the spec (fake media device,
+# Playwright-fulfilled /api/transcribe + /api/speak + /api/check-in/*,
+# intercepted PostHog ingest) — no Sarvam, no LLM, no real PostHog
+# traffic. The page still talks to the dev Convex deployment for its
+# queries, same as the nightly integration workflow.
+
+on:
+  pull_request:
+    paths:
+      - "lib/voice/**"
+      - "lib/checkin/**"
+      - "app/check-in/**"
+      - "app/PostHogProvider.tsx"
+      - "app/api/transcribe/**"
+      - "app/api/speak/**"
+      - "app/api/check-in/**"
+      - "e2e/voice-telemetry-smoke.spec.ts"
+      - "playwright.config.ts"
+      - ".github/workflows/voice-harness.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: voice-harness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  voice-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Public client value (dev deployment) from the repo Actions variable —
+      # the /check-in page's Convex queries need a reachable deployment.
+      NEXT_PUBLIC_CONVEX_URL: ${{ vars.NEXT_PUBLIC_CONVEX_URL }}
+      # Inlined at build time by the webServer's `pnpm build`. The Sarvam
+      # providers select the adapters that emit voice_start/stop_called;
+      # their API routes are never reached (Playwright stubs them).
+      NEXT_PUBLIC_VOICE_PROVIDER: sarvam
+      NEXT_PUBLIC_VOICE_TTS_PROVIDER: sarvam
+      # Any non-empty key initializes posthog-js; every request to the
+      # ingest host is intercepted in the spec, so a dummy is correct here.
+      # Not a real credential — hence the gitleaks allow.
+      NEXT_PUBLIC_POSTHOG_KEY: phc_e2e_voice_harness_dummy # gitleaks:allow
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright test --project=voice-telemetry
+      - name: Upload failure artifacts (traces, screenshots, error context)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-harness-test-results
+          path: test-results/
+          retention-days: 7
