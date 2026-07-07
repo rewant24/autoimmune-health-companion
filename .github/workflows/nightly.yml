@@ -1,0 +1,64 @@
+name: Nightly integration
+
+# Nightly live-dependency suite (Lane 1A item ④). Two legs:
+#   1. integration — tests/integration against the live dev Convex
+#      (hardy-hamster-888). Tests create per-run qa_<uuid> users and wipe
+#      them in afterEach via devSeed.wipeUser — dev data only.
+#   2. live-llm — tests/api/*.live.test.ts through the real AI Gateway.
+#      Self-skips until the AI_GATEWAY_API_KEY repo secret exists, so this
+#      workflow lands disarmed and arms the moment the secret is added.
+# Non-blocking by design: no branch-protection tie-in; failures surface
+# here, not on PRs.
+
+on:
+  schedule:
+    # 03:00 IST = 21:30 UTC the previous day.
+    - cron: "30 21 * * *"
+  workflow_dispatch:
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_CONVEX_URL: ${{ vars.NEXT_PUBLIC_CONVEX_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:integration
+
+  live-llm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_CONVEX_URL: ${{ vars.NEXT_PUBLIC_CONVEX_URL }}
+      AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # secrets aren't allowed in job-level `if`, so gate at step level:
+      # absent secret → leg reports "disarmed" and exits green.
+      - name: Check for AI_GATEWAY_API_KEY
+        id: key
+        run: |
+          if [ -n "$AI_GATEWAY_API_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "AI_GATEWAY_API_KEY secret not set — live-LLM leg disarmed, skipping."
+          fi
+      - name: Run live LLM tests
+        if: steps.key.outputs.present == 'true'
+        env:
+          QA_RUN_LIVE_LLM: "1"
+        run: pnpm test:api:live
