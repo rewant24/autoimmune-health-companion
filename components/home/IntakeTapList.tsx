@@ -14,16 +14,6 @@
  * (chunk 4.B's surface) is the only Home-page medications affordance in
  * that state.
  *
- * Convex API surface (assumed from chunk 4.A — typed via `(api as any)`
- * since the generated `convex/_generated/api.d.ts` only ships after
- * `npx convex dev` has run against the new modules):
- *   - query  `medications.getTodayAdherence({ userId, date })`
- *       → Array<{ medication: { _id, name, dose }, takenToday: boolean,
- *                  lastTakenAt?: number }>
- *   - mutation `medications.logIntake({ userId, medicationId, date,
- *                                       takenAt, source: 'home-tap',
- *                                       clientRequestId })`
- *
  * SSR / pre-onboarding: the parent `/home` only renders this once a
  * profile is loaded, so window access is safe at mount time.
  */
@@ -31,20 +21,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
-
-const TEST_USER_KEY = 'saha.testUser.v1'
-
-function getOrCreateTestUserId(): string {
-  if (typeof window === 'undefined') return 'ssr-placeholder'
-  const existing = window.localStorage.getItem(TEST_USER_KEY)
-  if (existing) return existing
-  const fresh =
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : `u_${Math.random().toString(36).slice(2)}_${Date.now()}`
-  window.localStorage.setItem(TEST_USER_KEY, fresh)
-  return fresh
-}
+import { useUserId } from '@/lib/auth/use-user-id'
 
 function todayIsoDate(): string {
   const d = new Date()
@@ -94,7 +71,9 @@ export function IntakeTapList({
   userIdOverride,
   dateOverride,
 }: IntakeTapListProps = {}): React.JSX.Element | null {
-  const [userId, setUserId] = useState<string | null>(userIdOverride ?? null)
+  // Test seam wins when provided; otherwise the shared identity hook.
+  const hookUserId = useUserId()
+  const userId = userIdOverride ?? hookUserId
   // Device-local date string. When the page is left open across local
   // midnight, a 60s tick re-derives the date and only updates state on
   // change so the Convex `getTodayAdherence` subscription rebinds to the
@@ -125,36 +104,17 @@ export function IntakeTapList({
     return () => clearTimeout(id)
   }, [loggedToast])
 
-  useEffect(() => {
-    if (userIdOverride !== undefined) {
-      setUserId(userIdOverride)
-      return
-    }
-    setUserId(getOrCreateTestUserId())
-  }, [userIdOverride])
-
-  // useMutation/useQuery from convex/react are typed against the generated
-  // api. We keep a narrow `unknown` cast for these two calls until the
-  // generated `FunctionReference` shapes are imported here directly.
   // Note: `getTodayAdherence` lives on `medications`; `logIntake` lives on
   // `intakeEvents` — the original code mistakenly called both off
   // `medications`, which 404'd at runtime against real Convex.
-  const apiAny = api as unknown as {
-    medications: {
-      getTodayAdherence: never
-    }
-    intakeEvents: {
-      logIntake: never
-    }
-  }
-
-  const adherenceArg = userId ? { userId, date } : 'skip'
   const adherence = useQuery(
-    apiAny.medications.getTodayAdherence,
-    adherenceArg as never,
+    api.medications.getTodayAdherence,
+    userId ? { userId, date } : 'skip',
   ) as AdherenceRow[] | undefined
 
-  const logIntakeRaw = useMutation(apiAny.intakeEvents.logIntake)
+  const logIntakeRaw = useMutation(api.intakeEvents.logIntake)
+  // Narrow boundary cast: AdherenceRow._id is a plain string (component
+  // stays decoupled from generated Id<> brands, matching PR #23 precedent).
   const logIntake = logIntakeRaw as unknown as (args: {
     userId: string
     medicationId: string

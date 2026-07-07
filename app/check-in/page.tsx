@@ -57,6 +57,7 @@ import { useMutation, useQuery } from 'convex/react'
 import { useRouter } from 'next/navigation'
 
 import { api } from '@/convex/_generated/api'
+import { useUserId } from '@/lib/auth/use-user-id'
 import type { TtsProvider, VoiceProvider, Transcript } from '@/lib/voice/types'
 import { getTtsProvider, getVoiceProvider } from '@/lib/voice/provider'
 import {
@@ -158,20 +159,6 @@ export interface CheckinPageProps {
   ttsProviderOverride?: TtsProvider
 }
 
-const TEST_USER_KEY = 'saha.testUser.v1'
-
-function getOrCreateTestUserId(): string {
-  if (typeof window === 'undefined') return 'ssr-placeholder'
-  const existing = window.localStorage.getItem(TEST_USER_KEY)
-  if (existing) return existing
-  const fresh =
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : `u_${Math.random().toString(36).slice(2)}_${Date.now()}`
-  window.localStorage.setItem(TEST_USER_KEY, fresh)
-  return fresh
-}
-
 function todayIsoDate(): string {
   // YYYY-MM-DD in user's local timezone
   const d = new Date()
@@ -269,7 +256,7 @@ export default function CheckinPage({
   // and skip the dependent Convex queries until we have the real
   // values. First render on server and on client now both see
   // `null` → identical HTML → no mismatch.
-  const [userId, setUserId] = useState<string | null>(null)
+  const userId = useUserId()
   const [todayIso, setTodayIso] = useState<string | null>(null)
   // Profile-name read is deferred to post-mount for the same reason as
   // userId/todayIso above — `readProfile` touches localStorage and would
@@ -288,7 +275,6 @@ export default function CheckinPage({
   const [profileName, setProfileName] = useState<string | null>(null)
   const [profileResolved, setProfileResolved] = useState(false)
   useEffect(() => {
-    setUserId(getOrCreateTestUserId())
     setTodayIso(todayIsoDate())
     setProfileName(readProfile()?.name ?? null)
     setProfileResolved(true)

@@ -34,8 +34,7 @@ import { useEffect, type ReactNode } from "react"
 
 import { setVoiceLogSink, resetVoiceLogSink } from "@/lib/voice/log"
 import { makePosthogVoiceSink } from "@/lib/voice/sink-posthog"
-
-const TEST_USER_KEY = "saha.testUser.v1"
+import { readUserId } from "@/lib/auth/use-user-id"
 
 export function PostHogProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
@@ -76,7 +75,7 @@ export function PostHogProvider({ children }: { children: ReactNode }) {
           // own that lifecycle. If absent, PostHog keeps its own
           // auto-generated anon ID and aliases forward whenever auth /
           // testUser writes one.
-          const stub = window.localStorage.getItem(TEST_USER_KEY)
+          const stub = readUserId()
           if (stub) {
             posthog.identify(stub)
           }

@@ -67,11 +67,14 @@
  * post-MVP), so the guard is best-effort.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { useRouter } from 'next/navigation'
 
 import { api } from '@/convex/_generated/api'
+import type { Id } from '@/convex/_generated/dataModel'
+import { useOnboardingGuard } from '@/lib/auth/use-onboarding-guard'
+import { useUserId } from '@/lib/auth/use-user-id'
 import { BottomNav } from '@/components/nav/BottomNav'
 import {
   AddMedicationSheet,
@@ -80,21 +83,6 @@ import {
 import { DosageChangeDialog } from '@/components/medications/DosageChangeDialog'
 import { RegimenList } from '@/components/medications/RegimenList'
 import type { MedicationCardData } from '@/components/medications/MedicationCard'
-import { readProfile } from '@/lib/profile/storage'
-
-const TEST_USER_KEY = 'saha.testUser.v1'
-
-function getOrCreateTestUserId(): string {
-  if (typeof window === 'undefined') return 'ssr-placeholder'
-  const existing = window.localStorage.getItem(TEST_USER_KEY)
-  if (existing) return existing
-  const fresh =
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : `u_${Math.random().toString(36).slice(2)}_${Date.now()}`
-  window.localStorage.setItem(TEST_USER_KEY, fresh)
-  return fresh
-}
 
 // Shape we expect back from listActiveMedications. Mirrors the
 // `medications` table schema in convex/schema.ts (already landed in
@@ -111,47 +99,18 @@ type MedicationDoc = {
 
 export default function MedicationsPage(): React.JSX.Element {
   const router = useRouter()
-  const [allowed, setAllowed] = useState<boolean>(false)
-  const [checked, setChecked] = useState<boolean>(false)
-  const [userId, setUserId] = useState<string | null>(null)
+  const allowed = useOnboardingGuard()
+  const userId = useUserId()
 
-  useEffect(() => {
-    const profile = readProfile()
-    if (!profile || profile.onboarded !== true) {
-      router.replace('/onboarding/1')
-      setChecked(true)
-      return
-    }
-    setUserId(getOrCreateTestUserId())
-    setAllowed(true)
-    setChecked(true)
-  }, [router])
-
-  // `as any` — chunk 4.A's Convex module isn't in the generated api.d.ts
-  // on this branch yet. The runtime path resolves once 4.A lands and
-  // `npx convex dev` regenerates types. See header for expected shape.
   const meds = useQuery(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).medications?.listActiveMedications,
-    userId === null ? 'skip' : { userId },
+    api.medications.listActiveMedications,
+    userId === null || !allowed ? 'skip' : { userId },
   ) as MedicationDoc[] | undefined
 
-  const createMedication = useMutation(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).medications?.createMedication,
-  )
-  const updateMedication = useMutation(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).medications?.updateMedication,
-  )
-  const deactivateMedication = useMutation(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).medications?.deactivateMedication,
-  )
-  const recordDosageChange = useMutation(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).dosageChanges?.recordDosageChange,
-  )
+  const createMedication = useMutation(api.medications.createMedication)
+  const updateMedication = useMutation(api.medications.updateMedication)
+  const deactivateMedication = useMutation(api.medications.deactivateMedication)
+  const recordDosageChange = useMutation(api.dosageChanges.recordDosageChange)
 
   const cards: MedicationCardData[] | undefined = useMemo(() => {
     if (meds === undefined) return undefined
@@ -187,7 +146,7 @@ export default function MedicationsPage(): React.JSX.Element {
       ? meds?.find((m) => m._id === deactivateId) ?? null
       : null
 
-  if (!checked || !allowed) {
+  if (!allowed) {
     return (
       <main
         data-testid="medications-page-pending"
@@ -211,7 +170,9 @@ export default function MedicationsPage(): React.JSX.Element {
         // sub-object. Reconciled at integrate; no idempotency on update.
         await updateMedication({
           userId,
-          medicationId: editId,
+          // Narrow brand cast at the boundary — local state keeps plain
+          // strings, decoupled from generated Id<> types (PR #23 precedent).
+          medicationId: editId as Id<'medications'>,
           ...values,
         })
       }
@@ -231,7 +192,7 @@ export default function MedicationsPage(): React.JSX.Element {
     try {
       await deactivateMedication({
         userId,
-        medicationId: deactivateId,
+        medicationId: deactivateId as Id<'medications'>,
       })
       setDeactivateId(null)
     } catch (err) {
@@ -252,7 +213,7 @@ export default function MedicationsPage(): React.JSX.Element {
     try {
       await recordDosageChange({
         userId,
-        medicationId: doseChangeTarget._id,
+        medicationId: doseChangeTarget._id as Id<'medications'>,
         oldDose: doseChangeTarget.dose,
         newDose: values.newDose,
         changedAt: Date.now(),

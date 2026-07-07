@@ -22,19 +22,14 @@ import { useMutation, useQuery } from 'convex/react'
 import { useParams, useRouter } from 'next/navigation'
 
 import { api } from '@/convex/_generated/api'
+import type { Id } from '@/convex/_generated/dataModel'
+import { useUserId } from '@/lib/auth/use-user-id'
 import { BottomNav } from '@/components/nav/BottomNav'
 import {
   VisitForm,
   type VisitFormValues,
   type VisitType,
 } from '@/components/visits/VisitForm'
-
-const TEST_USER_KEY = 'saha.testUser.v1'
-
-function getTestUserId(): string | null {
-  if (typeof window === 'undefined') return null
-  return window.localStorage.getItem(TEST_USER_KEY)
-}
 
 const VISIT_TYPE_LABELS: Record<VisitType, string> = {
   consultation: 'Consultation',
@@ -69,29 +64,20 @@ export default function VisitDetailPage(): React.JSX.Element {
   const router = useRouter()
   const params = useParams<{ id: string }>()
   const visitId = params?.id ?? null
-  const [userId, setUserId] = useState<string | null>(null)
+  // Detail pages read the existing stub without minting one — a missing
+  // id just means "no visits", which renders the not-found state.
+  const userId = useUserId({ create: false })
   const [editing, setEditing] = useState<boolean>(false)
   const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    setUserId(getTestUserId())
-  }, [])
-
   const visits = useQuery(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).doctorVisits?.listVisits,
+    api.doctorVisits.listVisits,
     userId === null ? 'skip' : { userId },
   ) as VisitDoc[] | undefined
 
-  const updateVisit = useMutation(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).doctorVisits?.updateVisit,
-  )
-  const softDeleteVisit = useMutation(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).doctorVisits?.softDeleteVisit,
-  )
+  const updateVisit = useMutation(api.doctorVisits.updateVisit)
+  const softDeleteVisit = useMutation(api.doctorVisits.softDeleteVisit)
 
   const visit = useMemo<VisitDoc | null>(() => {
     if (!visits || !visitId) return null
@@ -104,7 +90,9 @@ export default function VisitDetailPage(): React.JSX.Element {
     try {
       await updateVisit({
         userId,
-        visitId: visit._id,
+        // Narrow brand cast at the boundary — local VisitDoc keeps plain
+        // strings, decoupled from generated Id<> types (PR #23 precedent).
+        visitId: visit._id as Id<'doctorVisits'>,
         date: values.date,
         doctorName: values.doctorName,
         specialty: values.specialty.length > 0 ? values.specialty : undefined,
@@ -123,7 +111,10 @@ export default function VisitDetailPage(): React.JSX.Element {
     if (!visit || !userId) return
     setError(null)
     try {
-      await softDeleteVisit({ userId, visitId: visit._id })
+      await softDeleteVisit({
+        userId,
+        visitId: visit._id as Id<'doctorVisits'>,
+      })
       router.push('/visits')
     } catch (err) {
       setError(

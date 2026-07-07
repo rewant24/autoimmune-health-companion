@@ -22,11 +22,13 @@
  * Convex API expectations: see /medications page header.
  */
 
-import { useEffect, useId, useState } from 'react'
+import { useId, useState } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { useRouter } from 'next/navigation'
 
 import { api } from '@/convex/_generated/api'
+import { useOnboardingGuard } from '@/lib/auth/use-onboarding-guard'
+import { useUserId } from '@/lib/auth/use-user-id'
 import {
   MED_CATEGORIES,
   MED_DELIVERIES,
@@ -34,21 +36,6 @@ import {
   type MedDelivery,
   type MedicationFormValues,
 } from '@/components/medications/AddMedicationSheet'
-import { readProfile } from '@/lib/profile/storage'
-
-const TEST_USER_KEY = 'saha.testUser.v1'
-
-function getOrCreateTestUserId(): string {
-  if (typeof window === 'undefined') return 'ssr-placeholder'
-  const existing = window.localStorage.getItem(TEST_USER_KEY)
-  if (existing) return existing
-  const fresh =
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : `u_${Math.random().toString(36).slice(2)}_${Date.now()}`
-  window.localStorage.setItem(TEST_USER_KEY, fresh)
-  return fresh
-}
 
 const CATEGORY_LABELS: Record<MedCategory, string> = {
   'arthritis-focused': 'Arthritis-focused',
@@ -84,38 +71,21 @@ type MedicationDoc = {
 
 export default function MedicationsSetupPage(): React.JSX.Element {
   const router = useRouter()
-  const [allowed, setAllowed] = useState<boolean>(false)
-  const [checked, setChecked] = useState<boolean>(false)
-  const [userId, setUserId] = useState<string | null>(null)
+  const allowed = useOnboardingGuard()
+  const userId = useUserId()
   const [values, setValues] = useState<MedicationFormValues>(EMPTY)
   const [submitting, setSubmitting] = useState<boolean>(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const formId = useId()
 
-  useEffect(() => {
-    const profile = readProfile()
-    if (!profile || profile.onboarded !== true) {
-      router.replace('/onboarding/1')
-      setChecked(true)
-      return
-    }
-    setUserId(getOrCreateTestUserId())
-    setAllowed(true)
-    setChecked(true)
-  }, [router])
-
   const meds = useQuery(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).medications?.listActiveMedications,
-    userId === null ? 'skip' : { userId },
+    api.medications.listActiveMedications,
+    userId === null || !allowed ? 'skip' : { userId },
   ) as MedicationDoc[] | undefined
 
-  const createMedication = useMutation(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).medications?.createMedication,
-  )
+  const createMedication = useMutation(api.medications.createMedication)
 
-  if (!checked || !allowed) {
+  if (!allowed) {
     return (
       <main
         data-testid="medications-setup-pending"

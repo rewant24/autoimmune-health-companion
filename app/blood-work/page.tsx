@@ -7,31 +7,18 @@
  * `api.bloodWork.listBloodWork`.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useQuery } from 'convex/react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 import { api } from '@/convex/_generated/api'
+import { useUserId } from '@/lib/auth/use-user-id'
 import { BottomNav } from '@/components/nav/BottomNav'
 import {
   BloodWorkCard,
   type BloodWorkCardData,
 } from '@/components/blood-work/BloodWorkCard'
-
-const TEST_USER_KEY = 'saha.testUser.v1'
-
-function getOrCreateTestUserId(): string | null {
-  if (typeof window === 'undefined') return null
-  const existing = window.localStorage.getItem(TEST_USER_KEY)
-  if (existing) return existing
-  const fresh =
-    typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : `u_${Math.random().toString(36).slice(2)}_${Date.now()}`
-  window.localStorage.setItem(TEST_USER_KEY, fresh)
-  return fresh
-}
 
 type BloodWorkDoc = {
   _id: string
@@ -47,15 +34,10 @@ type BloodWorkDoc = {
 
 export default function BloodWorkPage(): React.JSX.Element {
   const router = useRouter()
-  const [userId, setUserId] = useState<string | null>(null)
-
-  useEffect(() => {
-    setUserId(getOrCreateTestUserId())
-  }, [])
+  const userId = useUserId()
 
   const rows = useQuery(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).bloodWork?.listBloodWork,
+    api.bloodWork.listBloodWork,
     userId === null ? 'skip' : { userId },
   ) as BloodWorkDoc[] | undefined
 
