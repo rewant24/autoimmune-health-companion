@@ -13,8 +13,9 @@
  *
  * Everything external is stubbed at the Playwright network layer — NO
  * live Sarvam, NO live LLM, NO real PostHog ingestion:
- *   - getUserMedia: Chromium fake media device (see the `voice-telemetry`
- *     project launch args in playwright.config.ts). The real
+ *   - getUserMedia: init-script fake returning a synthetic silent
+ *     MediaStream (see `installFakeMicrophone` — the Chromium
+ *     fake-device launch flags proved platform-flaky). The real
  *     AudioContext/AudioWorklet recorder runs against the fake stream.
  *   - /api/transcribe: fulfilled with the route's real SSE `final` frame
  *     shape, scripted transcript per turn.
@@ -313,6 +314,45 @@ async function installVoiceStubs(
 // ---------------------------------------------------------------------------
 
 /**
+ * Replace `navigator.mediaDevices.getUserMedia` with a synthetic silent
+ * MediaStream (AudioContext → MediaStreamDestination with a zero
+ * constant source). The Chromium fake-device launch flags proved
+ * unreliable: on macOS the runner-launched browser kept using the REAL
+ * microphone, and on the ubuntu CI runner getUserMedia rejected
+ * NotFoundError (no device at all). An init-script fake is deterministic
+ * on every platform, keeps real audio out of the tests, and the real
+ * AudioContext/AudioWorklet recorder consumes the stream unchanged.
+ *
+ * Silence is a feature: it stays below the recorder's speech-RMS
+ * threshold so the silence VAD never fires and the manual orb tap is
+ * the single deterministic end-of-turn path.
+ */
+async function installFakeMicrophone(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const fakeGetUserMedia = async (): Promise<MediaStream> => {
+      const ctx = new AudioContext()
+      const destination = ctx.createMediaStreamDestination()
+      const source = ctx.createConstantSource()
+      source.offset.value = 0 // pure silence
+      source.connect(destination)
+      source.start()
+      // Post-gesture (the orb tap) this resolves; if not, the track
+      // still exists and the recorder simply sees no samples.
+      void ctx.resume().catch(() => undefined)
+      return destination.stream
+    }
+    if (navigator.mediaDevices) {
+      navigator.mediaDevices.getUserMedia = fakeGetUserMedia
+    } else {
+      Object.defineProperty(navigator, 'mediaDevices', {
+        value: { getUserMedia: fakeGetUserMedia },
+        configurable: true,
+      })
+    }
+  })
+}
+
+/**
  * posthog-js drops EVERY capture when `isLikelyBot()` is true, and that
  * check returns true whenever `navigator.webdriver` is set — which
  * Playwright always sets. Mask it (plus userAgentData brands, which
@@ -429,6 +469,7 @@ test.describe('voice telemetry harness', () => {
       console.log(`[browser:pageerror] ${err.message}`)
     })
 
+    await installFakeMicrophone(page)
     await maskAutomationSignals(page)
     await seedTestUser(page, testUserId)
     await installPosthogIntercept(page, sink)
@@ -528,6 +569,7 @@ test.describe('voice telemetry harness', () => {
       console.log(`[browser:pageerror] ${err.message}`)
     })
 
+    await installFakeMicrophone(page)
     await maskAutomationSignals(page)
     await seedTestUser(page, testUserId)
     await installPosthogIntercept(page, sink)
