@@ -420,6 +420,11 @@ test.describe('voice telemetry harness', () => {
     const testUserId = `qa_e2e_${randomUUID()}`
     const sink: CapturedEvent[] = []
 
+    page.on('console', (msg) => {
+      if (msg.type() === 'error' || msg.type() === 'warning') {
+        console.log(`[browser:${msg.type()}] ${msg.text()}`)
+      }
+    })
     page.on('pageerror', (err) => {
       console.log(`[browser:pageerror] ${err.message}`)
     })
@@ -514,6 +519,11 @@ test.describe('voice telemetry harness', () => {
     const testUserId = `qa_e2e_${randomUUID()}`
     const sink: CapturedEvent[] = []
 
+    page.on('console', (msg) => {
+      if (msg.type() === 'error' || msg.type() === 'warning') {
+        console.log(`[browser:${msg.type()}] ${msg.text()}`)
+      }
+    })
     page.on('pageerror', (err) => {
       console.log(`[browser:pageerror] ${err.message}`)
     })

@@ -62,3 +62,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm exec playwright test --project=voice-telemetry
+      - name: Upload failure artifacts (traces, screenshots, error context)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-harness-test-results
+          path: test-results/
+          retention-days: 7
