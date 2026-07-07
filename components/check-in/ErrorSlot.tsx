@@ -103,14 +103,14 @@ export function ErrorSlot({
       data-error-kind={kind}
       className={
         'flex min-h-[60vh] w-full max-w-md flex-col items-center justify-center ' +
-        'gap-4 rounded-2xl border border-red-200 bg-white p-8 text-center ' +
-        'shadow-sm dark:border-red-900/40 dark:bg-zinc-900'
+        'gap-4 rounded-2xl border border-red-200 bg-bg-card p-8 text-center ' +
+        'shadow-sm dark:border-red-900/40'
       }
     >
-      <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+      <h2 className="text-xl font-semibold text-ink">
         {(ERROR_COPY[kind] ?? FALLBACK_COPY).title}
       </h2>
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="text-sm text-ink-muted">
         {(ERROR_COPY[kind] ?? FALLBACK_COPY).body}
         {message ? <span className="block pt-2">{message}</span> : null}
       </p>
@@ -121,16 +121,16 @@ export function ErrorSlot({
           onClick={onRetry}
           className={
             'mt-2 inline-flex min-h-11 items-center justify-center rounded-full ' +
-            'bg-teal-600 px-6 text-sm font-medium text-white hover:bg-teal-700 ' +
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 ' +
-            'focus-visible:ring-offset-2'
+            'bg-sage-deep px-6 text-sm font-medium text-bg-elevated transition-colors ' +
+            'hover:bg-sage focus-visible:outline-none focus-visible:ring-2 ' +
+            'focus-visible:ring-sage focus-visible:ring-offset-2'
           }
         >
           Try again
         </button>
       ) : null}
       {/* Debug slug, demoted to a detail line — kept for bug reports. */}
-      <span className="font-mono text-[10px] text-zinc-300 dark:text-zinc-600">
+      <span className="font-mono text-[10px] text-ink-subtle opacity-60">
         {kind}
       </span>
     </section>

@@ -107,11 +107,11 @@ export function MilestoneCelebration({
       aria-label={ARIA_LABEL_FOR_KIND[kind]}
       className={
         'fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 ' +
-        'bg-white/95 px-6 backdrop-blur dark:bg-zinc-950/95'
+        'bg-bg/95 px-6 backdrop-blur'
       }
     >
       <h2
-        className="text-center text-lg font-medium text-zinc-900 dark:text-zinc-50"
+        className="text-center text-lg font-medium text-ink"
         // Closer text is rendered as the heading per spec.
       >
         {closerText}
@@ -119,7 +119,7 @@ export function MilestoneCelebration({
 
       <p
         data-testid="milestone-tier-label"
-        className="text-center text-sm font-semibold uppercase tracking-wider text-teal-700 dark:text-teal-300"
+        className="text-center text-sm font-semibold uppercase tracking-wider text-sage-deep"
       >
         {TIER_LABEL_FOR_KIND[kind]}
       </p>
@@ -139,9 +139,9 @@ export function MilestoneCelebration({
             data-filled={prefersReducedMotion ? 'true' : 'false'}
             style={prefersReducedMotion ? undefined : { animationDelay: `${i * 40}ms` }}
             className={
-              'block h-6 w-6 rounded-full border-2 border-teal-600 ' +
+              'block h-6 w-6 rounded-full border-2 border-sage ' +
               (prefersReducedMotion
-                ? 'bg-teal-600 '
+                ? 'bg-sage '
                 : 'milestone-ring-animate ')
             }
           />
@@ -154,9 +154,9 @@ export function MilestoneCelebration({
         onClick={onContinue}
         className={
           'inline-flex min-h-12 items-center justify-center rounded-full ' +
-          'bg-teal-700 px-8 text-sm font-semibold text-white shadow-sm ' +
-          'transition hover:bg-teal-800 focus-visible:outline-none ' +
-          'focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2'
+          'bg-sage-deep px-8 text-sm font-semibold text-bg-elevated shadow-sm ' +
+          'transition hover:bg-sage focus-visible:outline-none ' +
+          'focus-visible:ring-2 focus-visible:ring-sage focus-visible:ring-offset-2'
         }
       >
         Keep going

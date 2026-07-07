@@ -33,6 +33,7 @@ import { useState } from 'react'
 import { Closer } from './Closer'
 import { DiscardConfirm } from './DiscardConfirm'
 import { ErrorSlot } from './ErrorSlot'
+import { PillButton } from '@/components/ui/PillButton'
 import type { CheckinMetrics, Metric } from '@/lib/checkin/types'
 
 const BONUS_WORD_THRESHOLD = 30
@@ -120,20 +121,9 @@ export function ConfirmSummary({
           message="We couldn't save this check-in."
           onRetry={onRetry ?? onSave}
         />
-        <button
-          type="button"
-          onClick={() => onSaveLater?.()}
-          className={
-            'inline-flex min-h-11 items-center justify-center rounded-full ' +
-            'border border-zinc-300 bg-white px-6 text-sm font-medium text-zinc-800 ' +
-            'hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 ' +
-            'focus-visible:ring-teal-400 focus-visible:ring-offset-2 ' +
-            'dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 ' +
-            'dark:hover:bg-zinc-800'
-          }
-        >
+        <PillButton variant="secondary" onClick={() => onSaveLater?.()}>
           Keep this for later
-        </button>
+        </PillButton>
       </section>
     )
   }
@@ -146,12 +136,12 @@ export function ConfirmSummary({
     >
       <h2
         id="confirm-heading"
-        className="text-lg font-semibold text-zinc-900 dark:text-zinc-50"
+        className="text-lg font-semibold text-ink"
       >
         Here&apos;s what I heard
       </h2>
 
-      <ul className="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
+      <ul className="flex flex-col divide-y divide-rule">
         {METRIC_ORDER.map((m) => {
           const isDeclined = declinedSet.has(m)
           return (
@@ -160,10 +150,8 @@ export function ConfirmSummary({
               data-metric={m}
               className="flex items-center justify-between py-2 text-sm"
             >
-              <span className="text-zinc-700 dark:text-zinc-200">
-                {METRIC_LABELS[m]}
-              </span>
-              <span className="text-zinc-500 dark:text-zinc-400">
+              <span className="text-ink-muted">{METRIC_LABELS[m]}</span>
+              <span className="text-ink-subtle">
                 {isDeclined ? '— skipped today' : formatValue(m, metrics)}
               </span>
             </li>
@@ -172,9 +160,7 @@ export function ConfirmSummary({
       </ul>
 
       {showBonus ? (
-        <p className="text-sm text-zinc-600 dark:text-zinc-300">
-          Plus: {transcript.text}
-        </p>
+        <p className="text-sm text-ink-muted">Plus: {transcript.text}</p>
       ) : null}
 
       <Closer text={closerText} />
@@ -185,9 +171,9 @@ export function ConfirmSummary({
         disabled={isSaving}
         className={
           'sticky bottom-4 mt-4 inline-flex min-h-12 w-full items-center justify-center ' +
-          'rounded-full bg-teal-600 px-6 text-sm font-medium text-white shadow-md ' +
-          'hover:bg-teal-700 focus-visible:outline-none focus-visible:ring-2 ' +
-          'focus-visible:ring-teal-400 focus-visible:ring-offset-2 ' +
+          'rounded-full bg-sage-deep px-6 text-sm font-medium text-bg-elevated shadow-md ' +
+          'transition-colors hover:bg-sage focus-visible:outline-none focus-visible:ring-2 ' +
+          'focus-visible:ring-sage focus-visible:ring-offset-2 ' +
           'disabled:cursor-not-allowed disabled:opacity-70'
         }
       >
@@ -197,10 +183,7 @@ export function ConfirmSummary({
       <button
         type="button"
         onClick={() => setDiscardOpen(true)}
-        className={
-          'mx-auto text-xs text-zinc-500 underline-offset-2 hover:underline ' +
-          'dark:text-zinc-400'
-        }
+        className="mx-auto text-xs text-ink-subtle underline-offset-2 hover:underline"
       >
         Discard this check-in
       </button>

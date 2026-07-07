@@ -74,12 +74,11 @@ export function SwitchToTapsButton({
         }}
         className={
           'pointer-events-auto inline-flex min-h-11 items-center justify-center ' +
-          'rounded-full border border-zinc-300 bg-white/95 px-5 py-2 ' +
-          'text-sm font-medium text-zinc-700 shadow-md backdrop-blur ' +
-          'transition-opacity hover:bg-zinc-50 focus-visible:outline-none ' +
-          'focus-visible:ring-2 focus-visible:ring-teal-400 ' +
-          'focus-visible:ring-offset-2 dark:border-zinc-700 ' +
-          'dark:bg-zinc-900/95 dark:text-zinc-100 dark:hover:bg-zinc-800'
+          'rounded-full border border-rule bg-bg-elevated/95 px-5 py-2 ' +
+          'text-sm font-medium text-ink-muted shadow-md backdrop-blur ' +
+          'transition-opacity hover:bg-sage-soft focus-visible:outline-none ' +
+          'focus-visible:ring-2 focus-visible:ring-sage ' +
+          'focus-visible:ring-offset-2'
         }
       >
         Switch to taps

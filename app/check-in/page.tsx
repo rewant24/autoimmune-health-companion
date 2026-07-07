@@ -735,7 +735,7 @@ export default function CheckinPage({
       medicationId: card.medication._id as Id<'medications'>,
       oldDose: card.medication.dose,
       newDose: card.newDose,
-      changedAt: Date.now(),
+      // changedAt omitted — the mutation stamps server time by default.
       ...(card.reason !== undefined ? { reason: card.reason } : {}),
       source: 'check-in',
     })
@@ -757,7 +757,6 @@ export default function CheckinPage({
       medicationId: card.medication._id as Id<'medications'>,
       oldDose: card.newDose,
       newDose: card.medication.dose,
-      changedAt: Date.now(),
       reason: 'Undo from check-in',
       source: 'check-in',
     })
@@ -1514,7 +1513,7 @@ export default function CheckinPage({
               state.kind === 'idle-ready' && state.greetingBlocked === true
             }
           />
-          <p className="text-base text-zinc-600 dark:text-zinc-400">
+          <p className="text-base text-ink-muted">
             {state.kind === 'idle-ready' && state.greetingBlocked === true
               ? 'Tap the speaker to hear how Saha greets you, then tap the orb to begin.'
               : 'Tap the orb and tell me in your own words.'}
@@ -1524,7 +1523,7 @@ export default function CheckinPage({
 
       {state.kind === 'speaking-opener' ? (
         <header className="flex flex-col gap-3">
-          <h1 className="text-center text-base font-normal text-zinc-800 dark:text-zinc-100">
+          <h1 className="text-center text-base font-normal text-ink">
             {state.text}
           </h1>
         </header>
@@ -1532,7 +1531,7 @@ export default function CheckinPage({
 
       {state.kind === 'speaking-question' ? (
         <header className="flex flex-col gap-3">
-          <h2 className="text-center text-base font-normal text-zinc-800 dark:text-zinc-100">
+          <h2 className="text-center text-base font-normal text-ink">
             {state.text}
           </h2>
         </header>
@@ -1546,7 +1545,7 @@ export default function CheckinPage({
 
       <p
         aria-live="polite"
-        className="min-h-6 text-sm text-zinc-600 dark:text-zinc-400"
+        className="min-h-6 text-sm text-ink-muted"
       >
         {transientCopyFor(state)}
       </p>

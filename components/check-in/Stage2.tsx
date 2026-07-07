@@ -114,9 +114,9 @@ export function Stage2({
           onClick={onContinue}
           className={
             'inline-flex min-h-12 w-full items-center justify-center rounded-full ' +
-            'bg-teal-600 px-8 text-sm font-semibold text-white shadow-sm ' +
-            'transition hover:bg-teal-700 focus-visible:outline-none ' +
-            'focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 ' +
+            'bg-sage-deep px-8 text-sm font-semibold text-bg-elevated shadow-sm ' +
+            'transition hover:bg-sage focus-visible:outline-none ' +
+            'focus-visible:ring-2 focus-visible:ring-sage focus-visible:ring-offset-2 ' +
             'disabled:opacity-60'
           }
         >

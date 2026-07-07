@@ -55,11 +55,9 @@ export function SavedView({ closer, queued }: SavedViewProps): React.JSX.Element
         className="flex flex-col items-center gap-6"
       >
         <Orb orbState="saved" onTap={() => {}} disabled />
-        <p className="max-w-sm text-base text-zinc-700 dark:text-zinc-200">
-          {visibleCloser}
-        </p>
+        <p className="max-w-sm text-base text-ink-muted">{visibleCloser}</p>
         {queued ? (
-          <p className="max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="max-w-sm text-sm text-ink-subtle">
             Saved for later — we&apos;ll save it as soon as you&apos;re back online.
           </p>
         ) : null}
@@ -67,9 +65,9 @@ export function SavedView({ closer, queued }: SavedViewProps): React.JSX.Element
           href="/journey/memory"
           className={
             'mt-2 inline-flex min-h-11 items-center justify-center rounded-full ' +
-            'bg-teal-600 px-6 text-sm font-medium text-white hover:bg-teal-700 ' +
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 ' +
-            'focus-visible:ring-offset-2'
+            'bg-sage-deep px-6 text-sm font-medium text-bg-elevated transition-colors ' +
+            'hover:bg-sage focus-visible:outline-none focus-visible:ring-2 ' +
+            'focus-visible:ring-sage focus-visible:ring-offset-2'
           }
         >
           View memory

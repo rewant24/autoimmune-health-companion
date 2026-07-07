@@ -24,6 +24,8 @@
 
 import { useEffect, useRef } from 'react'
 
+import { PillButton } from '@/components/ui/PillButton'
+
 export interface DiscardConfirmProps {
   open: boolean
   onDiscard: () => void
@@ -87,19 +89,14 @@ export function DiscardConfirm({
         aria-modal="true"
         aria-labelledby="discard-heading"
         className={
-          'w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 ' +
-          'text-center shadow-xl dark:border-zinc-800 dark:bg-zinc-900'
+          'w-full max-w-sm rounded-2xl border border-rule bg-bg-elevated p-6 ' +
+          'text-center shadow-xl'
         }
       >
-        <h2
-          id="discard-heading"
-          className="text-lg font-semibold text-zinc-900 dark:text-zinc-50"
-        >
+        <h2 id="discard-heading" className="text-lg font-semibold text-ink">
           Discard this one?
         </h2>
-        <p className="pt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Nothing will be saved.
-        </p>
+        <p className="pt-2 text-sm text-ink-muted">Nothing will be saved.</p>
         <div className="mt-6 flex flex-col gap-2">
           <button
             ref={discardRef}
@@ -114,20 +111,13 @@ export function DiscardConfirm({
           >
             Discard
           </button>
-          <button
-            type="button"
+          <PillButton
+            variant="secondary"
+            className="w-full"
             onClick={onCancel}
-            className={
-              'inline-flex min-h-11 w-full items-center justify-center rounded-full ' +
-              'border border-zinc-300 bg-white px-6 text-sm font-medium text-zinc-800 ' +
-              'hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 ' +
-              'focus-visible:ring-teal-400 focus-visible:ring-offset-2 ' +
-              'dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 ' +
-              'dark:hover:bg-zinc-800'
-            }
           >
             Keep editing
-          </button>
+          </PillButton>
         </div>
       </div>
     </div>

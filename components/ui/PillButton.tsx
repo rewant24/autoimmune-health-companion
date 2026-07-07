@@ -23,8 +23,7 @@ const variants = {
   secondary: 'border border-rule bg-transparent text-ink',
 } as const
 
-export interface PillButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface PillButtonProps extends React.ComponentProps<'button'> {
   variant?: keyof typeof variants
 }
 

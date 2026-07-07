@@ -80,9 +80,7 @@ export function Stage2Recap({
       data-testid="stage-2-recap"
       className="flex w-full flex-col gap-2"
     >
-      <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">
-        Heard you on:
-      </h2>
+      <h2 className="text-sm font-semibold text-ink-muted">Heard you on:</h2>
       <ul className="flex flex-col gap-1">
         {SCOPING_ORDER.map((metric) => {
           const state = rowStateFor(

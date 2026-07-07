@@ -67,9 +67,7 @@ export function MissingMetricList({
       className="flex w-full flex-col gap-3"
     >
       {header ? (
-        <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">
-          {header}
-        </h2>
+        <h2 className="text-sm font-semibold text-ink-muted">{header}</h2>
       ) : null}
       <ul className="flex flex-col gap-2">
         {ordered.map((metric) => (

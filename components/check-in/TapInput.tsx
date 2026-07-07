@@ -49,17 +49,16 @@ const METRIC_LABEL: Record<Metric, string> = {
 
 const skipLinkClass =
   'inline-flex min-h-11 items-center justify-center px-2 text-xs font-medium ' +
-  'text-zinc-500 underline-offset-4 hover:underline focus-visible:outline-none ' +
-  'focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 ' +
-  'dark:text-zinc-400'
+  'text-ink-subtle underline-offset-4 hover:underline focus-visible:outline-none ' +
+  'focus-visible:ring-2 focus-visible:ring-sage focus-visible:ring-offset-2'
 
 const chipClass = (active: boolean): string =>
   'inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-4 ' +
   'text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 ' +
-  'focus-visible:ring-teal-400 focus-visible:ring-offset-2 ' +
+  'focus-visible:ring-sage focus-visible:ring-offset-2 ' +
   (active
-    ? 'bg-teal-600 text-white shadow-sm '
-    : 'bg-zinc-100 text-zinc-800 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700 ')
+    ? 'bg-sage-deep text-bg-elevated shadow-sm '
+    : 'bg-sage-soft text-ink hover:bg-rule ')
 
 export function TapInput({
   metric,
@@ -73,9 +72,9 @@ export function TapInput({
       <div
         data-testid={`tap-input-${metric}`}
         data-declined="true"
-        className="flex items-center gap-3 py-2 text-sm text-zinc-500 dark:text-zinc-400"
+        className="flex items-center gap-3 py-2 text-sm text-ink-subtle"
       >
-        <span className="font-medium text-zinc-700 dark:text-zinc-200">
+        <span className="font-medium text-ink-muted">
           {METRIC_LABEL[metric]}
         </span>
         <span>— skipped today</span>
@@ -89,7 +88,7 @@ export function TapInput({
       className="flex flex-col gap-2 py-2"
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-zinc-800 dark:text-zinc-100">
+        <span className="text-sm font-medium text-ink">
           {METRIC_LABEL[metric]}
         </span>
       </div>
@@ -151,7 +150,7 @@ function SliderControl({
       <div className="flex justify-end">
         <span
           data-testid={`tap-input-${metric}-readout`}
-          className="inline-flex min-h-7 min-w-9 items-center justify-center rounded-md bg-zinc-100 px-2 text-sm font-semibold text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
+          className="inline-flex min-h-7 min-w-9 items-center justify-center rounded-md bg-sage-soft px-2 text-sm font-semibold text-ink"
         >
           {display}
         </span>
@@ -170,7 +169,7 @@ function SliderControl({
           const n = Number(e.currentTarget.value)
           onUpdate(metric, n)
         }}
-        className="min-h-11 w-full cursor-pointer accent-teal-600"
+        className="min-h-11 w-full cursor-pointer accent-sage-deep"
       />
     </div>
   )
