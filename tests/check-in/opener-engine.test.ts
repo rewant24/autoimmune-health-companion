@@ -74,7 +74,8 @@ describe("selectOpener — variant per state", () => {
       }),
     );
     expect(result.key).toBe("doctor-visit-tomorrow");
-    expect(result.text).toMatch(/Dr\. Mehta tomorrow/);
+    // W2-2: copy genericized when upcomingEvent got wired to real data.
+    expect(result.text).toMatch(/Your doctor tomorrow/);
   });
 
   it("blood-test-tomorrow fires for upcoming blood test", () => {

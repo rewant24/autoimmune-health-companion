@@ -229,6 +229,26 @@ export class EventExtractFailedError extends Error {
 }
 
 /**
+ * Provider rate-limit (route code `event-extract.rate_limited`). The
+ * extraction is opportunistic — callers currently swallow this like any
+ * failure — but the dedicated class keeps the 429 from masquerading as a
+ * server fault in logs/telemetry (feedback_server_429_ux).
+ */
+export class EventExtractRateLimitedError extends Error {
+  readonly code = 'event-extract.rate_limited' as const
+  readonly retryAfterSeconds: number | null
+  constructor(retryAfterSeconds: number | null = null) {
+    super(
+      retryAfterSeconds !== null
+        ? `Event extraction rate limited; retry after ${retryAfterSeconds}s`
+        : 'Event extraction rate limited',
+    )
+    this.name = 'EventExtractRateLimitedError'
+    this.retryAfterSeconds = retryAfterSeconds
+  }
+}
+
+/**
  * POST the transcript to the event extraction route. Returns the structured
  * `{ visits, bloodWork }` result. Empty transcript short-circuits without
  * calling fetch — there's nothing to extract from silence.
@@ -259,6 +279,17 @@ export async function extractEvents(
   } catch (err) {
     throw new EventExtractFailedError(
       `Network error calling event-extract route: ${(err as Error).message}`,
+    )
+  }
+
+  if (response.status === 429) {
+    // Note: Number("") is 0 — only parse when the header actually exists.
+    const headerRaw = response.headers.get('Retry-After')
+    const headerRetry = headerRaw !== null ? Number(headerRaw) : Number.NaN
+    throw new EventExtractRateLimitedError(
+      Number.isFinite(headerRetry) && headerRetry >= 0
+        ? Math.ceil(headerRetry)
+        : null,
     )
   }
 

@@ -102,6 +102,12 @@ export type ListCheckinsArgs = {
 // satisfies this structurally.
 type IndexBuilder = {
   eq: (field: "userId" | "date", value: string) => IndexBuilder;
+  // W2-2: range bounds pushed into the index predicate so Convex narrows
+  // the scan instead of collecting the user's full history
+  // (feedback_memory_aggregation_index_bounds).
+  gte: (field: "date", value: string) => IndexBuilder;
+  lte: (field: "date", value: string) => IndexBuilder;
+  lt: (field: "date", value: string) => IndexBuilder;
 };
 
 // Minimal medication shape needed for the Memory intake projection — name
@@ -266,9 +272,25 @@ export async function listCheckinsHandler(
     return { items: [], nextCursor: null };
   }
 
+  // W2-2: date bounds ride the index. Upper bound is the tighter of
+  // toDate (inclusive) and cursor (exclusive); rows must satisfy both,
+  // so when both exist we keep whichever excludes more. The JS filters
+  // below stay as defense-in-depth — they're free on the narrowed set.
   const all = await ctx.db
     .query("checkIns")
-    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .withIndex("by_user_date", (q) => {
+      let b = q.eq("userId", args.userId);
+      if (args.fromDate !== undefined) b = b.gte("date", args.fromDate);
+      if (
+        args.cursor !== undefined &&
+        (args.toDate === undefined || args.cursor <= args.toDate)
+      ) {
+        b = b.lt("date", args.cursor);
+      } else if (args.toDate !== undefined) {
+        b = b.lte("date", args.toDate);
+      }
+      return b;
+    })
     .collect();
 
   const filtered = all
@@ -433,9 +455,16 @@ export async function listEventsByRangeHandler(
   args: ListEventsByRangeArgs,
 ): Promise<{ events: MemoryEvent[] }> {
   // 1. Check-in rows → CheckInEvent (and optionally a paired FlareEvent).
+  // W2-2: [fromDate, toDate] rides the index on all four collects below;
+  // the JS range filters stay as defense-in-depth.
   const checkinRows = await ctx.db
     .query("checkIns")
-    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .withIndex("by_user_date", (q) =>
+      q
+        .eq("userId", args.userId)
+        .gte("date", args.fromDate)
+        .lte("date", args.toDate),
+    )
     .collect();
 
   const inRangeCheckins = checkinRows.filter(
@@ -457,7 +486,12 @@ export async function listEventsByRangeHandler(
   //    project (the user did take them at the time).
   const intakeRows = await ctx.db
     .query("intakeEvents")
-    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .withIndex("by_user_date", (q) =>
+      q
+        .eq("userId", args.userId)
+        .gte("date", args.fromDate)
+        .lte("date", args.toDate),
+    )
     .collect();
 
   const inRangeIntakes = intakeRows.filter(
@@ -498,7 +532,12 @@ export async function listEventsByRangeHandler(
   }).format(new Date(args.nowMs ?? Date.now()));
   const visitRows = await ctx.db
     .query("doctorVisits")
-    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .withIndex("by_user_date", (q) =>
+      q
+        .eq("userId", args.userId)
+        .gte("date", args.fromDate)
+        .lte("date", args.toDate),
+    )
     .collect();
   const inRangeVisits = visitRows.filter(
     (row) =>
@@ -511,7 +550,12 @@ export async function listEventsByRangeHandler(
   // 4. Blood-work rows → BloodWorkEvent (F05 chunk 5.C).
   const bloodWorkRows = await ctx.db
     .query("bloodWork")
-    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .withIndex("by_user_date", (q) =>
+      q
+        .eq("userId", args.userId)
+        .gte("date", args.fromDate)
+        .lte("date", args.toDate),
+    )
     .collect();
   const inRangeBloodWork = bloodWorkRows.filter(
     (row) =>

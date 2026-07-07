@@ -37,13 +37,30 @@ function makeCtx() {
             eq: (field: 'userId' | 'date', value: string) => unknown
           }) => unknown,
         ) => {
-          // Capture the eq() calls to know what (userId[, date]) to match.
-          const eqs: Array<{ field: 'userId' | 'date'; value: string }> = []
-          const builder: {
-            eq: (f: 'userId' | 'date', v: string) => typeof builder
-          } = {
+          // W2-2: mock applies eq AND the range bounds (gte/lte/lt) so the
+          // index-predicate narrowing is actually exercised in tests.
+          const preds: Array<(row: Record<string, string>) => boolean> = []
+          type Builder = {
+            eq: (f: 'userId' | 'date', v: string) => Builder
+            gte: (f: 'date', v: string) => Builder
+            lte: (f: 'date', v: string) => Builder
+            lt: (f: 'date', v: string) => Builder
+          }
+          const builder: Builder = {
             eq(field, value) {
-              eqs.push({ field, value })
+              preds.push((row) => row[field] === value)
+              return builder
+            },
+            gte(field, value) {
+              preds.push((row) => row[field] >= value)
+              return builder
+            },
+            lte(field, value) {
+              preds.push((row) => row[field] <= value)
+              return builder
+            },
+            lt(field, value) {
+              preds.push((row) => row[field] < value)
               return builder
             },
           }
@@ -51,9 +68,8 @@ function makeCtx() {
           return {
             collect: async () =>
               rows.filter((row) =>
-                eqs.every(
-                  ({ field, value }) =>
-                    (row as unknown as Record<string, string>)[field] === value,
+                preds.every((p) =>
+                  p(row as unknown as Record<string, string>),
                 ),
               ),
           }

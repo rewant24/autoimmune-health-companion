@@ -654,3 +654,26 @@ Voice-first is the long-term direction (matches the rest of the app's give/get c
 
 **Supersedes / amends:** None. Refines scoping § Doctor-visit timeline + § Lab-result tracking — MVP slice with the locked Cycle 1 mechanics.
 
+
+## ADR-036 — clientRequestId check-then-insert is TOCTOU-safe on Convex; unique index is semantics, not a race fix
+
+**Status.** Accepted (2026-07-07, W2-2).
+
+**Context.** Four tables (`checkIns`, `intakeEvents`, `doctorVisits`, `bloodWork`) enforce idempotency with an application-level check-then-insert on `clientRequestId`: query for an existing row with the same `(userId, clientRequestId)`, insert only if absent. `feedback_clientRequestId_unique_index` flagged this as a classic TOCTOU (time-of-check-to-time-of-use) race — two concurrent retries could both pass the check and both insert. Housekeeping #14 and ADR-034 (reserved, ships inside W3 auth) track the DB-level unique-index answer.
+
+**Decision.** Record explicitly: **on Convex, the check-then-insert pattern is not racy.** Convex mutations run as serializable ACID transactions with optimistic concurrency control — two mutations that read and write the same index range cannot both commit as if the other didn't exist; one commits, the other retries against the new state and then sees the first one's row. The classic TOCTOU window between "check" and "insert" does not exist inside a single Convex mutation.
+
+The `(userId, clientRequestId)` work therefore splits:
+- **Now (W2-2):** `by_user_client_request` indexes on `doctorVisits` + `bloodWork` — pure lookup efficiency. The idempotency scan was walking the user's whole history via `by_user_date`; it's now a point lookup.
+- **W3 (ADR-034):** *uniqueness as schema semantics* — making the invariant declarative and guarding non-mutation writers (imports, migrations, seed scripts) that bypass the handler path. That's a correctness-documentation upgrade, not a race fix.
+
+**Consequences.**
+- Pros: no emergency migration needed; the W2-2 index ships risk-free ahead of auth; the mental model ("Convex mutations are transactions — don't port Postgres race intuitions") is written down where reviewers look.
+- Cons: until ADR-034 lands, uniqueness lives in handler code only — a direct `db.insert` from a future migration script could still create duplicates. Acceptable at current scale; W3 closes it.
+- Test discipline: existing per-table idempotency tests (same `clientRequestId` twice → `deduped: true`) already cover the handler path; concurrency tests live in `tests/integration/concurrency.test.ts` against real Convex.
+
+**Alternatives considered.**
+- **Ship the unique constraint now.** Rejected: Convex has no declarative unique constraints; the enforcement pattern (helper + all-writers audit) is the same work ADR-034 schedules inside W3, where the auth migration already touches every writer.
+- **Do nothing until W3.** Rejected: the by_user_date idempotency scan gets slower with every row a user writes; the index is a two-line schema change with immediate benefit.
+
+**Supersedes / amends.** Amends the framing of housekeeping #14 / `feedback_clientRequestId_unique_index` (race → semantics). Feeds ADR-034 (W3).

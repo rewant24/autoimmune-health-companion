@@ -68,11 +68,14 @@ export const OPENER_VARIANTS: Record<
       ? "Back again — anything else?"
       : `Back again, ${n} — anything else?`;
   },
+  // W2-2: copy genericized when upcomingEvent got wired to real
+  // doctorVisits data — the persona-era "Dr. Mehta" placeholder would
+  // have greeted every user with the wrong doctor's name.
   "doctor-visit-tomorrow": (name) => {
     const n = nameOrNull(name);
     return n === null
-      ? "Morning. Dr. Mehta tomorrow — how are you feeling going in?"
-      : `Morning, ${n}. Dr. Mehta tomorrow — how are you feeling going in?`;
+      ? "Morning. Your doctor tomorrow — how are you feeling going in?"
+      : `Morning, ${n}. Your doctor tomorrow — how are you feeling going in?`;
   },
   "blood-test-tomorrow": (name) => {
     const n = nameOrNull(name);

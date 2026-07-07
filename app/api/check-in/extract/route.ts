@@ -34,6 +34,7 @@ import {
   type ExtractedMetrics,
 } from "@/lib/checkin/extract-prompt";
 import { getExtractModelId } from "@/lib/checkin/model-config";
+import { detectProviderRateLimit } from "@/lib/checkin/provider-rate-limit";
 
 export const runtime = "nodejs";
 
@@ -166,6 +167,28 @@ export async function POST(req: Request): Promise<Response> {
     });
     metrics = result.object as ExtractedMetrics;
   } catch (err) {
+    // Provider 429 gets its own code + status, never the generic 502
+    // (per feedback_server_429_ux) — it's recoverable behavior, not a
+    // fault, and the client copy differs from the daily-cap 429.
+    const rateLimit = detectProviderRateLimit(err);
+    if (rateLimit !== null) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "extract.rate_limited",
+            message: "The model provider is rate limiting; retry shortly.",
+            retryAfterSeconds: rateLimit.retryAfterSeconds,
+          },
+        },
+        {
+          status: 429,
+          headers:
+            rateLimit.retryAfterSeconds !== null
+              ? { "Retry-After": String(rateLimit.retryAfterSeconds) }
+              : undefined,
+        },
+      );
+    }
     return NextResponse.json(
       {
         error: {

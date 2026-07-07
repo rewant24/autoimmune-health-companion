@@ -113,6 +113,9 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // Structural ctx — same approach as convex/doctorVisits.ts.
 type IndexBuilder = {
   eq: (field: string, value: unknown) => IndexBuilder;
+  // W2-2: range bounds ride the index (feedback_memory_aggregation_index_bounds).
+  gte: (field: string, value: unknown) => IndexBuilder;
+  lte: (field: string, value: unknown) => IndexBuilder;
 };
 
 type BloodWorkCtx = {
@@ -278,9 +281,13 @@ export async function createBloodWorkHandler(
   const markers = normalizeMarkers(args.markers);
 
   // Idempotency on clientRequestId — scoped to userId. Skip soft-deleted.
+  // W2-2: point lookup on the new by_user_client_request index instead of
+  // scanning the user's whole blood-work history.
   const existing = await ctx.db
     .query("bloodWork")
-    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .withIndex("by_user_client_request", (q) =>
+      q.eq("userId", args.userId).eq("clientRequestId", args.clientRequestId),
+    )
     .collect();
   const idem = existing.find(
     (r) =>
@@ -387,9 +394,15 @@ export async function listBloodWorkHandler(
   ctx: BloodWorkCtx,
   args: ListBloodWorkArgs,
 ): Promise<BloodWorkRow[]> {
+  // W2-2: optional bounds ride the index; JS filters stay as defense.
   const rows = await ctx.db
     .query("bloodWork")
-    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .withIndex("by_user_date", (q) => {
+      let b = q.eq("userId", args.userId);
+      if (args.fromDate !== undefined) b = b.gte("date", args.fromDate);
+      if (args.toDate !== undefined) b = b.lte("date", args.toDate);
+      return b;
+    })
     .collect();
   return rows
     .filter((r) => r.deletedAt === undefined)

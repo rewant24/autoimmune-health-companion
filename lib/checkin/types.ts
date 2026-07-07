@@ -50,7 +50,8 @@ export interface CheckinMetrics {
  * engines to pick a variant. Computed by the Convex `getContinuityState`
  * query (chunk 2.A) from the last 30 days of check-ins.
  *
- * `upcomingEvent` is a F08 stub — returns null in C2.
+ * `upcomingEvent` (W2-2): populated when the user's next doctor visit is
+ * exactly tomorrow; null otherwise. `blood-test` kind remains unwired.
  */
 export interface ContinuityState {
   yesterday: {
@@ -65,7 +66,7 @@ export interface ContinuityState {
   streakDays: number;
   /** 0 = yesterday, 1 = day before, ≥ 2 = multi-day skip. */
   lastCheckinDaysAgo: number;
-  /** F08 stub — always null in C2. */
+  /** Next doctor visit when it's exactly tomorrow; otherwise null. */
   upcomingEvent: {
     kind: "doctor-visit" | "blood-test";
     whenIso: string;

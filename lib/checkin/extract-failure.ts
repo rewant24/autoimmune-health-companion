@@ -16,18 +16,26 @@
  * when the answer loop must bail to taps, and give the Stage-2 form honest
  * copy about what happened.
  */
-import { ExtractDailyCapError } from "./extract-metrics";
+import {
+  ExtractDailyCapError,
+  ExtractRateLimitedError,
+} from "./extract-metrics";
 
-export type ExtractFailureKind = "daily-cap" | "transient";
+export type ExtractFailureKind = "daily-cap" | "rate-limited" | "transient";
 
 export function classifyExtractError(err: unknown): ExtractFailureKind {
-  return err instanceof ExtractDailyCapError ? "daily-cap" : "transient";
+  if (err instanceof ExtractDailyCapError) return "daily-cap";
+  if (err instanceof ExtractRateLimitedError) return "rate-limited";
+  return "transient";
 }
 
 /**
  * Answer-loop bail policy. A daily-cap failure is terminal — every retry
  * burns a request and fails identically — so bail on the first one.
- * Transient failures (network, 5xx) get one silent re-ask before bailing.
+ * A provider rate-limit also bails immediately: the throttle window is
+ * per-minute, and the loop's next call lands seconds later, inside the
+ * same window — retrying just burns turns. Transient failures (network,
+ * 5xx) get one silent re-ask before bailing.
  *
  * Bailing means BAIL_TO_TAPS: captured metrics are carried into Stage 2
  * and the unanswered ones stay *missing* — never auto-declined.
@@ -36,7 +44,7 @@ export function shouldBailAnswerLoop(
   kind: ExtractFailureKind,
   consecutiveFailures: number,
 ): boolean {
-  if (kind === "daily-cap") return true;
+  if (kind === "daily-cap" || kind === "rate-limited") return true;
   return consecutiveFailures >= 2;
 }
 
@@ -52,6 +60,13 @@ export function extractFailureNotice(kind: ExtractFailureKind): string {
     return (
       "I've hit today's limit for understanding voice answers — that's " +
       "back tomorrow. Nothing you said is lost; finish below with taps."
+    );
+  }
+  if (kind === "rate-limited") {
+    return (
+      "The service that understands voice answers is busy right now — " +
+      "it usually passes in a few minutes. Nothing you said is lost; " +
+      "finish below with taps."
     );
   }
   return (
