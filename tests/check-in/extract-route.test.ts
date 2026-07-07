@@ -269,4 +269,36 @@ describe("POST /api/check-in/extract — LLM call (US-1.D.1)", () => {
     const body = await res.json();
     expect(body.error.code).toBe("extract.failed");
   });
+
+  // W2-2: provider 429 → dedicated rate_limited code (feedback_server_429_ux).
+  it("returns 429 extract.rate_limited with Retry-After when the provider throttles", async () => {
+    const providerErr = Object.assign(new Error("Rate limit exceeded"), {
+      statusCode: 429,
+      responseHeaders: { "retry-after": "17" },
+    });
+    generateObjectMock.mockRejectedValue(providerErr);
+    const res = await POST(
+      jsonRequest({ transcript: "hi", userId: "u-1", date: "2026-04-25" }),
+    );
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("17");
+    const body = await res.json();
+    expect(body.error.code).toBe("extract.rate_limited");
+    expect(body.error.retryAfterSeconds).toBe(17);
+  });
+
+  it("returns 429 extract.rate_limited without Retry-After when the provider omits it", async () => {
+    const providerErr = Object.assign(new Error("Rate limit exceeded"), {
+      statusCode: 429,
+    });
+    generateObjectMock.mockRejectedValue(providerErr);
+    const res = await POST(
+      jsonRequest({ transcript: "hi", userId: "u-1", date: "2026-04-25" }),
+    );
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBeNull();
+    const body = await res.json();
+    expect(body.error.code).toBe("extract.rate_limited");
+    expect(body.error.retryAfterSeconds).toBeNull();
+  });
 });

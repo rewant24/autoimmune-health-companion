@@ -191,7 +191,12 @@ export default defineSchema({
     clientRequestId: v.string(),
     createdAt: v.number(),
     deletedAt: v.optional(v.number()),
-  }).index("by_user_date", ["userId", "date"]),
+  })
+    .index("by_user_date", ["userId", "date"])
+    // W2-2: idempotency lookups previously scanned by_user_date and
+    // filtered clientRequestId in JS. Full unique semantics (ADR-034)
+    // ship inside W3 auth; this index is the lookup-efficiency slice.
+    .index("by_user_client_request", ["userId", "clientRequestId"]),
 
   // Feature 05 Cycle 1 — Blood work results (structured markers).
   //
@@ -219,5 +224,8 @@ export default defineSchema({
     clientRequestId: v.string(),
     createdAt: v.number(),
     deletedAt: v.optional(v.number()),
-  }).index("by_user_date", ["userId", "date"]),
+  })
+    .index("by_user_date", ["userId", "date"])
+    // W2-2: same lookup-efficiency slice as doctorVisits above.
+    .index("by_user_client_request", ["userId", "clientRequestId"]),
 });

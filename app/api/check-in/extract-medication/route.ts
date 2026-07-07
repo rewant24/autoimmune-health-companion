@@ -34,6 +34,7 @@ import {
   type RegimenMedication,
 } from '@/lib/checkin/medication-extract'
 import { getExtractModelId } from '@/lib/checkin/model-config'
+import { detectProviderRateLimit } from '@/lib/checkin/provider-rate-limit'
 
 export const runtime = 'nodejs'
 
@@ -135,6 +136,26 @@ export async function POST(req: Request): Promise<Response> {
     })
     return NextResponse.json({ result: result.object })
   } catch (err) {
+    // Provider 429 → dedicated rate_limited code (feedback_server_429_ux).
+    const rateLimit = detectProviderRateLimit(err)
+    if (rateLimit !== null) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'medication-extract.rate_limited',
+            message: 'The model provider is rate limiting; retry shortly.',
+            retryAfterSeconds: rateLimit.retryAfterSeconds,
+          },
+        },
+        {
+          status: 429,
+          headers:
+            rateLimit.retryAfterSeconds !== null
+              ? { 'Retry-After': String(rateLimit.retryAfterSeconds) }
+              : undefined,
+        },
+      )
+    }
     return NextResponse.json(
       {
         error: {

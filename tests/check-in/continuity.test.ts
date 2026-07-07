@@ -8,44 +8,87 @@
  *
  * The handler reads the prior 30 days of `checkIns` for the given user
  * and computes a `ContinuityState` snapshot the opener/closer engines
- * consume. `upcomingEvent` is always `null` in C2 (F08 stub).
+ * consume. `upcomingEvent` (W2-2) surfaces the next doctor visit when
+ * it's exactly tomorrow.
  */
 
 import { describe, it, expect } from "vitest";
 import {
   getContinuityStateHandler,
   type ContinuityRow,
+  type UpcomingVisitRow,
 } from "@/convex/continuity";
 
 type Ctx = Parameters<typeof getContinuityStateHandler>[0];
 
-function makeCtx(rows: ContinuityRow[] = []): Ctx {
+// W2-2: the handler now also queries `doctorVisits` (upcoming-event
+// wiring), and pushes date bounds (gte/lte) into the index predicate —
+// the mock applies both so the narrowing is actually exercised.
+function makeCtx(
+  rows: ContinuityRow[] = [],
+  visitRows: UpcomingVisitRow[] = [],
+): Ctx {
+  function queryable<Row>(source: Row[]) {
+    return {
+      withIndex: (
+        _name: string,
+        cb: (q: unknown) => unknown,
+      ) => {
+        const preds: Array<(row: Record<string, string>) => boolean> = [];
+        type Builder = {
+          eq: (f: string, v: string) => Builder;
+          gte: (f: string, v: string) => Builder;
+          lte: (f: string, v: string) => Builder;
+          lt: (f: string, v: string) => Builder;
+        };
+        const builder: Builder = {
+          eq(field, value) {
+            preds.push((row) => row[field] === value);
+            return builder;
+          },
+          gte(field, value) {
+            preds.push((row) => row[field] >= value);
+            return builder;
+          },
+          lte(field, value) {
+            preds.push((row) => row[field] <= value);
+            return builder;
+          },
+          lt(field, value) {
+            preds.push((row) => row[field] < value);
+            return builder;
+          },
+        };
+        cb(builder);
+        return {
+          collect: async () =>
+            source.filter((row) =>
+              preds.every((p) =>
+                p(row as unknown as Record<string, string>),
+              ),
+            ),
+        };
+      },
+    };
+  }
+
   return {
     db: {
-      query: (_table: "checkIns") => ({
-        withIndex: (_name, cb) => {
-          const eqs: Array<{ field: "userId" | "date"; value: string }> = [];
-          const builder: { eq: (f: "userId" | "date", v: string) => typeof builder } = {
-            eq(field, value) {
-              eqs.push({ field, value });
-              return builder;
-            },
-          };
-          cb(builder);
-          return {
-            collect: async () =>
-              rows.filter((row) =>
-                eqs.every(
-                  ({ field, value }) =>
-                    (row as unknown as Record<string, string>)[field] === value,
-                ),
-              ),
-          };
-        },
-      }),
+      query: ((table: "checkIns" | "doctorVisits") =>
+        table === "doctorVisits"
+          ? queryable(visitRows)
+          : queryable(rows)) as Ctx["db"]["query"],
     },
-  };
+  } as Ctx;
 }
+
+const visitRow = (overrides: Partial<UpcomingVisitRow>): UpcomingVisitRow => ({
+  _id: `visit_${Math.random().toString(36).slice(2, 8)}`,
+  userId: "user_A",
+  date: "2026-04-26",
+  createdAt: Date.now(),
+  ...overrides,
+});
 
 const baseRow = (overrides: Partial<ContinuityRow>): ContinuityRow => ({
   _id: `id_${Math.random().toString(36).slice(2, 8)}`,
@@ -294,14 +337,80 @@ describe("getContinuityStateHandler — flare ongoing counting", () => {
   });
 });
 
-describe("getContinuityStateHandler — F08 stub + soft-delete", () => {
-  it("upcomingEvent always returns null in C2", async () => {
+describe("getContinuityStateHandler — upcomingEvent wiring (W2-2) + soft-delete", () => {
+  it("upcomingEvent is null with no doctor visits", async () => {
     const ctx = makeCtx([baseRow({ date: "2026-04-24" })]);
     const state = await getContinuityStateHandler(ctx, {
       userId: "user_A",
       todayIso: "2026-04-25",
     });
     expect(state.upcomingEvent).toBeNull();
+  });
+
+  it("populates upcomingEvent when the next visit is exactly tomorrow", async () => {
+    const ctx = makeCtx(
+      [baseRow({ date: "2026-04-24" })],
+      [visitRow({ date: "2026-04-26" })],
+    );
+    const state = await getContinuityStateHandler(ctx, {
+      userId: "user_A",
+      todayIso: "2026-04-25",
+    });
+    expect(state.upcomingEvent).toEqual({
+      kind: "doctor-visit",
+      whenIso: "2026-04-26",
+      hoursFromNow: 24,
+    });
+  });
+
+  it("leaves upcomingEvent null when the next visit is beyond tomorrow", async () => {
+    const ctx = makeCtx(
+      [baseRow({ date: "2026-04-24" })],
+      [visitRow({ date: "2026-04-30" })],
+    );
+    const state = await getContinuityStateHandler(ctx, {
+      userId: "user_A",
+      todayIso: "2026-04-25",
+    });
+    expect(state.upcomingEvent).toBeNull();
+  });
+
+  it("leaves upcomingEvent null for a visit today (the copy says tomorrow)", async () => {
+    const ctx = makeCtx(
+      [baseRow({ date: "2026-04-24" })],
+      [visitRow({ date: "2026-04-25" })],
+    );
+    const state = await getContinuityStateHandler(ctx, {
+      userId: "user_A",
+      todayIso: "2026-04-25",
+    });
+    expect(state.upcomingEvent).toBeNull();
+  });
+
+  it("ignores soft-deleted visits for upcomingEvent", async () => {
+    const ctx = makeCtx(
+      [baseRow({ date: "2026-04-24" })],
+      [visitRow({ date: "2026-04-26", deletedAt: 1234 })],
+    );
+    const state = await getContinuityStateHandler(ctx, {
+      userId: "user_A",
+      todayIso: "2026-04-25",
+    });
+    expect(state.upcomingEvent).toBeNull();
+  });
+
+  it("still surfaces a tomorrow visit for a first-ever user", async () => {
+    const ctx = makeCtx([], [visitRow({ date: "2026-04-26" })]);
+    const state = await getContinuityStateHandler(ctx, {
+      userId: "user_A",
+      todayIso: "2026-04-25",
+    });
+    expect(state.isFirstEverCheckin).toBe(true);
+    expect(state.upcomingEvent).toEqual({
+      kind: "doctor-visit",
+      whenIso: "2026-04-26",
+      hoursFromNow: 24,
+    });
   });
 
   it("ignores soft-deleted rows", async () => {

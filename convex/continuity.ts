@@ -9,8 +9,13 @@
  * Pure-function handler (`getContinuityStateHandler`) is exported so the
  * test suite can drive it with a mock ctx (no Convex runtime).
  *
- * `upcomingEvent` is always `null` in Cycle 2 — F08 (Journey) hasn't shipped
- * an events store yet. The opener/closer engines treat `null` as "no event".
+ * `upcomingEvent` (W2-2): populated from `doctorVisits` via
+ * `getNextUpcomingVisitHandler` — but ONLY when the next visit is exactly
+ * tomorrow, because the opener/closer copy for the branch says "tomorrow"
+ * (`doctor-visit-tomorrow` variant). A visit further out stays `null` so
+ * the engines fall through to the other branches. `kind: 'blood-test'`
+ * remains unwired — blood work is recorded after the fact, there's no
+ * future-dated source for it yet.
  *
  * Date math: dates are YYYY-MM-DD strings stored in the user's local
  * timezone (per pre-flight schema note). Day arithmetic uses
@@ -20,6 +25,7 @@
 
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import { getNextUpcomingVisitHandler } from "./doctorVisits";
 import type {
   ContinuityState,
   Mood,
@@ -41,17 +47,34 @@ export type ContinuityRow = {
 
 type IndexBuilder = {
   eq: (field: "userId" | "date", value: string) => IndexBuilder;
+  // W2-2: range bounds ride the index (feedback_memory_aggregation_index_bounds).
+  gte: (field: "date", value: string) => IndexBuilder;
+  lte: (field: "date", value: string) => IndexBuilder;
+};
+
+/** Slice of a doctorVisits row the upcoming-event wiring reads. */
+export type UpcomingVisitRow = {
+  _id: string;
+  userId?: string;
+  date: string;
+  createdAt: number;
+  deletedAt?: number;
+};
+
+type Queryable<Row> = {
+  withIndex: (
+    name: "by_user_date",
+    cb: (q: IndexBuilder) => IndexBuilder,
+  ) => {
+    collect: () => Promise<Row[]>;
+  };
 };
 
 type ContinuityCtx = {
   db: {
-    query: (table: "checkIns") => {
-      withIndex: (
-        name: "by_user_date",
-        cb: (q: IndexBuilder) => IndexBuilder,
-      ) => {
-        collect: () => Promise<ContinuityRow[]>;
-      };
+    query: {
+      (table: "checkIns"): Queryable<ContinuityRow>;
+      (table: "doctorVisits"): Queryable<UpcomingVisitRow>;
     };
   };
 };
@@ -82,27 +105,46 @@ export async function getContinuityStateHandler(
   ctx: ContinuityCtx,
   args: { userId: string; todayIso: string },
 ): Promise<ContinuityState> {
-  // Read the last 30 days for this user. The Convex index is
-  // `by_user_date`; we filter on userId via the eq() builder and
-  // post-filter by date range + soft-delete in code (consistent with
-  // existing `listCheckinsHandler` style).
+  // Read the last 30 days for this user. W2-2: the window rides the
+  // `by_user_date` index; soft-delete + the same range stay as JS
+  // defense-in-depth filters.
+  const fromDate = addDays(args.todayIso, 30);
   const all = await ctx.db
     .query("checkIns")
-    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .withIndex("by_user_date", (q) =>
+      q
+        .eq("userId", args.userId)
+        .gte("date", fromDate)
+        .lte("date", args.todayIso),
+    )
     .collect();
 
-  const fromDate = addDays(args.todayIso, 30);
   const rows = all
     .filter((r) => r.deletedAt === undefined)
     .filter((r) => r.date >= fromDate && r.date <= args.todayIso)
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)); // desc
+
+  // W2-2: upcoming-event wiring. Only a visit dated exactly tomorrow
+  // populates the state — the opener/closer branch copy says "tomorrow".
+  const nextVisit = await getNextUpcomingVisitHandler(
+    ctx as unknown as Parameters<typeof getNextUpcomingVisitHandler>[0],
+    { userId: args.userId, today: args.todayIso },
+  );
+  const upcomingEvent: ContinuityState["upcomingEvent"] =
+    nextVisit !== null && daysBetween(args.todayIso, nextVisit.date) === 1
+      ? {
+          kind: "doctor-visit",
+          whenIso: nextVisit.date,
+          hoursFromNow: 24,
+        }
+      : null;
 
   if (rows.length === 0) {
     return {
       yesterday: null,
       streakDays: 0,
       lastCheckinDaysAgo: Number.POSITIVE_INFINITY,
-      upcomingEvent: null,
+      upcomingEvent,
       flareOngoingDays: 0,
       isFirstEverCheckin: true,
     };
@@ -168,7 +210,7 @@ export async function getContinuityStateHandler(
     yesterday,
     streakDays,
     lastCheckinDaysAgo,
-    upcomingEvent: null, // F08 stub — wired in a later cycle.
+    upcomingEvent,
     flareOngoingDays,
     isFirstEverCheckin: false,
   };

@@ -111,6 +111,9 @@ export type GetVisitsByDateArgs = {
 // Structural ctx — same approach as convex/medications.ts.
 type IndexBuilder = {
   eq: (field: string, value: unknown) => IndexBuilder;
+  // W2-2: range bounds ride the index (feedback_memory_aggregation_index_bounds).
+  gte: (field: string, value: unknown) => IndexBuilder;
+  lte: (field: string, value: unknown) => IndexBuilder;
 };
 
 type VisitsCtx = {
@@ -199,9 +202,13 @@ export async function createVisitHandler(
   assertSourceCheckInInvariant(args.source, args.checkInId);
 
   // Idempotency on clientRequestId — scoped to userId. Skip soft-deleted.
+  // W2-2: point lookup on the new by_user_client_request index instead of
+  // scanning the user's whole visit history.
   const existingForUser = await ctx.db
     .query("doctorVisits")
-    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .withIndex("by_user_client_request", (q) =>
+      q.eq("userId", args.userId).eq("clientRequestId", args.clientRequestId),
+    )
     .collect();
   const idem = existingForUser.find(
     (r) =>
@@ -328,9 +335,15 @@ export async function listVisitsHandler(
   ctx: VisitsCtx,
   args: ListVisitsArgs,
 ): Promise<DoctorVisitRow[]> {
+  // W2-2: optional bounds ride the index; JS filters stay as defense.
   const rows = await ctx.db
     .query("doctorVisits")
-    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .withIndex("by_user_date", (q) => {
+      let b = q.eq("userId", args.userId);
+      if (args.fromDate !== undefined) b = b.gte("date", args.fromDate);
+      if (args.toDate !== undefined) b = b.lte("date", args.toDate);
+      return b;
+    })
     .collect();
   return rows
     .filter((r) => r.deletedAt === undefined)
@@ -350,9 +363,12 @@ export async function getNextUpcomingVisitHandler(
   args: GetNextUpcomingVisitArgs,
 ): Promise<DoctorVisitRow | null> {
   assertVisitDate(args.today);
+  // W2-2: the >= today bound rides the index — only future rows scan.
   const rows = await ctx.db
     .query("doctorVisits")
-    .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+    .withIndex("by_user_date", (q) =>
+      q.eq("userId", args.userId).gte("date", args.today),
+    )
     .collect();
   const upcoming = rows
     .filter((r) => r.deletedAt === undefined)

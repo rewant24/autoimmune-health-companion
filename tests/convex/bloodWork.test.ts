@@ -32,12 +32,25 @@ function makeCtx() {
             eq: (field: string, value: unknown) => unknown;
           }) => unknown,
         ) => {
-          const eqs: Array<{ field: string; value: unknown }> = [];
-          const builder: {
-            eq: (f: string, v: unknown) => typeof builder;
-          } = {
+          // W2-2: mock applies eq AND the range bounds (gte/lte) so the
+          // index-predicate narrowing is actually exercised in tests.
+          const preds: Array<(row: Record<string, string>) => boolean> = [];
+          type Builder = {
+            eq: (f: string, v: unknown) => Builder;
+            gte: (f: string, v: unknown) => Builder;
+            lte: (f: string, v: unknown) => Builder;
+          };
+          const builder: Builder = {
             eq(field, value) {
-              eqs.push({ field, value });
+              preds.push((row) => row[field] === value);
+              return builder;
+            },
+            gte(field, value) {
+              preds.push((row) => row[field] >= (value as string));
+              return builder;
+            },
+            lte(field, value) {
+              preds.push((row) => row[field] <= (value as string));
               return builder;
             },
           };
@@ -45,10 +58,8 @@ function makeCtx() {
           return {
             collect: async () =>
               rows.filter((row) =>
-                eqs.every(
-                  ({ field, value }) =>
-                    (row as unknown as Record<string, unknown>)[field] ===
-                    value,
+                preds.every((p) =>
+                  p(row as unknown as Record<string, string>),
                 ),
               ),
           };

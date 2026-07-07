@@ -17,11 +17,18 @@ import {
 import {
   ExtractDailyCapError,
   ExtractFailedError,
+  ExtractRateLimitedError,
 } from '@/lib/checkin/extract-metrics'
 
 describe('classifyExtractError', () => {
   it('classifies ExtractDailyCapError as daily-cap', () => {
     expect(classifyExtractError(new ExtractDailyCapError())).toBe('daily-cap')
+  })
+
+  it('classifies ExtractRateLimitedError as rate-limited (W2-2)', () => {
+    expect(classifyExtractError(new ExtractRateLimitedError(12))).toBe(
+      'rate-limited',
+    )
   })
 
   it('classifies ExtractFailedError as transient', () => {
@@ -40,6 +47,12 @@ describe('classifyExtractError', () => {
 describe('shouldBailAnswerLoop', () => {
   it('bails immediately on the first daily-cap failure', () => {
     expect(shouldBailAnswerLoop('daily-cap', 1)).toBe(true)
+  })
+
+  it('bails immediately on the first rate-limited failure (W2-2)', () => {
+    // The throttle window is per-minute; the loop's next call lands
+    // seconds later, inside the same window.
+    expect(shouldBailAnswerLoop('rate-limited', 1)).toBe(true)
   })
 
   it('re-asks once for a transient failure, bails on the second', () => {
@@ -64,9 +77,20 @@ describe('extractFailureNotice', () => {
     expect(copy).not.toMatch(/limit/i)
   })
 
-  it('the two classes get distinct copy', () => {
-    expect(extractFailureNotice('daily-cap')).not.toBe(
+  it('rate-limited copy says it passes soon and points to taps (W2-2)', () => {
+    const copy = extractFailureNotice('rate-limited')
+    expect(copy).toMatch(/busy/i)
+    expect(copy).toMatch(/taps/i)
+    expect(copy).toMatch(/nothing you said is lost/i)
+    expect(copy).not.toMatch(/tomorrow/i)
+  })
+
+  it('all three classes get distinct copy', () => {
+    const copies = [
+      extractFailureNotice('daily-cap'),
+      extractFailureNotice('rate-limited'),
       extractFailureNotice('transient'),
-    )
+    ]
+    expect(new Set(copies).size).toBe(3)
   })
 })

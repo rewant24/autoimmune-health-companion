@@ -14,6 +14,9 @@
  *
  * Errors:
  * - 429 with code `extract.daily_cap_reached` → `ExtractDailyCapError`.
+ * - 429 with code `extract.rate_limited` (provider throttling) →
+ *   `ExtractRateLimitedError`, carrying Retry-After when the provider
+ *   sent one (feedback_server_429_ux).
  * - All other failures → `ExtractFailedError` (page falls back to all-missing).
  */
 import type { CheckinMetrics, Metric } from "./types";
@@ -37,6 +40,25 @@ export class ExtractDailyCapError extends Error {
   constructor(message = "Daily extraction cap reached") {
     super(message);
     this.name = "ExtractDailyCapError";
+  }
+}
+
+/**
+ * Thrown when the model provider (not our cost guard) is rate limiting.
+ * Recoverable: retry after the window, or finish with taps. Distinct from
+ * the daily cap — that's terminal until tomorrow; this passes in minutes.
+ */
+export class ExtractRateLimitedError extends Error {
+  readonly code = "extract.rate_limited" as const;
+  readonly retryAfterSeconds: number | null;
+  constructor(retryAfterSeconds: number | null = null) {
+    super(
+      retryAfterSeconds !== null
+        ? `Extraction rate limited; retry after ${retryAfterSeconds}s`
+        : "Extraction rate limited",
+    );
+    this.name = "ExtractRateLimitedError";
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -99,7 +121,36 @@ export async function extractMetrics(
   }
 
   if (response.status === 429) {
-    // Route returns { error: { code: 'extract.daily_cap_reached' } } on cap.
+    // Two distinct 429s: our daily cap (terminal until tomorrow) vs the
+    // provider throttling (passes in minutes). Discriminate on the body
+    // code; header Retry-After wins over the body echo when both exist.
+    let code: string | undefined;
+    let retryAfterSeconds: number | null = null;
+    const headerRaw = response.headers.get("Retry-After");
+    // Note: Number("") is 0 — only parse when the header actually exists.
+    const headerRetry = headerRaw !== null ? Number(headerRaw) : Number.NaN;
+    if (Number.isFinite(headerRetry) && headerRetry >= 0) {
+      retryAfterSeconds = Math.ceil(headerRetry);
+    }
+    try {
+      const errBody = (await response.json()) as {
+        error?: { code?: string; retryAfterSeconds?: number | null };
+      };
+      code = errBody.error?.code;
+      if (
+        retryAfterSeconds === null &&
+        typeof errBody.error?.retryAfterSeconds === "number"
+      ) {
+        retryAfterSeconds = errBody.error.retryAfterSeconds;
+      }
+    } catch {
+      // Body unreadable — fall through to code === undefined below.
+    }
+    if (code === "extract.rate_limited") {
+      throw new ExtractRateLimitedError(retryAfterSeconds);
+    }
+    // Default to the cap for the known cap code AND unknown 429 bodies —
+    // preserves the pre-W2-2 behavior for old responses.
     throw new ExtractDailyCapError();
   }
 

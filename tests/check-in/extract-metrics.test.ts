@@ -17,6 +17,7 @@ import {
   extractMetrics,
   ExtractDailyCapError,
   ExtractFailedError,
+  ExtractRateLimitedError,
 } from "@/lib/checkin/extract-metrics";
 
 interface Fixture {
@@ -193,6 +194,70 @@ describe("extractMetrics — error paths", () => {
   it("ExtractDailyCapError carries the locked error code", async () => {
     const err = new ExtractDailyCapError();
     expect(err.code).toBe("extract.daily_cap_reached");
+  });
+
+  // W2-2: provider-429 discrimination (feedback_server_429_ux).
+  it("throws ExtractRateLimitedError on 429 with code extract.rate_limited", async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({
+          error: { code: "extract.rate_limited", retryAfterSeconds: 12 },
+        }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": "12",
+          },
+        },
+      )) as unknown as typeof fetch;
+    const err = await extractMetrics({
+      transcript: "anything",
+      userId: "user-1",
+      date: "2026-04-25",
+      fetchImpl,
+    }).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(ExtractRateLimitedError);
+    expect((err as ExtractRateLimitedError).code).toBe(
+      "extract.rate_limited",
+    );
+    expect((err as ExtractRateLimitedError).retryAfterSeconds).toBe(12);
+  });
+
+  it("falls back to the body's retryAfterSeconds when the header is absent", async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({
+          error: { code: "extract.rate_limited", retryAfterSeconds: 30 },
+        }),
+        { status: 429, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch;
+    const err = await extractMetrics({
+      transcript: "anything",
+      userId: "user-1",
+      date: "2026-04-25",
+      fetchImpl,
+    }).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect((err as ExtractRateLimitedError).retryAfterSeconds).toBe(30);
+  });
+
+  it("still throws ExtractDailyCapError on a 429 with an unreadable body", async () => {
+    const fetchImpl = (async () =>
+      new Response("not json", { status: 429 })) as unknown as typeof fetch;
+    await expect(
+      extractMetrics({
+        transcript: "anything",
+        userId: "user-1",
+        date: "2026-04-25",
+        fetchImpl,
+      }),
+    ).rejects.toBeInstanceOf(ExtractDailyCapError);
   });
 
   it("throws ExtractFailedError on 500", async () => {

@@ -153,6 +153,26 @@ export class MedicationExtractFailedError extends Error {
 }
 
 /**
+ * Provider rate-limit (route code `medication-extract.rate_limited`).
+ * Opportunistic path — callers currently swallow it — but the dedicated
+ * class keeps a 429 out of the generic-failure bucket in logs/telemetry
+ * (feedback_server_429_ux).
+ */
+export class MedicationExtractRateLimitedError extends Error {
+  readonly code = 'medication-extract.rate_limited' as const
+  readonly retryAfterSeconds: number | null
+  constructor(retryAfterSeconds: number | null = null) {
+    super(
+      retryAfterSeconds !== null
+        ? `Medication extraction rate limited; retry after ${retryAfterSeconds}s`
+        : 'Medication extraction rate limited',
+    )
+    this.name = 'MedicationExtractRateLimitedError'
+    this.retryAfterSeconds = retryAfterSeconds
+  }
+}
+
+/**
  * POST the transcript to the medication extraction route. Returns the
  * structured result. Failures collapse to `EMPTY_EXTRACTION` so the
  * check-in summary can render without a medication block — the metric
@@ -163,9 +183,9 @@ export class MedicationExtractFailedError extends Error {
  * already constrains the model, defence-in-depth keeps a phantom name
  * out of the UI.
  *
- * Note: this client never throws on cost-guard 429 because the route
- * doesn't increment the cap (see top-of-file invariant). 429s coming back
- * here would be unexpected; we surface them as `MedicationExtractFailedError`.
+ * Note: this client never sees a cost-guard 429 because the route doesn't
+ * increment the cap (see top-of-file invariant). A 429 here means the
+ * model provider is throttling → `MedicationExtractRateLimitedError`.
  */
 export async function extractMedications(
   args: ExtractMedicationsArgs,
@@ -195,6 +215,17 @@ export async function extractMedications(
   } catch (err) {
     throw new MedicationExtractFailedError(
       `Network error calling medication-extract route: ${(err as Error).message}`,
+    )
+  }
+
+  if (response.status === 429) {
+    // Note: Number("") is 0 — only parse when the header actually exists.
+    const headerRaw = response.headers.get('Retry-After')
+    const headerRetry = headerRaw !== null ? Number(headerRaw) : Number.NaN
+    throw new MedicationExtractRateLimitedError(
+      Number.isFinite(headerRetry) && headerRetry >= 0
+        ? Math.ceil(headerRetry)
+        : null,
     )
   }
 
