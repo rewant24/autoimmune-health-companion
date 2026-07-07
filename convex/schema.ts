@@ -228,4 +228,38 @@ export default defineSchema({
     .index("by_user_date", ["userId", "date"])
     // W2-2: same lookup-efficiency slice as doctorVisits above.
     .index("by_user_client_request", ["userId", "clientRequestId"]),
+
+  // Housekeeping #13 / ADR-037 — flattened blood-work markers.
+  //
+  // One row per marker, a relational projection of the parent
+  // `bloodWork.markers[]` embedded array. The embedded array stays the
+  // source of truth for all F05 read surfaces; this table exists for F08
+  // per-marker trend queries ("show CRP trend over 6 months") — an indexed
+  // range scan on `by_user_name_date` instead of scanning every bloodWork
+  // doc and filtering markers in JS (feedback_embedded_array_vs_relational_table).
+  //
+  // `name` is CANONICAL (convex/markerNames.ts) — "crp" / " C-reactive
+  // protein " land on "CRP" so trends don't fragment. The as-entered name
+  // lives on the parent's embedded array. `date` is denormalized from the
+  // parent so the trend index needs no join. `deletedAt` mirrors the
+  // parent's soft-delete (dual-write keeps them in lockstep). No read path
+  // depends on this table yet (deploy safety: prod can run old code after
+  // the schema ships; the backfill is a separate manual step).
+  bloodWorkMarkers: defineTable({
+    userId: v.string(),
+    bloodWorkId: v.id("bloodWork"),
+    date: v.string(), // YYYY-MM-DD, denormalized from parent
+    name: v.string(), // canonical form via canonicalMarkerName()
+    value: v.number(),
+    unit: v.string(),
+    refRangeLow: v.optional(v.number()),
+    refRangeHigh: v.optional(v.number()),
+    abnormal: v.optional(v.boolean()),
+    deletedAt: v.optional(v.number()),
+  })
+    // F08 trend query shape: (userId, name) point + date range.
+    .index("by_user_name_date", ["userId", "name", "date"])
+    // Parent linkage: soft-delete mirroring, edit replacement, backfill
+    // already-flattened check.
+    .index("by_blood_work", ["bloodWorkId"]),
 });

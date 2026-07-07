@@ -677,3 +677,30 @@ The `(userId, clientRequestId)` work therefore splits:
 - **Do nothing until W3.** Rejected: the by_user_date idempotency scan gets slower with every row a user writes; the index is a two-line schema change with immediate benefit.
 
 **Supersedes / amends.** Amends the framing of housekeeping #14 / `feedback_clientRequestId_unique_index` (race → semantics). Feeds ADR-034 (W3).
+
+## ADR-037 — Flatten `bloodWork.markers[]` into a relational `bloodWorkMarkers` table (dual-write + backfill, before F08)
+
+**Status.** Accepted (2026-07-08, housekeeping #13).
+
+**Context.** F05 shipped blood-work markers as an embedded array on `bloodWork` — the right call for MVP velocity (every read is "fetch the parent, render its markers"; see `feedback_embedded_array_vs_relational_table`). F08 Journey aggregation breaks that assumption: "show CRP trend over 6 months" against an embedded array means scanning every `bloodWork` doc and filtering markers in JS. The build-plan spine (§7.1.3 item 4) schedules the flatten *before* F08, while prod data is small — flattening with data already in prod is migration work, and the migration is cheapest now.
+
+**Decision.** Add a `bloodWorkMarkers` table — one row per marker, indexed `by_user_name_date` `(userId, name, date)` (the F08 trend-query shape: point on user+name, range on date) plus `by_blood_work` `(bloodWorkId)` for parent linkage. Four sub-decisions:
+
+1. **Dual-write, embedded stays read-source.** `createBloodWorkHandler` / `updateBloodWorkHandler` / `softDeleteBloodWorkHandler` write BOTH the embedded array (unchanged — still the source of truth for every F05 surface) AND the flattened rows. No read path touches the new table yet; F08 flips trend reads onto it. The marker rows sit AFTER the `clientRequestId` idempotency early-return, so retries never double-insert. On edit, stale projection rows are hard-deleted and rebuilt from the new array — they are a projection with no independent lifecycle, so soft-deleting replaced rows would only pollute future trend scans.
+2. **Canonical marker names.** Flattened `name` goes through `canonicalMarkerName()` (`convex/markerNames.ts`): trim + collapse whitespace + a case-insensitive alias map for the four MVP defaults (CRP/ESR/WBC/Hb and obvious spellings — "hgb", "sed rate", "c-reactive protein"). Unknown names pass through whitespace-normalized with casing preserved. One shared function used by both the dual-write and the backfill, so "crp" and " C-reactive protein " can't fragment a trend. Deliberately no ontology / fuzzy matching — extend the alias map when real duplicates appear. The embedded array keeps the user's as-entered spelling for display.
+3. **Soft-delete parity = mirrored `deletedAt`.** `softDeleteBloodWork` patches the parent's timestamp onto its marker rows (delete-by-`deletedAt` is the codebase-wide convention — checkIns, intakeEvents, doctorVisits, bloodWork all soft-delete; hard-deleting mirror rows would make the projection unrecoverable if undelete ever ships, and trend queries filter `deletedAt` anyway).
+4. **Backfill = idempotent, batched `internalMutation`.** `migrations:backfillBloodWorkMarkers` paginates over `bloodWork` (default 50 parents/invocation, `continueCursor` to resume), skips any parent that already has marker rows (covered by dual-write or a prior run — safe to run twice), mirrors `deletedAt` on soft-deleted parents, and reports counts. Operator-run via `npx convex run`; NOT wired into deploy.
+
+**Deploy safety.** Everything is additive: prod runs old code against the new schema until `ship-prod.sh`; merged main never requires the backfill to have run (no read depends on the table). The prod sequence is (a) `scripts/ship-prod.sh` carries schema + dual-write, (b) backfill run as a separate manual step after deploy.
+
+**Consequences.**
+- Pros: F08's trend query becomes an indexed range scan; the migration runs while prod rows number in the dozens, not thousands; dual-write keeps both shapes correct from day one so F08 needs zero data work.
+- Cons: every blood-work write now does N+1 inserts; two representations of the same data until F08 retires embedded reads (accepted — embedded stays canonical, flattened is derived, and every divergence path goes through the three handlers).
+- Risks: a writer that bypasses the handlers (future import script) could skip the dual-write. Mitigation: re-running the backfill heals missing rows; ADR-034's all-writers audit (W3) covers this class.
+
+**Alternatives considered.**
+- **Flatten during F08.** Rejected: couples a prod data migration to a feature build, against the memo's "flip the cycle BEFORE the first feature that needs per-element queries."
+- **Move markers out of the parent entirely (no embedded array).** Rejected: rewrites every F05 read surface + form round-trip for zero user-visible gain this cycle; dual-write is reversible and incremental.
+- **Canonicalize the embedded names too.** Rejected: silently rewriting what the user typed on a display surface; canonical form is a query concern, not a display concern.
+
+**Supersedes / amends.** None. Implements build-plan §7.1.3 spine item 4; prepares F08. Feeds ADR-034 (W3 writer audit).

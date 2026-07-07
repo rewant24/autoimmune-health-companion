@@ -22,6 +22,7 @@
 
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { canonicalMarkerName } from "./markerNames";
 
 // ---------------------------------------------------------------------------
 // Validators / types
@@ -74,6 +75,27 @@ export type BloodWorkRow = {
   deletedAt?: number;
 };
 
+/**
+ * ADR-037 — flattened marker row (`bloodWorkMarkers` table). A relational
+ * projection of the parent's embedded `markers[]`: `name` is canonical
+ * (convex/markerNames.ts), `date` is denormalized from the parent, and
+ * `deletedAt` mirrors the parent's soft-delete. F05 read surfaces never
+ * touch this table — it exists for F08 per-marker trend queries.
+ */
+export type BloodWorkMarkerRow = {
+  _id: string;
+  userId: string;
+  bloodWorkId: string;
+  date: string;
+  name: string;
+  value: number;
+  unit: string;
+  refRangeLow?: number;
+  refRangeHigh?: number;
+  abnormal?: boolean;
+  deletedAt?: number;
+};
+
 export type CreateBloodWorkArgs = {
   userId: string;
   date: string;
@@ -118,22 +140,33 @@ type IndexBuilder = {
   lte: (field: string, value: unknown) => IndexBuilder;
 };
 
+// ADR-037: handlers now touch two tables — the parent `bloodWork` docs and
+// the flattened `bloodWorkMarkers` projection rows.
+type BloodWorkTables = {
+  bloodWork: BloodWorkRow;
+  bloodWorkMarkers: BloodWorkMarkerRow;
+};
+
 type BloodWorkCtx = {
   db: {
-    query: (table: "bloodWork") => {
+    query: <T extends keyof BloodWorkTables>(table: T) => {
       withIndex: (
         name: string,
         cb: (q: IndexBuilder) => IndexBuilder,
       ) => {
-        collect: () => Promise<BloodWorkRow[]>;
+        collect: () => Promise<Array<BloodWorkTables[T]>>;
       };
     };
-    insert: (
-      table: "bloodWork",
-      doc: Omit<BloodWorkRow, "_id">,
+    insert: <T extends keyof BloodWorkTables>(
+      table: T,
+      doc: Omit<BloodWorkTables[T], "_id">,
     ) => Promise<string>;
     get: (id: string) => Promise<BloodWorkRow | null>;
-    patch: (id: string, fields: Partial<BloodWorkRow>) => Promise<void>;
+    patch: (
+      id: string,
+      fields: Partial<BloodWorkRow> | Partial<BloodWorkMarkerRow>,
+    ) => Promise<void>;
+    delete: (id: string) => Promise<void>;
   };
 };
 
@@ -267,6 +300,64 @@ function normalizeMarkers(
 }
 
 // ---------------------------------------------------------------------------
+// Flattened marker-row helpers (ADR-037 dual-write)
+// ---------------------------------------------------------------------------
+
+async function loadMarkerRows(
+  ctx: BloodWorkCtx,
+  bloodWorkId: string,
+): Promise<BloodWorkMarkerRow[]> {
+  return ctx.db
+    .query("bloodWorkMarkers")
+    .withIndex("by_blood_work", (q) => q.eq("bloodWorkId", bloodWorkId))
+    .collect();
+}
+
+/**
+ * Insert one `bloodWorkMarkers` row per (already-normalized) marker.
+ * `name` goes through `canonicalMarkerName` so trend queries don't
+ * fragment on spelling ("crp" vs "CRP" vs "C-reactive protein").
+ */
+async function insertMarkerRows(
+  ctx: BloodWorkCtx,
+  parent: { bloodWorkId: string; userId: string; date: string },
+  markers: BloodWorkMarker[],
+): Promise<void> {
+  for (const m of markers) {
+    const doc: Omit<BloodWorkMarkerRow, "_id"> = {
+      userId: parent.userId,
+      bloodWorkId: parent.bloodWorkId,
+      date: parent.date,
+      name: canonicalMarkerName(m.name),
+      value: m.value,
+      unit: m.unit,
+    };
+    if (m.refRangeLow !== undefined) doc.refRangeLow = m.refRangeLow;
+    if (m.refRangeHigh !== undefined) doc.refRangeHigh = m.refRangeHigh;
+    if (m.abnormal !== undefined) doc.abnormal = m.abnormal;
+    await ctx.db.insert("bloodWorkMarkers", doc);
+  }
+}
+
+/**
+ * Replace the flattened projection rows for a parent after its embedded
+ * `markers[]` changed. Stale projection rows are HARD-deleted (they have
+ * no independent lifecycle — the embedded array is the source of truth;
+ * see ADR-037), then re-inserted from the new array.
+ */
+async function replaceMarkerRows(
+  ctx: BloodWorkCtx,
+  parent: { bloodWorkId: string; userId: string; date: string },
+  markers: BloodWorkMarker[],
+): Promise<void> {
+  const stale = await loadMarkerRows(ctx, parent.bloodWorkId);
+  for (const row of stale) {
+    await ctx.db.delete(row._id);
+  }
+  await insertMarkerRows(ctx, parent, markers);
+}
+
+// ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
 
@@ -316,6 +407,16 @@ export async function createBloodWorkHandler(
   }
 
   const id = await ctx.db.insert("bloodWork", doc);
+
+  // ADR-037 dual-write: flattened projection rows for F08 trend queries.
+  // Sits AFTER the idempotency early-return above, so a retried
+  // clientRequestId never double-inserts marker rows.
+  await insertMarkerRows(
+    ctx,
+    { bloodWorkId: String(id), userId: args.userId, date: args.date },
+    markers,
+  );
+
   return { bloodWorkId: String(id), deduped: false };
 }
 
@@ -359,9 +460,34 @@ export async function updateBloodWorkHandler(
     patch.notes = notes.length === 0 ? undefined : notes;
   }
 
+  // Capture before patching — `row` may alias the stored doc.
+  const previousDate = row.date;
+
   if (Object.keys(patch).length > 0) {
     await ctx.db.patch(args.bloodWorkId, patch);
   }
+
+  // ADR-037 dual-write: keep the flattened projection in lockstep.
+  const effectiveDate = patch.date ?? previousDate;
+  if (patch.markers !== undefined) {
+    // Embedded array changed → rebuild the projection rows.
+    await replaceMarkerRows(
+      ctx,
+      {
+        bloodWorkId: String(args.bloodWorkId),
+        userId: row.userId,
+        date: effectiveDate,
+      },
+      patch.markers,
+    );
+  } else if (patch.date !== undefined && patch.date !== previousDate) {
+    // Date-only change → sync the denormalized date on existing rows.
+    const markerRows = await loadMarkerRows(ctx, String(args.bloodWorkId));
+    for (const markerRow of markerRows) {
+      await ctx.db.patch(markerRow._id, { date: patch.date });
+    }
+  }
+
   return { bloodWorkId: String(args.bloodWorkId) };
 }
 
@@ -386,7 +512,19 @@ export async function softDeleteBloodWorkHandler(
   if (row.deletedAt !== undefined) {
     return { bloodWorkId: String(args.bloodWorkId), alreadyDeleted: true };
   }
-  await ctx.db.patch(args.bloodWorkId, { deletedAt: now() });
+  const deletedAt = now();
+  await ctx.db.patch(args.bloodWorkId, { deletedAt });
+
+  // ADR-037 soft-delete parity: mirror the same timestamp onto the
+  // flattened rows so future trend queries (which filter deletedAt) never
+  // see markers whose parent entry was deleted.
+  const markerRows = await loadMarkerRows(ctx, String(args.bloodWorkId));
+  for (const markerRow of markerRows) {
+    if (markerRow.deletedAt === undefined) {
+      await ctx.db.patch(markerRow._id, { deletedAt });
+    }
+  }
+
   return { bloodWorkId: String(args.bloodWorkId), alreadyDeleted: false };
 }
 
