@@ -1120,3 +1120,13 @@ Session-28 mop-up decisions arrived unfilled in the handoff; proceeded on the de
 Gate: typecheck ✅ · lint 0 errors/46 warnings (baseline 47) ✅ · 1188/1188 ✅ · build ✅ · required `ci` ✅. e2e untouched by policy (specs don't reference confirm-card testids).
 
 **Rewant's pending list (updated):** ① review PR #38 (visual diff + live confirm-flow smoke) ② review/merge PR #37 ③ **Convex prod deploy** (`scripts/ship-prod.sh`) — now carries BOTH W2-2 (indexes/handlers) AND the #38 dosage-fix; dose-change voice confirms stay broken live until it runs ④ `AI_GATEWAY_API_KEY` secret ⑤ vendor keys + Q2/Q3/Q5. Housekeeping: #12 (date-bounded withIndex) closed in memory — verified shipped by PR #36; #15 spike answered by this build, closes when #38 merges.
+
+### Session 29 addendum — PR #38 merged + Convex prod deploy DONE (same session)
+
+Rewant reversed the leave-open call mid-session: **PR #38 squash-merged `4a18c7d` on his explicit go** (visual pass moved into the live smoke below), branch deleted. Pre-flight re-run green on merged main (1188/1188 · tsc · build).
+
+**Convex prod deploy EXECUTED (walked with Rewant, ship-prod.sh steps 1–7).** Key hygiene: old `saha-prod-cli` value is unviewable by design; Rewant generated **`saha-prod-cli-2`** and piped it clipboard→`~/.saha-prod.env` (0600) without it entering chat; tempfile trashed post-deploy. Note: Rewant keeps the key value in his personal notes app — logged on the housekeeping #1/#2 exposure trail. Old-key revocation NOT confirmed — open ask.
+
+Deploy results: `npx convex deploy` clean — **`by_user_client_request` indexes added on doctorVisits + bloodWork, no indexes deleted**, all functions pushed (includes W2-2 date-bounded handlers, `rate_limited` codes, `continuity.upcomingEvent`, AND the #38 `recordDosageChange` fix — dose-change confirms are now unbroken server-side). Verify: 37 functions in prod; `waitlist:count` = 12 (no drop). Vercel: prod env vars present; auto-promote Ready; `meetsaha.com/check-in` 200; **live bundle grep confirms `confirm-card-group` → prod serves the #38 front end**. No cycle tag (hardening wave, not a feature cycle).
+
+**Remaining from this session: Rewant's live manual smoke** (ship-day rule — HTTP 200 ≠ smoke): ① dose-change card Save → saved row → Undo → re-save (also proves the prod fix end-to-end) ② visit + blood-work cards incl. "Not now" → Undo ③ a 4-card check-in → grouped presentation + Save all ④ palette eyeball across check-in (sage-on-cream; orb intentionally still teal) ⑤ spot-check the row landed in prod data. Then the standing items: PR #37 review, `AI_GATEWAY_API_KEY` secret, vendor keys + Q2/Q3/Q5.
