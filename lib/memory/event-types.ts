@@ -10,10 +10,11 @@
  * `eventFromCheckin` is the only event-producer in F02 C1; F04 / F05 will
  * add `eventFromIntake` / `eventFromVisit` later — additive, no churn here.
  */
-// Relative import (not `@/convex/checkIns`) so Convex's tsconfig — which
-// has no `paths` alias — can typecheck this file when it's transitively
+// Relative imports (not `@/...`) so Convex's tsconfig — which has no
+// `paths` alias — can typecheck this file when it's transitively
 // imported by `convex/checkIns.ts`.
 import type { CheckinRow } from "../../convex/checkIns";
+import { formatISTTime } from "../format/date";
 
 export type TaskState = "pending" | "done" | "missed";
 export type Mood = "heavy" | "flat" | "okay" | "bright" | "great";
@@ -94,20 +95,6 @@ const MOOD_LABELS: Record<Mood, string> = {
 };
 
 /**
- * Format a UTC ms timestamp as HH:MM in IST (Asia/Kolkata).
- * IST is UTC+5:30 with no DST — a fixed offset is correct year-round and
- * avoids Intl.DateTimeFormat surprises across runtimes.
- */
-function formatTimeIST(createdAt: number): string {
-  const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
-  const istMs = createdAt + IST_OFFSET_MS;
-  const d = new Date(istMs);
-  const hh = String(d.getUTCHours()).padStart(2, "0");
-  const mm = String(d.getUTCMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
-}
-
-/**
  * Convert one check-in row into 1 or 2 MemoryEvents:
  *  - always: a 'check-in' event (taskState='done').
  *  - if `flare === 'yes'` or `'ongoing'`: also a 'flare' event at the same
@@ -119,7 +106,7 @@ function formatTimeIST(createdAt: number): string {
  * undefined) suppresses the flare event.
  */
 export function eventFromCheckin(row: CheckinRow): MemoryEvent[] {
-  const time = formatTimeIST(row.createdAt);
+  const time = formatISTTime(row.createdAt);
   const painText = row.pain !== undefined ? String(row.pain) : "—";
   const moodText = row.mood !== undefined ? MOOD_LABELS[row.mood] : "—";
   const events: MemoryEvent[] = [
@@ -236,7 +223,7 @@ export function eventFromVisit(
   row: DoctorVisitRow,
   todayIso: string,
 ): VisitEvent {
-  const time = formatTimeIST(row.createdAt);
+  const time = formatISTTime(row.createdAt);
   const taskState: "done" | "pending" =
     row.date <= todayIso ? "done" : "pending";
   return {
@@ -264,7 +251,7 @@ export function eventFromVisit(
  * abnormal segment is omitted when `abnormalCount` is 0.
  */
 export function eventFromBloodWork(row: BloodWorkRow): BloodWorkEvent {
-  const time = formatTimeIST(row.createdAt);
+  const time = formatISTTime(row.createdAt);
   const markerCount = row.markers.length;
   const abnormalCount = row.markers.reduce(
     (n, m) => n + (m.abnormal === true ? 1 : 0),
@@ -307,7 +294,7 @@ export function eventFromIntake(
   medication: IntakeMedication,
 ): IntakeEvent | null {
   if (row.medicationId !== medication._id) return null;
-  const time = formatTimeIST(row.takenAt);
+  const time = formatISTTime(row.takenAt);
   const memorySource: "home-tap" | "check-in" =
     row.source === "check-in" ? "check-in" : "home-tap";
   return {

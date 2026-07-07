@@ -23,7 +23,8 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 
-import { MemoryTab, todayIST } from '@/components/memory/MemoryTab'
+import { MemoryTab } from '@/components/memory/MemoryTab'
+import { todayIST } from '@/lib/format/date'
 import type { MemoryEvent } from '@/components/memory/_types'
 
 function seedEvents(date: string): MemoryEvent[] {

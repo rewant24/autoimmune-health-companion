@@ -16,6 +16,7 @@
  * emits check-ins as `done`. So in C1 every check-in lands in Completed.
  * That's the spec; the pending/missed branches light up in later cycles.
  */
+import { formatISTDate, todayIST } from '@/lib/format/date'
 import type { MemoryEvent } from './_types'
 import { EventGroup } from './EventGroup'
 
@@ -25,27 +26,10 @@ type Props = {
   onEventTap?: (eventId: string) => void
 }
 
-/** Today's date in IST (YYYY-MM-DD). en-CA happens to format as ISO. */
-function todayIST(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
-}
-
 function formatDayHeader(date: string): string {
   if (date === todayIST()) return 'Today'
-  const [y, m, d] = date.split('-').map(Number)
-  const dt = new Date(Date.UTC(y, m - 1, d))
-  // en-GB orders day before month: "Tue, 21 Apr" (matches scoping spec).
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata',
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  }).format(dt)
+  // "Tue, 21 Apr" — the year is context in a day header.
+  return formatISTDate(date, 'compact')
 }
 
 export function DayView({ date, events, onEventTap }: Props): React.JSX.Element {

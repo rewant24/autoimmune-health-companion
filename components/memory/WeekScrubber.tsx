@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react'
+import { todayIST } from '@/lib/format/date'
 import type { MemoryEvent } from './_types'
 
 export interface WeekScrubberProps {
@@ -70,17 +71,6 @@ function formatISO(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
-}
-
-/** Today as YYYY-MM-DD in IST. */
-function todayIST(): string {
-  // en-CA emits ISO-style YYYY-MM-DD directly.
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
 }
 
 /** Sunday of the week containing `iso`. */

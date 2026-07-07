@@ -19,6 +19,7 @@ import { useSearchParams } from 'next/navigation'
 import { useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { useUserId } from '@/lib/auth/use-user-id'
+import { todayIST } from '@/lib/format/date'
 import type { MemoryFilter } from '@/components/memory/_types'
 import { MemoryTab } from '@/components/memory/MemoryTab'
 
@@ -46,13 +47,7 @@ function parseFilter(raw: string | null): MemoryFilter {
  * Reviewer 2 catch.
  */
 function istDateOffset(daysOffset: number): string {
-  const istToday = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
-  const [y, m, d] = istToday.split('-').map(Number)
+  const [y, m, d] = todayIST().split('-').map(Number)
   // Construct in UTC so setUTCDate arithmetic is timezone-agnostic, then
   // read back UTC fields — the date string carries no time component so
   // there's no IST formatting to do here.
