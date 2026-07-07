@@ -15,17 +15,25 @@ import {
   listBloodWorkHandler,
   getBloodWorkByDateHandler,
   type BloodWorkRow,
+  type BloodWorkMarkerRow,
   type CreateBloodWorkArgs,
   type BloodWorkMarkerInput,
 } from "@/convex/bloodWork";
 
 function makeCtx() {
+  // ADR-037: two tables — parent bloodWork docs + flattened marker rows.
   const rows: BloodWorkRow[] = [];
+  const markerRows: BloodWorkMarkerRow[] = [];
   let nextId = 1;
+
+  const tableOf = (
+    table: "bloodWork" | "bloodWorkMarkers",
+  ): Array<BloodWorkRow | BloodWorkMarkerRow> =>
+    table === "bloodWork" ? rows : markerRows;
 
   const ctx = {
     db: {
-      query: (_table: "bloodWork") => ({
+      query: (table: "bloodWork" | "bloodWorkMarkers") => ({
         withIndex: (
           _name: string,
           cb: (q: {
@@ -57,7 +65,7 @@ function makeCtx() {
           cb(builder);
           return {
             collect: async () =>
-              rows.filter((row) =>
+              tableOf(table).filter((row) =>
                 preds.every((p) =>
                   p(row as unknown as Record<string, string>),
                 ),
@@ -66,24 +74,36 @@ function makeCtx() {
         },
       }),
       insert: async (
-        _table: "bloodWork",
-        doc: Omit<BloodWorkRow, "_id">,
+        table: "bloodWork" | "bloodWorkMarkers",
+        doc: Omit<BloodWorkRow, "_id"> | Omit<BloodWorkMarkerRow, "_id">,
       ): Promise<string> => {
-        const id = `bw_${nextId++}`;
-        rows.push({ ...doc, _id: id });
+        const id = table === "bloodWork" ? `bw_${nextId++}` : `bwm_${nextId++}`;
+        tableOf(table).push({ ...doc, _id: id } as BloodWorkRow &
+          BloodWorkMarkerRow);
         return id;
       },
       get: async (id: string): Promise<BloodWorkRow | null> =>
         rows.find((r) => r._id === id) ?? null,
-      patch: async (id: string, fields: Partial<BloodWorkRow>) => {
-        const target = rows.find((r) => r._id === id);
+      patch: async (
+        id: string,
+        fields: Partial<BloodWorkRow> | Partial<BloodWorkMarkerRow>,
+      ) => {
+        const target =
+          rows.find((r) => r._id === id) ??
+          markerRows.find((r) => r._id === id);
         if (target !== undefined) {
           Object.assign(target, fields);
         }
       },
+      delete: async (id: string) => {
+        for (const arr of [rows, markerRows]) {
+          const i = arr.findIndex((r) => r._id === id);
+          if (i >= 0) arr.splice(i, 1);
+        }
+      },
     },
   };
-  return { ctx, rows };
+  return { ctx, rows, markerRows };
 }
 
 const crpMarker: BloodWorkMarkerInput = {
@@ -646,5 +666,201 @@ describe("getBloodWorkByDateHandler", () => {
         date: "30-04-2026",
       }),
     ).rejects.toMatchObject({ data: { code: "bloodWork.bad_date_format" } });
+  });
+});
+
+describe("bloodWorkMarkers dual-write (ADR-037)", () => {
+  it("create inserts one flattened row per marker, linked to the parent", async () => {
+    const { ctx, rows, markerRows } = makeCtx();
+    const { bloodWorkId } = await createBloodWorkHandler(
+      ctx as unknown as Ctx,
+      baseCreate({
+        markers: [
+          { name: "CRP", value: 5.2, unit: "mg/L" },
+          { name: "ESR", value: 20, unit: "mm/hr" },
+        ],
+      }),
+    );
+    expect(rows).toHaveLength(1);
+    expect(markerRows).toHaveLength(2);
+    for (const row of markerRows) {
+      expect(row.bloodWorkId).toBe(bloodWorkId);
+      expect(row.userId).toBe("user_A");
+      expect(row.date).toBe("2026-04-30"); // denormalized from parent
+      expect(row.deletedAt).toBeUndefined();
+    }
+    expect(markerRows.map((r) => r.name)).toEqual(["CRP", "ESR"]);
+    expect(markerRows[0].value).toBe(5.2);
+    expect(markerRows[0].unit).toBe("mg/L");
+  });
+
+  it("canonicalizes flattened names; embedded array keeps as-entered (trimmed)", async () => {
+    const { ctx, rows, markerRows } = makeCtx();
+    await createBloodWorkHandler(
+      ctx as unknown as Ctx,
+      baseCreate({
+        markers: [
+          { name: "crp", value: 5, unit: "mg/L" },
+          { name: " C-reactive   protein ", value: 6, unit: "mg/L" },
+          { name: "Vitamin D", value: 30, unit: "ng/mL" },
+        ],
+      }),
+    );
+    // Flattened rows: both CRP spellings land on one canonical name.
+    expect(markerRows.map((r) => r.name)).toEqual(["CRP", "CRP", "Vitamin D"]);
+    // Embedded array: user's spelling preserved (trimmed) for F05 display.
+    expect(rows[0].markers.map((m) => m.name)).toEqual([
+      "crp",
+      "C-reactive   protein",
+      "Vitamin D",
+    ]);
+  });
+
+  it("mirrors ref ranges + derived abnormal onto flattened rows", async () => {
+    const { ctx, markerRows } = makeCtx();
+    await createBloodWorkHandler(
+      ctx as unknown as Ctx,
+      baseCreate({
+        markers: [
+          {
+            name: "CRP",
+            value: 12,
+            unit: "mg/L",
+            refRangeLow: 0,
+            refRangeHigh: 5,
+          },
+        ],
+      }),
+    );
+    expect(markerRows[0].refRangeLow).toBe(0);
+    expect(markerRows[0].refRangeHigh).toBe(5);
+    expect(markerRows[0].abnormal).toBe(true);
+  });
+
+  it("retry with same clientRequestId does not duplicate marker rows", async () => {
+    const { ctx, markerRows } = makeCtx();
+    await createBloodWorkHandler(ctx as unknown as Ctx, baseCreate());
+    const second = await createBloodWorkHandler(
+      ctx as unknown as Ctx,
+      baseCreate(),
+    );
+    expect(second.deduped).toBe(true);
+    expect(markerRows).toHaveLength(1);
+  });
+
+  it("soft-delete mirrors deletedAt onto marker rows (same timestamp)", async () => {
+    const { ctx, rows, markerRows } = makeCtx();
+    const { bloodWorkId } = await createBloodWorkHandler(
+      ctx as unknown as Ctx,
+      baseCreate({
+        markers: [
+          { name: "CRP", value: 5, unit: "mg/L" },
+          { name: "ESR", value: 20, unit: "mm/hr" },
+        ],
+      }),
+    );
+    await softDeleteBloodWorkHandler(ctx as unknown as Ctx, {
+      bloodWorkId,
+      userId: "user_A",
+    });
+    expect(rows[0].deletedAt).toBeGreaterThan(0);
+    for (const row of markerRows) {
+      expect(row.deletedAt).toBe(rows[0].deletedAt);
+    }
+  });
+
+  it("repeat soft-delete leaves marker timestamps untouched", async () => {
+    const { ctx, markerRows } = makeCtx();
+    const { bloodWorkId } = await createBloodWorkHandler(
+      ctx as unknown as Ctx,
+      baseCreate(),
+    );
+    await softDeleteBloodWorkHandler(ctx as unknown as Ctx, {
+      bloodWorkId,
+      userId: "user_A",
+    });
+    const first = markerRows[0].deletedAt;
+    await softDeleteBloodWorkHandler(ctx as unknown as Ctx, {
+      bloodWorkId,
+      userId: "user_A",
+    });
+    expect(markerRows[0].deletedAt).toBe(first);
+  });
+
+  it("update with new markers replaces the flattened rows", async () => {
+    const { ctx, markerRows } = makeCtx();
+    const { bloodWorkId } = await createBloodWorkHandler(
+      ctx as unknown as Ctx,
+      baseCreate({
+        markers: [
+          { name: "CRP", value: 5, unit: "mg/L" },
+          { name: "ESR", value: 20, unit: "mm/hr" },
+        ],
+      }),
+    );
+    expect(markerRows).toHaveLength(2);
+    await updateBloodWorkHandler(ctx as unknown as Ctx, {
+      bloodWorkId,
+      userId: "user_A",
+      markers: [{ name: "hgb", value: 11.2, unit: "g/dL" }],
+    });
+    expect(markerRows).toHaveLength(1);
+    expect(markerRows[0].name).toBe("Hb"); // canonicalized
+    expect(markerRows[0].value).toBe(11.2);
+    expect(markerRows[0].bloodWorkId).toBe(bloodWorkId);
+  });
+
+  it("update with date-only change syncs the denormalized date", async () => {
+    const nowMs = Date.UTC(2026, 4, 9, 6, 30, 0, 0); // today=2026-05-09
+    const { ctx, markerRows } = makeCtx();
+    const { bloodWorkId } = await createBloodWorkHandler(
+      ctx as unknown as Ctx,
+      baseCreate({ date: "2026-05-01" }),
+      () => nowMs,
+    );
+    await updateBloodWorkHandler(
+      ctx as unknown as Ctx,
+      { bloodWorkId, userId: "user_A", date: "2026-05-02" },
+      () => nowMs,
+    );
+    expect(markerRows[0].date).toBe("2026-05-02");
+  });
+
+  it("update with markers + date uses the new date on rebuilt rows", async () => {
+    const nowMs = Date.UTC(2026, 4, 9, 6, 30, 0, 0);
+    const { ctx, markerRows } = makeCtx();
+    const { bloodWorkId } = await createBloodWorkHandler(
+      ctx as unknown as Ctx,
+      baseCreate({ date: "2026-05-01" }),
+      () => nowMs,
+    );
+    await updateBloodWorkHandler(
+      ctx as unknown as Ctx,
+      {
+        bloodWorkId,
+        userId: "user_A",
+        date: "2026-05-03",
+        markers: [{ name: "WBC", value: 7.1, unit: "10^9/L" }],
+      },
+      () => nowMs,
+    );
+    expect(markerRows).toHaveLength(1);
+    expect(markerRows[0].date).toBe("2026-05-03");
+    expect(markerRows[0].name).toBe("WBC");
+  });
+
+  it("notes-only update leaves marker rows untouched", async () => {
+    const { ctx, markerRows } = makeCtx();
+    const { bloodWorkId } = await createBloodWorkHandler(
+      ctx as unknown as Ctx,
+      baseCreate(),
+    );
+    const before = markerRows.map((r) => ({ ...r }));
+    await updateBloodWorkHandler(ctx as unknown as Ctx, {
+      bloodWorkId,
+      userId: "user_A",
+      notes: "Fasting sample",
+    });
+    expect(markerRows).toEqual(before);
   });
 });

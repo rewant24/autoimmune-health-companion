@@ -16,7 +16,9 @@ import type * as doctorVisits from "../doctorVisits.js";
 import type * as dosageChanges from "../dosageChanges.js";
 import type * as extractAttempts from "../extractAttempts.js";
 import type * as intakeEvents from "../intakeEvents.js";
+import type * as markerNames from "../markerNames.js";
 import type * as medications from "../medications.js";
+import type * as migrations from "../migrations.js";
 import type * as waitlist from "../waitlist.js";
 
 import type {
@@ -34,7 +36,9 @@ declare const fullApi: ApiFromModules<{
   dosageChanges: typeof dosageChanges;
   extractAttempts: typeof extractAttempts;
   intakeEvents: typeof intakeEvents;
+  markerNames: typeof markerNames;
   medications: typeof medications;
+  migrations: typeof migrations;
   waitlist: typeof waitlist;
 }>;
 
