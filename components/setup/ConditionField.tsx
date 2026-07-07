@@ -98,7 +98,7 @@ export function ConditionField({
             htmlFor={otherInputId}
             className="type-label text-[var(--ink-muted)]"
           >
-            Tell us what you're living with
+            Tell us what you&rsquo;re living with
           </label>
           <input
             id={otherInputId}

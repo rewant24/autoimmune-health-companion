@@ -13,7 +13,8 @@
     "test:api:live": "vitest --config vitest.integration.config.ts tests/api --run",
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
-    "prepare": "git config core.hooksPath .githooks"
+    "prepare": "git config core.hooksPath .githooks",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.53",
@@ -37,6 +38,8 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.1",
     "dotenv": "^17.4.2",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "16.2.4",
     "jsdom": "^29.0.2",
     "msw": "^2.14.3",
     "tailwindcss": "^4",

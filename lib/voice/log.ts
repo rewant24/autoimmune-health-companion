@@ -43,7 +43,6 @@ const defaultSink: VoiceLogSink = {
         : category === 'guard'
           ? 'warn'
           : 'log'
-    // eslint-disable-next-line no-console
     console[method](`[voice]`, category, fields)
   },
 }

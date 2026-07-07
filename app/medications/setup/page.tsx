@@ -104,14 +104,12 @@ export default function MedicationsSetupPage(): React.JSX.Element {
     setChecked(true)
   }, [router])
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const meds = useQuery(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).medications?.listActiveMedications,
     userId === null ? 'skip' : { userId },
   ) as MedicationDoc[] | undefined
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const createMedication = useMutation(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).medications?.createMedication,

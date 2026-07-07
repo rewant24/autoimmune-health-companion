@@ -86,27 +86,22 @@ function attachErrorCapture(page: Page): { errors: string[] } {
   page.on('console', (msg) => {
     if (msg.type() === 'error') {
       const text = msg.text()
-      // eslint-disable-next-line no-console
       console.log(`[browser:error] ${text}`)
       errors.push(text)
     } else if (msg.type() === 'warning') {
-      // eslint-disable-next-line no-console
       console.log(`[browser:warning] ${msg.text()}`)
     } else if (msg.type() === 'log') {
       const text = msg.text()
       if (/qa[:|]/.test(text)) {
-        // eslint-disable-next-line no-console
         console.log(`[browser:log] ${text}`)
       }
     }
   })
   page.on('pageerror', (err) => {
-    // eslint-disable-next-line no-console
     console.log(`[browser:pageerror] ${err.message}`)
     errors.push(err.message)
   })
   page.on('requestfailed', (req) => {
-    // eslint-disable-next-line no-console
     console.log(
       `[browser:requestfailed] ${req.method()} ${req.url()} :: ${req.failure()?.errorText}`,
     )
@@ -194,7 +189,6 @@ test.describe('F05 C1 — visits + blood work', () => {
 
     await page.getByTestId('visit-form-submit').click()
     const seenConvex = await convexCallPromise
-    // eslint-disable-next-line no-console
     console.log(`[qa] convex POST observed for createVisit: ${!!seenConvex}`)
 
     // After create, app routes to `/visits/[id]`. Land on detail then

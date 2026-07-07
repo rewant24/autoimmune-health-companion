@@ -83,7 +83,6 @@ let activeUserId: string | null = null;
 
 beforeAll(() => {
   if (!CONVEX_URL) return;
-  // eslint-disable-next-line no-console
   console.log(`[concurrency] target Convex deployment: ${CONVEX_URL}`);
 });
 
@@ -92,7 +91,6 @@ afterEach(async () => {
     try {
       await client.mutation(api.devSeed.wipeUser, { userId: activeUserId });
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.warn(
         `[concurrency] wipeUser failed for ${activeUserId}; rows may persist on dev:`,
         err,
@@ -138,7 +136,6 @@ describe("F04 C1 logIntake — concurrent dedupe invariants", () => {
       ),
     );
     const elapsedMs = Date.now() - started;
-    // eslint-disable-next-line no-console
     console.log(`[concurrency:case1] 50 parallel calls in ${elapsedMs}ms`);
 
     const winners = results.filter((r) => r.deduped === false);
@@ -149,7 +146,6 @@ describe("F04 C1 logIntake — concurrent dedupe invariants", () => {
 
     // Telemetry: who won the race?
     const winnerIdx = results.findIndex((r) => r.deduped === false);
-    // eslint-disable-next-line no-console
     console.log(
       `[concurrency:case1] winner clientRequestId=${calls[winnerIdx].clientRequestId} id=${winners[0].id}`,
     );
@@ -194,7 +190,6 @@ describe("F04 C1 logIntake — concurrent dedupe invariants", () => {
       ),
     );
     const elapsedMs = Date.now() - started;
-    // eslint-disable-next-line no-console
     console.log(`[concurrency:case2] 50 parallel calls in ${elapsedMs}ms`);
 
     // None should dedupe — each (user, med, date) triple is unique.
@@ -247,7 +242,6 @@ describe("F04 C1 logIntake — concurrent dedupe invariants", () => {
       ),
     );
     const elapsedMs = Date.now() - started;
-    // eslint-disable-next-line no-console
     console.log(`[concurrency:case3] 50 mixed-source parallel calls in ${elapsedMs}ms`);
 
     const winners = results.filter((r) => r.deduped === false);
@@ -265,7 +259,6 @@ describe("F04 C1 logIntake — concurrent dedupe invariants", () => {
     expect(["home-tap", "check-in"]).toContain(rows[0].source);
     expect(rows[0].source).toBe(winners[0].source);
 
-    // eslint-disable-next-line no-console
     console.log(
       `[concurrency:case3] winning source=${rows[0].source} id=${rows[0]._id}`,
     );

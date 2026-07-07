@@ -53,7 +53,6 @@ export default function BloodWorkPage(): React.JSX.Element {
     setUserId(getOrCreateTestUserId())
   }, [])
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = useQuery(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (api as any).bloodWork?.listBloodWork,

@@ -44,7 +44,6 @@ export function readProfile(): Profile | null {
     parsed = JSON.parse(raw)
   } catch {
     if (!warnedCorrupt) {
-      // eslint-disable-next-line no-console
       console.warn(`[profile] corrupted JSON at ${PROFILE_KEY}; treating as missing`)
       warnedCorrupt = true
     }
@@ -56,7 +55,6 @@ export function readProfile(): Profile | null {
     (parsed as { v?: unknown }).v !== PROFILE_VERSION
   ) {
     if (!warnedCorrupt) {
-      // eslint-disable-next-line no-console
       console.warn(`[profile] payload at ${PROFILE_KEY} missing or wrong schema version`)
       warnedCorrupt = true
     }
@@ -107,7 +105,6 @@ export function writeProfile(patch: Partial<Profile>): Profile {
       window.localStorage.setItem(PROFILE_KEY, JSON.stringify(next))
     } catch (err) {
       if (!warnedQuota) {
-        // eslint-disable-next-line no-console
         console.warn(
           `[profile] failed to persist to ${PROFILE_KEY}; in-memory shape returned`,
           err,
