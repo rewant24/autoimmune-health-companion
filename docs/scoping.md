@@ -162,18 +162,20 @@ Every onboarding screen uses **"Next"** as the single call to action. No other b
 
 ## Setup flow (after onboarding)
 
-### Setup Part A — Mobile verification (2 steps)
+### ~~Setup Part A — Mobile verification (2 steps)~~
 
-**Step A.1: Enter mobile number**
-- Screen asks the user to enter their mobile number.
-- Single CTA: **Next**.
+> **Amendment 2026-07-07 (W2-5).** Phone OTP / SMS verification was **parked 2026-07-04** (assessment session: MSG91 DLT registration was the auth long pole; scheduling-P0 died with it). Auth ships in W3 as **email magic link** via Convex Auth + Resend — see `docs/features/auth-scoping.md` (decisions A–G, ADR-032/033/035 slots). The mobile-verification steps below are retained as the historical design; they are not built and not planned.
 
-**Step A.2: Enter verification code**
-- Screen prompts the user to enter the verification code sent to their mobile number.
-- Primary CTA: **Next** (to submit the code).
-- Sub-CTAs on the same screen:
-  - **Resend**
-  - **Get the code via a phone call**
+~~**Step A.1: Enter mobile number**~~
+- ~~Screen asks the user to enter their mobile number.~~
+- ~~Single CTA: **Next**.~~
+
+~~**Step A.2: Enter verification code**~~
+- ~~Screen prompts the user to enter the verification code sent to their mobile number.~~
+- ~~Primary CTA: **Next** (to submit the code).~~
+- ~~Sub-CTAs on the same screen:~~
+  - ~~**Resend**~~
+  - ~~**Get the code via a phone call**~~
 
 **Confirmation after A.2:**
 > *"Awesome, now you are welcome; you are part of the health companion app family."*
@@ -240,7 +242,7 @@ Always visible at the bottom of every in-app screen (not during onboarding/setup
 4. **Dosage intake reminder tap** — a lightweight home-surface control listing her active regimen (pulled from the Medications module). Tapping a medication logs intake for that dose **without opening a conversation** — so she can mark "took my morning methotrexate" or "took my monthly biologic" the moment it happens, not at end-of-day check-in. See § Medications module → *Daily adherence — dosage intake capture* for the mechanics + why this exists alongside the check-in capture path.
 5. **Overall health metrics** — Whoop-style aggregated self-view (rings, streak bars, stacked metric timelines — specific chart types TBD, see open question #14).
 6. **Persistent mic-icon CTA** — always-visible floating button for on-demand voice conversation anytime, anywhere in the app.
-7. **Bottom menu bar** (Home / Medications / Journey / Community / Settings).
+7. **Bottom menu bar** (Home / Medications / Journey / Community / Settings). *(Amendment 2026-07-07: Community is post-MVP (F09, W5) — the shipped nav omits it until then. See § Community module.)*
 
 **Home is where check-in happens.** The daily voice check-in is an **act launched from Home**, not a destination tab. The history of past check-ins (the Memory) lives in the **Journey** pillar alongside the Doctor Report and pattern views — see § Journey module.
 
@@ -619,7 +621,9 @@ The Medications module surfaces today's adherence status (what's been logged, wh
 
 ---
 
-## Community module (new — added to MVP)
+## Community module ~~(new — added to MVP)~~
+
+> **Amendment 2026-07-07 (W2-5, per the 2026-04-26 MVP scope lock).** Community (F09) is **post-MVP** — the locked MVP scope is F01 + F02 + Voice + Onboarding, and build-plan §7.1 schedules F09 in W5 as parallel-safe, de-facto post-launch. The "added to MVP" in this heading and the "Why it's in MVP" framing below are historical; the module design itself stays locked for when F09 builds. The Community slot in the bottom-nav lists in this document reads as the *eventual* five-pillar nav, not shipped MVP nav.
 
 Accessed from the bottom menu bar. A dedicated module where users with autoimmune conditions can interact with each other — peers dealing with the same (or related) diseases.
 
@@ -794,7 +798,7 @@ Onboarding (4–5) → Setup A.1 → Setup A.2 → Confirmation → Setup B.1 �
 
 ### Sign-up flow
 
-Full sign-up = Onboarding (4–5 screens) + Setup Part A (mobile verification, 2 screens) + Setup Part B (profile, 4 screens — name, DOB, email, medical condition) + welcome email + redirect to home. CTA throughout = **Next**; only exceptions are the two sub-CTAs on verification (Resend, phone-call fallback).
+Full sign-up = Onboarding (4–5 screens) + ~~Setup Part A (mobile verification, 2 screens)~~ + Setup Part B (profile, 4 screens — name, DOB, email, medical condition) + welcome email + redirect to home. ~~CTA throughout = **Next**; only exceptions are the two sub-CTAs on verification (Resend, phone-call fallback).~~ *(Amendment 2026-07-07: mobile verification parked 2026-07-04 → W3 ships email magic link instead; see § Setup flow amendment. CTA convention stays **Next** throughout.)*
 
 ### Core action flow (daily check-in)
 

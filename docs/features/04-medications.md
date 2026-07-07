@@ -2,7 +2,7 @@
 number: 04
 name: Medications
 slug: medications
-status: chunked
+status: shipped
 depends_on: [01-daily-checkin]
 blocks: [05-doctor-visits, 06-doctor-report]
 owner: rewant

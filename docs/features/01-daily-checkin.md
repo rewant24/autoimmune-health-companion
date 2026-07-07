@@ -2,7 +2,7 @@
 number: 01
 name: Daily Voice Check-in
 slug: daily-checkin
-status: cycle-1-shipped
+status: shipped
 depends_on: []
 blocks: [02-memory, 06-doctor-report, 07-prepare-for-visit]
 owner: rewant
