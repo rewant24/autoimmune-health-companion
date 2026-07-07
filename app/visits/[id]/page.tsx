@@ -24,7 +24,9 @@ import { useParams, useRouter } from 'next/navigation'
 import { api } from '@/convex/_generated/api'
 import type { Id } from '@/convex/_generated/dataModel'
 import { useUserId } from '@/lib/auth/use-user-id'
+import { formatISTDate } from '@/lib/format/date'
 import { BottomNav } from '@/components/nav/BottomNav'
+import { DeleteConfirmDialog } from '@/components/ui/DeleteConfirmDialog'
 import {
   VisitForm,
   type VisitFormValues,
@@ -47,18 +49,6 @@ type VisitDoc = {
   notes?: string
 }
 
-function formatDate(date: string): string {
-  const [y, m, d] = date.split('-').map(Number)
-  if (!y || !m || !d) return date
-  const dt = new Date(Date.UTC(y, m - 1, d))
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata',
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(dt)
-}
 
 export default function VisitDetailPage(): React.JSX.Element {
   const router = useRouter()
@@ -184,7 +174,7 @@ export default function VisitDetailPage(): React.JSX.Element {
                 fontVariationSettings: "'SOFT' 100, 'opsz' 24, 'wght' 420",
               }}
             >
-              {formatDate(visit.date)}
+              {formatISTDate(visit.date, 'long')}
             </p>
             <p className="mt-1 text-[15px]">{visit.doctorName}</p>
             {visit.specialty ? (
@@ -256,7 +246,9 @@ export default function VisitDetailPage(): React.JSX.Element {
       </div>
 
       {confirmingDelete ? (
-        <DeleteConfirm
+        <DeleteConfirmDialog
+          title={'Delete this doctor visit? You can’t undo this.'}
+          testId="visit-delete-confirm"
           onConfirm={async () => {
             await handleDelete()
             setConfirmingDelete(false)
@@ -267,72 +259,5 @@ export default function VisitDetailPage(): React.JSX.Element {
 
       <BottomNav />
     </main>
-  )
-}
-
-function DeleteConfirm({
-  onConfirm,
-  onCancel,
-}: {
-  onConfirm: () => void
-  onCancel: () => void
-}): React.JSX.Element {
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      data-testid="visit-delete-confirm"
-      className="fixed inset-0 z-50 flex items-center justify-center p-6"
-      style={{ background: 'rgba(20, 24, 26, 0.45)' }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel()
-      }}
-    >
-      <div
-        className="w-full max-w-md rounded-2xl border p-6"
-        style={{
-          background: 'var(--bg-elevated)',
-          borderColor: 'var(--rule)',
-          color: 'var(--ink)',
-        }}
-      >
-        <h2
-          style={{
-            fontFamily: 'var(--font-fraunces)',
-            fontSize: '1.25rem',
-            lineHeight: 1.2,
-            fontVariationSettings: "'SOFT' 100, 'opsz' 24, 'wght' 420",
-          }}
-        >
-          Delete this doctor visit? You can&rsquo;t undo this.
-        </h2>
-        <div className="mt-6 flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="min-h-12 rounded-full px-5 text-[15px] font-medium"
-            style={{
-              background: 'transparent',
-              color: 'var(--ink-muted)',
-              border: '1px solid var(--rule)',
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            data-testid="visit-delete-confirm-submit"
-            className="min-h-12 rounded-full px-6 text-[15px] font-medium"
-            style={{
-              background: 'var(--terracotta)',
-              color: 'var(--bg-elevated)',
-            }}
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-    </div>
   )
 }

@@ -25,25 +25,9 @@
  */
 
 import { useState } from 'react'
+import { formatISTDate } from '@/lib/format/date'
 
 const COMMON_UNITS = ['mg/L', 'mm/hr', 'g/dL', '×10⁹/L'] as const
-
-/** Format YYYY-MM-DD as "Tue, 21 Apr 2026" in IST. Mirrors the
- *  formatter in VisitCard + BloodWorkCard — TODO follow-up: lift to
- *  `lib/format/date.ts` and DRY the three call sites. Inlining for now
- *  keeps the F05 ship diff narrow (per "no unnecessary abstractions"). */
-function formatDate(date: string): string {
-  const [y, m, d] = date.split('-').map(Number)
-  if (!y || !m || !d) return date
-  const dt = new Date(Date.UTC(y, m - 1, d))
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata',
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(dt)
-}
 
 export interface VisitConfirmCardProps {
   kind: 'visit'
@@ -140,8 +124,8 @@ export function EventConfirmCard(
 
   const titleText =
     props.kind === 'visit'
-      ? `Doctor visit on ${formatDate(props.date)}?`
-      : `Blood work on ${formatDate(props.date)}?`
+      ? `Doctor visit on ${formatISTDate(props.date)}?`
+      : `Blood work on ${formatISTDate(props.date)}?`
 
   if (done === 'saved') {
     return (

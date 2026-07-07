@@ -13,6 +13,8 @@
  * Pure presentational. Tap routes the parent to /blood-work/[id].
  */
 
+import { formatISTDate } from '@/lib/format/date'
+
 export interface BloodWorkCardMarker {
   name: string
   value: number
@@ -29,19 +31,6 @@ export interface BloodWorkCardData {
 export interface BloodWorkCardProps {
   bloodWork: BloodWorkCardData
   onSelect?: (id: string) => void
-}
-
-function formatDate(date: string): string {
-  const [y, m, d] = date.split('-').map(Number)
-  if (!y || !m || !d) return date
-  const dt = new Date(Date.UTC(y, m - 1, d))
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata',
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(dt)
 }
 
 export function BloodWorkCard({
@@ -66,7 +55,7 @@ export function BloodWorkCard({
         onClick={() => onSelect?.(bloodWork.id)}
         className="block w-full text-left"
         style={{ background: 'transparent', color: 'inherit' }}
-        aria-label={`Open blood work from ${formatDate(bloodWork.date)}`}
+        aria-label={`Open blood work from ${formatISTDate(bloodWork.date)}`}
       >
         <p
           className="text-lg"
@@ -75,7 +64,7 @@ export function BloodWorkCard({
             fontVariationSettings: "'SOFT' 100, 'opsz' 24, 'wght' 420",
           }}
         >
-          {formatDate(bloodWork.date)}
+          {formatISTDate(bloodWork.date)}
         </p>
         <p className="mt-1 text-[15px]" style={{ color: 'var(--ink-muted)' }}>
           {count} {count === 1 ? 'marker' : 'markers'}

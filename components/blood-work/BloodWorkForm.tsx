@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useId, useState } from 'react'
+import { todayIST } from '@/lib/format/date'
 import {
   EMPTY_MARKER,
   MarkerInput,
@@ -56,15 +57,6 @@ export interface BloodWorkFormProps {
 
 const DEFAULT_MARKER_NAMES = ['CRP', 'ESR', 'WBC', 'Hb'] as const
 
-/** Today as YYYY-MM-DD in IST. */
-function todayIST(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
-}
 
 function defaultMarkerRows(): MarkerInputValue[] {
   return DEFAULT_MARKER_NAMES.map((name) => ({ ...EMPTY_MARKER, name }))

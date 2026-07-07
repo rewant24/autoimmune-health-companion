@@ -20,6 +20,7 @@
  */
 
 import { useEffect, useId, useState } from 'react'
+import { todayIST } from '@/lib/format/date'
 
 export const VISIT_TYPES = [
   'consultation',
@@ -52,16 +53,6 @@ export interface VisitFormProps {
   errorMessage?: string | null
   onSubmit: (values: VisitFormValues) => void | Promise<void>
   onCancel?: () => void
-}
-
-/** Today as YYYY-MM-DD in IST. Mirrors the helper used elsewhere in Saha. */
-function todayIST(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
 }
 
 function isComplete(v: VisitFormValues): boolean {

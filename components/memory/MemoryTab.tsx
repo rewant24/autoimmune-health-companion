@@ -24,6 +24,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import type { MemoryEvent, MemoryFilter } from './_types'
 import { applyFilter } from '@/lib/memory/filters'
+import { todayIST } from '@/lib/format/date'
 import { WeekScrubber } from './WeekScrubber'
 import { FilterTabs } from './FilterTabs'
 import { DayView } from './DayView'
@@ -37,16 +38,6 @@ export interface MemoryTabProps {
    * doesn't read as empty during the first round-trip.
    */
   isLoading?: boolean
-}
-
-/** Today as YYYY-MM-DD in IST (en-CA emits ISO-style YYYY-MM-DD). */
-export function todayIST(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
 }
 
 export function MemoryTab({

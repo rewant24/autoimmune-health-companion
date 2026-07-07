@@ -15,6 +15,7 @@
  * is owned by the page-level container so this component stays a quiet leaf.
  */
 
+import { formatISTDate } from '@/lib/format/date'
 import type { VisitType } from './VisitForm'
 
 const VISIT_TYPE_LABELS: Record<VisitType, string> = {
@@ -38,20 +39,6 @@ export interface VisitCardProps {
   onSelect?: (id: string) => void
 }
 
-/** Format YYYY-MM-DD as "Tue, 21 Apr 2026" in IST. */
-function formatDate(date: string): string {
-  const [y, m, d] = date.split('-').map(Number)
-  if (!y || !m || !d) return date
-  const dt = new Date(Date.UTC(y, m - 1, d))
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Kolkata',
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(dt)
-}
-
 export function VisitCard({
   visit,
   onSelect,
@@ -71,7 +58,7 @@ export function VisitCard({
         onClick={() => onSelect?.(visit.id)}
         className="block w-full text-left"
         style={{ background: 'transparent', color: 'inherit' }}
-        aria-label={`Open visit on ${formatDate(visit.date)}`}
+        aria-label={`Open visit on ${formatISTDate(visit.date)}`}
       >
         <p
           className="text-lg"
@@ -80,7 +67,7 @@ export function VisitCard({
             fontVariationSettings: "'SOFT' 100, 'opsz' 24, 'wght' 420",
           }}
         >
-          {formatDate(visit.date)}
+          {formatISTDate(visit.date)}
         </p>
         <p className="mt-1 text-[15px]" style={{ color: 'var(--ink)' }}>
           {visit.doctorName}
