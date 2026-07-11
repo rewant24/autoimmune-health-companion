@@ -254,7 +254,7 @@ describe.skipIf(!SUITE_ENABLED)("F04 C1 — medications integration", () => {
     expect(replay.id).toBe(first.id);
   });
 
-  it("5. recordDosageChange — requires checkInId for source 'check-in', then atomic patch+audit", async () => {
+  it("5. recordDosageChange — 'check-in' accepts absent checkInId (best-effort linkage), 'module' forbids it, atomic patch+audit", async () => {
     const userId = newQaUser();
     const date = todayYmd();
 
@@ -267,19 +267,10 @@ describe.skipIf(!SUITE_ENABLED)("F04 C1 — medications integration", () => {
       delivery: "oral",
     })) as { id: Id<"medications"> };
 
-    // (a) Missing checkInId on source 'check-in' must reject.
-    await expect(
-      client.mutation(api.dosageChanges.recordDosageChange, {
-        userId,
-        medicationId: med.id,
-        oldDose: "15mg",
-        newDose: "20mg",
-        source: "check-in",
-      } as never),
-    ).rejects.toThrow();
-
-    // (b) Valid path — needs a real checkInId. The shipped mutation is
-    //     `checkIns.createCheckin` (NOT `append` as the QA plan stated).
+    // A real check-in row: used to prove the 'module' rejection below fires
+    // on the forbidden-rule, not on Id validation, and for linkage in (c).
+    // The shipped mutation is `checkIns.createCheckin` (NOT `append` as the
+    // QA plan stated).
     const checkin = (await client.mutation(api.checkIns.createCheckin, {
       userId,
       date,
@@ -295,30 +286,59 @@ describe.skipIf(!SUITE_ENABLED)("F04 C1 — medications integration", () => {
       clientRequestId: `qa-${randomUUID()}`,
     })) as unknown as { id: Id<"checkIns"> };
 
+    // (a) Source 'module' with a checkInId must reject
+    //     (dosage.checkin_id_forbidden).
+    await expect(
+      client.mutation(api.dosageChanges.recordDosageChange, {
+        userId,
+        medicationId: med.id,
+        oldDose: "15mg",
+        newDose: "20mg",
+        source: "module",
+        checkInId: checkin.id,
+      }),
+    ).rejects.toThrow();
+
+    // (b) Source 'check-in' WITHOUT checkInId records — confirm cards are
+    //     non-blocking, the check-in row may not exist yet (PR #38 relaxed
+    //     the handler to the documented best-effort intent; the old
+    //     dosage.checkin_id_required rejection was the latent prod bug).
     await client.mutation(api.dosageChanges.recordDosageChange, {
       userId,
       medicationId: med.id,
       oldDose: "15mg",
       newDose: "20mg",
       source: "check-in",
+    });
+
+    // (c) Source 'check-in' WITH a real checkInId records with linkage.
+    await client.mutation(api.dosageChanges.recordDosageChange, {
+      userId,
+      medicationId: med.id,
+      oldDose: "20mg",
+      newDose: "25mg",
+      source: "check-in",
       checkInId: checkin.id,
     });
 
-    // (a) medication.dose patched
+    // medication.dose patched through both changes
     const all = (await client.query(api.medications.listAllMedications, {
       userId,
     })) as Array<{ _id: string; dose: string }>;
-    expect(all.find((r) => r._id === med.id)?.dose).toBe("20mg");
+    expect(all.find((r) => r._id === med.id)?.dose).toBe("25mg");
 
-    // (b) one dosageChanges row inserted
+    // two audit rows: unlinked best-effort first, linked second
     const changes = (await client.query(
       api.dosageChanges.listDosageChanges,
       { userId, medicationId: med.id },
     )) as Array<{ oldDose: string; newDose: string; checkInId?: string }>;
-    expect(changes.length).toBe(1);
-    expect(changes[0].oldDose).toBe("15mg");
-    expect(changes[0].newDose).toBe("20mg");
-    expect(changes[0].checkInId).toBe(checkin.id);
+    expect(changes.length).toBe(2);
+    const unlinked = changes.find((c) => c.newDose === "20mg");
+    expect(unlinked?.oldDose).toBe("15mg");
+    expect(unlinked?.checkInId).toBeUndefined();
+    const linked = changes.find((c) => c.newDose === "25mg");
+    expect(linked?.oldDose).toBe("20mg");
+    expect(linked?.checkInId).toBe(checkin.id);
   });
 
   it("6. getTodayAdherence shape — 2 meds, 1 logged", async () => {
