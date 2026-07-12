@@ -22,6 +22,14 @@
  * area). `z-50` keeps it above BottomNav's `z-40`. Pre-fix-B versions
  * used `sticky bottom-4 z-10`, which left the button trapped under the
  * BottomNav on every voice-c1 smoke.
+ *
+ * `stacked` (housekeeping #17): in `listening-answer` the
+ * SwitchToTapsButton mounts at the same fixed offset, painted on top —
+ * it fully covered this button and intercepted its pointer events, so
+ * a tap aimed at "Tap when done" bailed the whole voice loop to Stage 2
+ * (found by the A2 harness, PR #40). When `stacked` is true this button
+ * takes the slot one button-height + gap above (5rem + 2.75rem button +
+ * 0.75rem gap = 8.5rem) so both are visible and tappable.
  */
 
 import { useEffect, useState } from 'react'
@@ -31,6 +39,12 @@ const FADE_IN_MS = 200
 export interface StopButtonProps {
   /** Fires when the user taps the button. The page dispatches TAP_ORB. */
   onStop: () => void
+  /**
+   * Raise the button one slot above the SwitchToTapsButton's fixed
+   * position. Pass true whenever the bail button also mounts
+   * (`listening-answer`), false when this button is alone (`listening`).
+   */
+  stacked?: boolean
 }
 
 function prefersReducedMotion(): boolean {
@@ -40,7 +54,10 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-export function StopButton({ onStop }: StopButtonProps): React.JSX.Element {
+export function StopButton({
+  onStop,
+  stacked = false,
+}: StopButtonProps): React.JSX.Element {
   const [reducedMotion] = useState(() => prefersReducedMotion())
   const [visible, setVisible] = useState(reducedMotion)
 
@@ -54,7 +71,9 @@ export function StopButton({ onStop }: StopButtonProps): React.JSX.Element {
     <div
       className={
         'fixed inset-x-0 z-50 flex justify-center px-4 ' +
-        '[bottom:calc(5rem+env(safe-area-inset-bottom))] ' +
+        (stacked
+          ? '[bottom:calc(8.5rem+env(safe-area-inset-bottom))] '
+          : '[bottom:calc(5rem+env(safe-area-inset-bottom))] ') +
         'pointer-events-none'
       }
     >

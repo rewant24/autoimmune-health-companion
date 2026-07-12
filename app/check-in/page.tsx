@@ -1557,7 +1557,12 @@ export default function CheckinPage({
         // visible. The recorder's silence VAD also triggers stop()
         // automatically after trailing silence; this button is the
         // deterministic fallback for noisy environments.
-        <StopButton onStop={() => dispatch({ type: 'TAP_ORB' })} />
+        // `stacked` lifts it above SwitchToTapsButton when both mount
+        // (listening-answer) so neither covers the other (housekeeping #17).
+        <StopButton
+          stacked={showBailButton}
+          onStop={() => dispatch({ type: 'TAP_ORB' })}
+        />
       ) : null}
 
       {showBailButton ? (
