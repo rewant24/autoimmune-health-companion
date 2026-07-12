@@ -11,14 +11,41 @@
  *    only the keys with non-null values (Partial<CheckinMetrics>).
  * 2. 429 responses raise `ExtractDailyCapError` with the locked code.
  * 3. Network / 5xx / malformed-JSON failures raise `ExtractFailedError`.
+ * 4. (2026-07-12 telemetry completion) each failure path emits its
+ *    `voice_extract_*` voiceLog event before throwing.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   extractMetrics,
   ExtractDailyCapError,
   ExtractFailedError,
   ExtractRateLimitedError,
 } from "@/lib/checkin/extract-metrics";
+import {
+  setVoiceLogSink,
+  resetVoiceLogSink,
+  type VoiceLogCategory,
+  type VoiceLogFields,
+} from "@/lib/voice/log";
+
+// The failure paths under test now emit voiceLog events; capture them
+// per-test (and keep the default console sink out of the runner output).
+interface CapturedLog {
+  category: VoiceLogCategory;
+  fields: VoiceLogFields;
+}
+let voiceLogs: CapturedLog[] = [];
+beforeEach(() => {
+  voiceLogs = [];
+  setVoiceLogSink({
+    log(category, fields) {
+      voiceLogs.push({ category, fields });
+    },
+  });
+});
+afterEach(() => {
+  resetVoiceLogSink();
+});
 
 interface Fixture {
   label: string;
@@ -345,5 +372,145 @@ describe("extractMetrics — error paths", () => {
     expect(parsed.transcript).toBe("hello");
     expect(parsed.userId).toBe("user-42");
     expect(parsed.date).toBe("2026-04-25");
+  });
+});
+
+// 2026-07-12 telemetry completion — every failure path emits a
+// `voice_extract_*` event (codes only, never the transcript) before
+// throwing, so cap / throttle / reject rates are observable in PostHog
+// instead of only as their downstream Stage-2 UX.
+describe("extractMetrics — failure telemetry", () => {
+  const args = {
+    transcript: "anything",
+    userId: "user-1",
+    date: "2026-04-25",
+  };
+
+  it("emits extract_daily_cap (guard) on the cap 429", async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({ error: { code: "extract.daily_cap_reached" } }),
+        { status: 429, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch;
+    await expect(extractMetrics({ ...args, fetchImpl })).rejects.toBeInstanceOf(
+      ExtractDailyCapError,
+    );
+    expect(voiceLogs).toEqual([
+      {
+        category: "guard",
+        fields: { event: "extract_daily_cap", source: "extractMetrics" },
+      },
+    ]);
+  });
+
+  it("emits extract_rate_limited (error) with retryAfterSeconds on the provider 429", async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({ error: { code: "extract.rate_limited" } }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": "30",
+          },
+        },
+      )) as unknown as typeof fetch;
+    await expect(extractMetrics({ ...args, fetchImpl })).rejects.toBeInstanceOf(
+      ExtractRateLimitedError,
+    );
+    expect(voiceLogs).toEqual([
+      {
+        category: "error",
+        fields: {
+          event: "extract_rate_limited",
+          source: "extractMetrics",
+          retryAfterSeconds: 30,
+        },
+      },
+    ]);
+  });
+
+  it("omits retryAfterSeconds when the provider 429 carries none", async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({ error: { code: "extract.rate_limited" } }),
+        { status: 429, headers: { "Content-Type": "application/json" } },
+      )) as unknown as typeof fetch;
+    await extractMetrics({ ...args, fetchImpl }).catch(() => undefined);
+    expect(voiceLogs).toEqual([
+      {
+        category: "error",
+        fields: { event: "extract_rate_limited", source: "extractMetrics" },
+      },
+    ]);
+  });
+
+  it("emits extract_request_failed reason=http with the status on 5xx", async () => {
+    const fetchImpl = (async () =>
+      new Response("server error", { status: 500 })) as unknown as typeof fetch;
+    await extractMetrics({ ...args, fetchImpl }).catch(() => undefined);
+    expect(voiceLogs).toEqual([
+      {
+        category: "error",
+        fields: {
+          event: "extract_request_failed",
+          source: "extractMetrics",
+          reason: "http",
+          status: 500,
+        },
+      },
+    ]);
+  });
+
+  it("emits extract_request_failed reason=network when fetch throws", async () => {
+    const fetchImpl = (async () => {
+      throw new Error("network down");
+    }) as unknown as typeof fetch;
+    await extractMetrics({ ...args, fetchImpl }).catch(() => undefined);
+    expect(voiceLogs).toEqual([
+      {
+        category: "error",
+        fields: {
+          event: "extract_request_failed",
+          source: "extractMetrics",
+          reason: "network",
+        },
+      },
+    ]);
+  });
+
+  it("emits extract_request_failed reason=malformed on non-JSON and missing-metrics bodies", async () => {
+    const nonJson = (async () =>
+      new Response("not-json", { status: 200 })) as unknown as typeof fetch;
+    await extractMetrics({ ...args, fetchImpl: nonJson }).catch(
+      () => undefined,
+    );
+    const missingKey = mockFetchOk({ unrelated: true });
+    await extractMetrics({ ...args, fetchImpl: missingKey }).catch(
+      () => undefined,
+    );
+    expect(voiceLogs).toHaveLength(2);
+    for (const log of voiceLogs) {
+      expect(log.category).toBe("error");
+      expect(log.fields).toEqual({
+        event: "extract_request_failed",
+        source: "extractMetrics",
+        reason: "malformed",
+      });
+    }
+  });
+
+  it("emits nothing on success", async () => {
+    const fetchImpl = mockFetchOk({
+      metrics: {
+        pain: 4,
+        mood: null,
+        adherenceTaken: null,
+        flare: null,
+        energy: null,
+      },
+    });
+    await extractMetrics({ ...args, fetchImpl });
+    expect(voiceLogs).toEqual([]);
   });
 });

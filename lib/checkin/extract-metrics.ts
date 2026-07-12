@@ -19,6 +19,7 @@
  *   sent one (feedback_server_429_ux).
  * - All other failures → `ExtractFailedError` (page falls back to all-missing).
  */
+import { voiceLog } from "@/lib/voice/log";
 import type { CheckinMetrics, Metric } from "./types";
 
 export interface ExtractMetricsArgs {
@@ -115,6 +116,16 @@ export async function extractMetrics(
       }),
     });
   } catch (err) {
+    // Voice-telemetry completion (2026-07-12): the failure paths below
+    // used to be observable only as their downstream UX (Stage 2 bail /
+    // honest notice) — the assessment's "telemetry instruments only STT
+    // arming" gap. Each throw now emits a `voice_extract_*` event first.
+    // Codes + counts only; the transcript never rides along (no PII).
+    voiceLog("error", {
+      event: "extract_request_failed",
+      source: "extractMetrics",
+      reason: "network",
+    });
     throw new ExtractFailedError(
       `Network error calling extraction route: ${(err as Error).message}`,
     );
@@ -147,14 +158,31 @@ export async function extractMetrics(
       // Body unreadable — fall through to code === undefined below.
     }
     if (code === "extract.rate_limited") {
+      voiceLog("error", {
+        event: "extract_rate_limited",
+        source: "extractMetrics",
+        ...(retryAfterSeconds !== null ? { retryAfterSeconds } : {}),
+      });
       throw new ExtractRateLimitedError(retryAfterSeconds);
     }
     // Default to the cap for the known cap code AND unknown 429 bodies —
-    // preserves the pre-W2-2 behavior for old responses.
+    // preserves the pre-W2-2 behavior for old responses. Category is
+    // `guard`: the cap is our own ADR-020 cost guard doing its job, not
+    // an external failure.
+    voiceLog("guard", {
+      event: "extract_daily_cap",
+      source: "extractMetrics",
+    });
     throw new ExtractDailyCapError();
   }
 
   if (!response.ok) {
+    voiceLog("error", {
+      event: "extract_request_failed",
+      source: "extractMetrics",
+      reason: "http",
+      status: response.status,
+    });
     throw new ExtractFailedError(
       `Extraction route returned ${response.status}`,
     );
@@ -164,6 +192,11 @@ export async function extractMetrics(
   try {
     body = await response.json();
   } catch (err) {
+    voiceLog("error", {
+      event: "extract_request_failed",
+      source: "extractMetrics",
+      reason: "malformed",
+    });
     throw new ExtractFailedError(
       `Extraction route returned non-JSON: ${(err as Error).message}`,
     );
@@ -176,6 +209,11 @@ export async function extractMetrics(
     typeof (body as { metrics: unknown }).metrics !== "object" ||
     (body as { metrics: unknown }).metrics === null
   ) {
+    voiceLog("error", {
+      event: "extract_request_failed",
+      source: "extractMetrics",
+      reason: "malformed",
+    });
     throw new ExtractFailedError("Extraction route returned malformed body");
   }
 
