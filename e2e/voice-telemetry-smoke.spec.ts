@@ -551,6 +551,19 @@ test.describe('voice telemetry harness', () => {
       voiceEvents.map((e) => e.properties.distinct_id),
     )
     expect([...distinctIds]).toEqual([testUserId])
+
+    // Telemetry completion (2026-07-12): a session still on the confirm
+    // screen has NO outcome yet — completed fires only on `saved` entry,
+    // which this harness never reaches (saving would write dev Convex).
+    expect(eventsNamed(sink, 'voice_session_outcome')).toHaveLength(0)
+    // The only TTS failures on a healthy run are the autoplay-blocked
+    // cold-mount greetings (0–2 on the wire depending on whether the
+    // PostHog sink installed before the greeting effect fired — the
+    // greeting races SDK init by design; user-path failures never do).
+    for (const failure of eventsNamed(sink, 'voice_tts_speak_failed')) {
+      expect(failure.properties.context).toBe('greeting')
+      expect(failure.properties.kind).toBe('playback_failed')
+    }
   })
 
   test('extract 429 (rate_limited) mid-loop bails to taps; rearm still fired', async ({
@@ -611,5 +624,97 @@ test.describe('voice telemetry harness', () => {
     const rearm = eventsNamed(sink, 'voice_rearm_fired')[0]
     expect(rearm?.properties.metric).toBe('flare')
     expect(rearm?.properties.distinct_id).toBe(testUserId)
+
+    // Telemetry completion (2026-07-12): the failure itself is now on
+    // the wire — the client extract helper reports the provider 429
+    // with its Retry-After...
+    await waitForEventCount(sink, 'voice_extract_rate_limited', 1)
+    const rateLimited = eventsNamed(sink, 'voice_extract_rate_limited')[0]
+    expect(rateLimited?.properties.category).toBe('error')
+    expect(rateLimited?.properties.source).toBe('extractMetrics')
+    expect(rateLimited?.properties.retryAfterSeconds).toBe(30)
+
+    // ...and the session records HOW it ended: bailed to taps because
+    // of the rate limit, not by user choice.
+    await waitForEventCount(sink, 'voice_session_outcome', 1)
+    const outcome = eventsNamed(sink, 'voice_session_outcome')[0]
+    expect(outcome?.properties.category).toBe('lifecycle')
+    expect(outcome?.properties.outcome).toBe('bailed_to_taps')
+    expect(outcome?.properties.reason).toBe('rate-limited')
+    expect(outcome?.properties.conversational).toBe(true)
+    expect(outcome?.properties.distinct_id).toBe(testUserId)
+    expect(eventsNamed(sink, 'voice_session_outcome')).toHaveLength(1)
+  })
+
+  test('TTS failures land on the wire with context and never trap the loop', async ({
+    page,
+  }) => {
+    test.setTimeout(TEST_TIMEOUT_MS)
+    const testUserId = `qa_e2e_${randomUUID()}`
+    const sink: CapturedEvent[] = []
+
+    page.on('console', (msg) => {
+      if (msg.type() === 'error' || msg.type() === 'warning') {
+        console.log(`[browser:${msg.type()}] ${msg.text()}`)
+      }
+    })
+    page.on('pageerror', (err) => {
+      console.log(`[browser:pageerror] ${err.message}`)
+    })
+
+    await installFakeMicrophone(page)
+    await maskAutomationSignals(page)
+    await seedTestUser(page, testUserId)
+    await installPosthogIntercept(page, sink)
+    await installVoiceStubs(page, {
+      transcripts: [FREEFORM_TRANSCRIPT, FLARE_ANSWER_TRANSCRIPT],
+      extractPlan: [
+        {
+          kind: 'metrics',
+          metrics: { pain: 4, mood: 'okay', adherenceTaken: true, energy: 6 },
+        },
+        { kind: 'metrics', metrics: { flare: 'no' } },
+      ],
+    })
+    // Override the harness /api/speak stub with a hard 500 — Playwright
+    // matches routes in reverse registration order, so this wins without
+    // touching the shared stub. Every TTS turn now fails server-side.
+    await page.route('**/api/speak', async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'speak.failed' } }),
+      })
+    })
+
+    await page.goto('/check-in')
+
+    // The loop must survive: question-TTS failures are treated as played
+    // (the caption is on screen), so the flare follow-up still arms and
+    // the check-in reaches the confirm screen.
+    await enterListening(page)
+    await completeListeningTurn(page) // freeform → ask flare (TTS 500)
+    await completeListeningTurn(page) // flare answer → loop complete
+    await expect(page.getByTestId('confirm-summary')).toBeVisible({
+      timeout: 30_000,
+    })
+
+    // The failed question utterance is on the wire with its context.
+    // (The failed greeting may or may not be captured — it races the
+    // PostHog sink install — so only the post-gesture failure is
+    // asserted deterministically.)
+    await waitForEventCount(sink, 'voice_tts_speak_failed', 1)
+    const questionFailure = eventsNamed(sink, 'voice_tts_speak_failed').find(
+      (e) => e.properties.context === 'question',
+    )
+    expect(questionFailure).toBeDefined()
+    expect(questionFailure?.properties.category).toBe('error')
+    expect(questionFailure?.properties.source).toBe('CheckinPage')
+    expect(questionFailure?.properties.kind).toBe('tts_failed')
+    expect(questionFailure?.properties.status).toBe(500)
+    expect(questionFailure?.properties.distinct_id).toBe(testUserId)
+
+    // TTS failures alone must not end the session.
+    expect(eventsNamed(sink, 'voice_session_outcome')).toHaveLength(0)
   })
 })

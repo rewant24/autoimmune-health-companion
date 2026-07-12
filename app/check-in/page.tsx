@@ -60,11 +60,18 @@ import { api } from '@/convex/_generated/api'
 import { useUserId } from '@/lib/auth/use-user-id'
 import type { TtsProvider, VoiceProvider, Transcript } from '@/lib/voice/types'
 import { getTtsProvider, getVoiceProvider } from '@/lib/voice/provider'
+import { voiceLog } from '@/lib/voice/log'
 import {
   toOrbState,
   useCheckinMachine,
   type State,
 } from '@/lib/checkin/state-machine'
+import {
+  deriveSessionOutcome,
+  isIdleKind,
+  ttsFailureFields,
+  type TtsSpeakContext,
+} from '@/lib/checkin/voice-telemetry'
 import { Orb } from '@/components/check-in/Orb'
 import { ScreenShell } from '@/components/check-in/ScreenShell'
 import { ErrorSlot } from '@/components/check-in/ErrorSlot'
@@ -1006,8 +1013,12 @@ export default function CheckinPage({
       () => {
         if (!cancelled) dispatch({ type: 'OPENER_PLAYED' })
       },
-      () => {
-        if (!cancelled) dispatch({ type: 'OPENER_FAILED' })
+      (err: unknown) => {
+        if (cancelled) return
+        // Voice-telemetry completion (2026-07-12): speak rejections were
+        // swallowed on every TTS path — Saha went mute with no signal.
+        logTtsSpeakFailure('opener', err)
+        dispatch({ type: 'OPENER_FAILED' })
       },
     )
     return () => {
@@ -1029,8 +1040,13 @@ export default function CheckinPage({
       () => {
         if (!cancelled) dispatch({ type: 'GREETING_PLAYED' })
       },
-      () => {
-        if (!cancelled) dispatch({ type: 'GREETING_FAILED' })
+      (err: unknown) => {
+        if (cancelled) return
+        // NOTE: autoplay-blocked cold mounts land here too (kind
+        // `playback_failed`) — a useful base-rate signal for how often
+        // the greeting is never heard.
+        logTtsSpeakFailure('greeting', err)
+        dispatch({ type: 'GREETING_FAILED' })
       },
     )
     return () => {
@@ -1048,11 +1064,13 @@ export default function CheckinPage({
       () => {
         if (!cancelled) dispatch({ type: 'QUESTION_PLAYED' })
       },
-      () => {
+      (err: unknown) => {
         // TTS failure on a follow-up shouldn't trap the loop — treat as
         // played so the user can still answer. The question text is also
         // captioned in the UI so they have it visually either way.
-        if (!cancelled) dispatch({ type: 'QUESTION_PLAYED' })
+        if (cancelled) return
+        logTtsSpeakFailure('question', err)
+        dispatch({ type: 'QUESTION_PLAYED' })
       },
     )
     return () => {
@@ -1073,10 +1091,12 @@ export default function CheckinPage({
       () => {
         if (!cancelled) dispatch({ type: 'CLOSER_PLAYED' })
       },
-      () => {
+      (err: unknown) => {
         // Closer TTS failure shouldn't block save — fall through to
         // saving so the data persists either way.
-        if (!cancelled) dispatch({ type: 'CLOSER_PLAYED' })
+        if (cancelled) return
+        logTtsSpeakFailure('closer', err)
+        dispatch({ type: 'CLOSER_PLAYED' })
       },
     )
     return () => {
@@ -1136,9 +1156,11 @@ export default function CheckinPage({
       const isDecline =
         captured == null && detectDecline(answerText)
       if (isDecline) {
-        // Acknowledge the decline aloud (best-effort; ignore failures).
+        // Acknowledge the decline aloud (best-effort; log-only failures).
         const ack = selectDeclineAcknowledgement(metric)
-        void tts.speak(ack.text).catch(() => {})
+        void tts
+          .speak(ack.text)
+          .catch((err: unknown) => logTtsSpeakFailure('decline-ack', err))
         dispatch({
           type: 'ANSWER_EXTRACTED',
           metrics: {},
@@ -1169,6 +1191,15 @@ export default function CheckinPage({
       const prev = reaskCountRef.current[metric] ?? 0
       reaskCountRef.current[metric] = prev + 1
       if (prev >= 1) {
+        // Voice-telemetry completion (2026-07-12): the give-up is the
+        // loop's "answered twice, understood zero times" moment — count
+        // it. Metric NAME only; the answer text never rides along.
+        voiceLog('guard', {
+          event: 'answer_give_up',
+          source: 'CheckinPage',
+          metric,
+          attempts: prev + 1,
+        })
         // Q4 (2026-07-04): the give-up used to be silent — the user
         // answered twice, was understood zero times, and was told
         // nothing. Speak it: bundled into the next question's TTS when
@@ -1180,7 +1211,9 @@ export default function CheckinPage({
         if (remaining.length > 0) {
           pendingAckRef.current = giveUp.text
         } else {
-          void tts.speak(giveUp.text).catch(() => {})
+          void tts
+            .speak(giveUp.text)
+            .catch((err: unknown) => logTtsSpeakFailure('give-up-ack', err))
         }
         dispatch({
           type: 'ANSWER_EXTRACTED',
@@ -1191,6 +1224,12 @@ export default function CheckinPage({
       }
       // First re-ask: dispatch ASK_QUESTION with attempt-2 copy directly.
       // The reducer routes extracting-answer → speaking-question.
+      voiceLog('guard', {
+        event: 'answer_reask',
+        source: 'CheckinPage',
+        metric,
+        attempt: 2,
+      })
       const reask = selectFollowUpQuestion(metric, 2, continuityState)
       dispatch({
         type: 'ASK_QUESTION',
@@ -1268,6 +1307,91 @@ export default function CheckinPage({
     continuityState.isFirstEverCheckin,
     dispatch,
   ])
+
+  // 5. Voice-session outcome telemetry (2026-07-12 — closes the
+  //    assessment gap "telemetry instruments only STT arming"). One
+  //    `session_outcome` event per session. A session starts when the
+  //    machine first leaves the idle family (orb tap / greeting
+  //    auto-progress) and ends at the first terminal signal:
+  //      completed      — save landed (`saved` entry)
+  //      bailed_to_taps — voice loop → Stage 2 (reason: user | daily-cap
+  //                       | rate-limited | transient)
+  //      error          — terminal error screen (`save-failed` excluded:
+  //                       it's retryable in place)
+  //      abandoned      — RESET/discard back to idle (via: reset), or
+  //                       unmount mid-session (via: unmount — SPA route
+  //                       change only; hard reloads / tab closes don't
+  //                       run effect cleanups, an accepted gap).
+  //    Payloads carry outcome + codes only — never health data (no PII).
+  const sessionStartedRef = useRef(false)
+  const sessionOutcomeSentRef = useRef(false)
+  const sessionPrevKindRef = useRef<State['kind']>(state.kind)
+  useEffect(() => {
+    const prev = sessionPrevKindRef.current
+    const kind = state.kind
+    if (prev === kind) return
+    sessionPrevKindRef.current = kind
+    if (!sessionStartedRef.current) {
+      if (isIdleKind(prev) && !isIdleKind(kind)) {
+        sessionStartedRef.current = true
+        sessionOutcomeSentRef.current = false
+      }
+      return
+    }
+    if (isIdleKind(kind)) {
+      // Back to idle (RESET / discard-confirm). If nothing terminal was
+      // reported, the user walked away from an in-flight session.
+      if (!sessionOutcomeSentRef.current) {
+        voiceLog('lifecycle', {
+          event: 'session_outcome',
+          source: 'CheckinPage',
+          outcome: 'abandoned',
+          via: 'reset',
+          lastState: prev,
+          conversational: ttsAvailable,
+        })
+      }
+      sessionStartedRef.current = false
+      sessionOutcomeSentRef.current = false
+      return
+    }
+    if (sessionOutcomeSentRef.current) return
+    const signal = deriveSessionOutcome(prev, state, {
+      conversational: ttsAvailable,
+      extractFailureKind,
+    })
+    if (signal === null) return
+    sessionOutcomeSentRef.current = true
+    voiceLog('lifecycle', {
+      event: 'session_outcome',
+      source: 'CheckinPage',
+      outcome: signal.outcome,
+      ...(signal.reason !== undefined ? { reason: signal.reason } : {}),
+      ...(signal.errorKind !== undefined
+        ? { errorKind: signal.errorKind }
+        : {}),
+      conversational: ttsAvailable,
+    })
+  }, [state, ttsAvailable, extractFailureKind])
+
+  // 5b. Route-change abandon: the page unmounted mid-session with no
+  //     outcome reported (Next.js SPA navigation — nav bar, back
+  //     gesture). Cleanup-only effect; the refs carry the live values.
+  //     `ttsAvailable` is stable per mount, so this cleanup runs exactly
+  //     once, at unmount.
+  useEffect(() => {
+    return () => {
+      if (!sessionStartedRef.current || sessionOutcomeSentRef.current) return
+      voiceLog('lifecycle', {
+        event: 'session_outcome',
+        source: 'CheckinPage',
+        outcome: 'abandoned',
+        via: 'unmount',
+        lastState: sessionPrevKindRef.current,
+        conversational: ttsAvailable,
+      })
+    }
+  }, [ttsAvailable])
 
   // ---- Render ----
 
@@ -1645,4 +1769,16 @@ function transientCopyFor(state: State): string {
     default:
       return ''
   }
+}
+
+/**
+ * Voice-telemetry completion (2026-07-12): report a `tts.speak()`
+ * rejection with its utterance context. Deliberate cancels (`aborted`)
+ * are filtered by `ttsFailureFields` — effect cleanups and bail-to-taps
+ * cancel TTS as a matter of course and must not read as failures.
+ */
+function logTtsSpeakFailure(context: TtsSpeakContext, err: unknown): void {
+  const fields = ttsFailureFields(context, err)
+  if (fields === null) return
+  voiceLog('error', fields)
 }
