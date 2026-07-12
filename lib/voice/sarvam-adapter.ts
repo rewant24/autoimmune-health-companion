@@ -765,11 +765,26 @@ export class SarvamAdapter implements VoiceProvider {
 
   /**
    * External abort. Cancels the in-flight fetch, releases mic, drops
-   * pending listeners. Safe to call from any state.
+   * pending listeners. Safe to call from any state — a no-op when
+   * nothing is capturing (`started === false`).
+   *
+   * Pattern B+D (2026-07-12): after tearing the turn down we reset the
+   * turn-scoped state so a fresh `start()` can re-arm the SAME adapter
+   * instance. Callers that abort mid-loop (REDO_METRIC re-asking the
+   * current metric, BAIL_TO_TAPS from a listening turn, page unmount)
+   * previously left `started === true`, which made every subsequent
+   * `start()` throw `already started` and stranded the loop.
    */
   abort(reason?: string): void {
+    if (!this.started) return
     if (this.errored || this.finalTranscript) return
     this.stopped = true
+    voiceLog('lifecycle', {
+      event: 'abort_called',
+      source: 'SarvamAdapter',
+      durationMs: this.startedAt ? Date.now() - this.startedAt : 0,
+      mode: this.resolvedMode,
+    })
     const err: VoiceError = {
       kind: 'aborted',
       message: reason ?? 'SarvamAdapter: aborted by caller',
@@ -798,6 +813,9 @@ export class SarvamAdapter implements VoiceProvider {
     this.finalSettled?.reject(err)
     this.finalSettled = null
     this.emitError(err)
+    // Reset AFTER the reject + emit so an in-flight runStopFlow (if any)
+    // observes the rejection first; double-reset is idempotent.
+    this.resetTurnState()
   }
 
   private cleanupAfterFailure(): void {
