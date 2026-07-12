@@ -1031,9 +1031,176 @@ describe('reducer: voice C1 dialog states (Wave 2 transitions)', () => {
       { type: 'ANSWER_TRANSCRIBED', transcript: baseTranscript },
       { type: 'ANSWER_EXTRACTED', metrics: { pain: 4 }, declined: false },
       { type: 'BAIL_TO_TAPS' },
+      {
+        type: 'EXTRACT_RECOVERY',
+        failure: 'transient',
+        text: 'Want me to ask one at a time, or switch to taps?',
+      },
+      { type: 'REDO_METRIC', text: 'Sure — one more time. How is your pain?' },
       { type: 'CLOSER_PLAYED' },
     ]
-    expect(events).toHaveLength(8)
+    expect(events).toHaveLength(10)
+  })
+})
+
+describe('reducer: voice Pattern B recovery + Pattern D redo (2026-07-12)', () => {
+  const baseTranscript: Transcript = { text: 'hello', durationMs: 1000 }
+  /** Mid-loop payload: pain captured, mood declined, flare+energy left. */
+  const loopPayload = {
+    metrics: { pain: 4, mood: null } as const,
+    missing: ['flare', 'energy'] as Array<'flare' | 'energy'>,
+    declined: ['mood'] as Array<'mood'>,
+  }
+  const listeningAnswer: State = {
+    kind: 'listening-answer',
+    metric: 'flare',
+    partial: 'well, hmm',
+    ...loopPayload,
+    transcript: baseTranscript,
+  }
+  const extractingAnswer: State = {
+    kind: 'extracting-answer',
+    metric: 'flare',
+    answerTranscript: { text: 'hmm', durationMs: 900 },
+    ...loopPayload,
+    transcript: baseTranscript,
+  }
+  const recovering: State = {
+    kind: 'recovering',
+    failure: 'transient',
+    text: 'Want me to ask one at a time, or switch to taps?',
+    ...loopPayload,
+    transcript: baseTranscript,
+  }
+
+  // ---- EXTRACT_RECOVERY entries ----
+
+  it('extracting + EXTRACT_RECOVERY (with seed) → recovering', () => {
+    const next = reducer(
+      { kind: 'extracting', transcript: baseTranscript },
+      {
+        type: 'EXTRACT_RECOVERY',
+        failure: 'transient',
+        text: 'Want me to ask one at a time, or switch to taps?',
+        seed: { metrics: {}, missing: ['pain', 'mood', 'adherenceTaken', 'flare', 'energy'], declined: [] },
+      },
+    )
+    expect(next).toEqual({
+      kind: 'recovering',
+      failure: 'transient',
+      text: 'Want me to ask one at a time, or switch to taps?',
+      metrics: {},
+      missing: ['pain', 'mood', 'adherenceTaken', 'flare', 'energy'],
+      declined: [],
+      transcript: baseTranscript,
+    })
+  })
+
+  it('extracting + EXTRACT_RECOVERY without seed is ignored (seed required from this state)', () => {
+    const s: State = { kind: 'extracting', transcript: baseTranscript }
+    const next = reducer(s, {
+      type: 'EXTRACT_RECOVERY',
+      failure: 'transient',
+      text: 'Want me to ask one at a time, or switch to taps?',
+    })
+    expect(next).toBe(s)
+  })
+
+  it('extracting-answer + EXTRACT_RECOVERY → recovering (carries the loop payload)', () => {
+    const next = reducer(extractingAnswer, {
+      type: 'EXTRACT_RECOVERY',
+      failure: 'transient',
+      text: 'Want me to ask one at a time, or switch to taps?',
+    })
+    expect(next).toEqual(recovering)
+  })
+
+  // ---- recovering choice ----
+
+  it('recovering + ASK_QUESTION → speaking-question (carried payload, voice-continue)', () => {
+    const next = reducer(recovering, {
+      type: 'ASK_QUESTION',
+      metric: 'flare',
+      text: 'Anything flaring today?',
+    })
+    expect(next).toEqual({
+      kind: 'speaking-question',
+      metric: 'flare',
+      text: 'Anything flaring today?',
+      ...loopPayload,
+      transcript: baseTranscript,
+    })
+  })
+
+  it('recovering + BAIL_TO_TAPS → stage-2 (captured metrics survive)', () => {
+    expect(reducer(recovering, { type: 'BAIL_TO_TAPS' })).toEqual({
+      kind: 'stage-2',
+      transcript: baseTranscript,
+      ...loopPayload,
+    })
+  })
+
+  it('recovering + RESET → idle', () => {
+    expect(reducer(recovering, { type: 'RESET' })).toEqual({ kind: 'idle' })
+  })
+
+  it('recovering ignores stray events', () => {
+    expect(reducer(recovering, { type: 'PARTIAL', text: 'noise' })).toBe(
+      recovering,
+    )
+    expect(reducer(recovering, { type: 'QUESTION_PLAYED' })).toBe(recovering)
+  })
+
+  it('toOrbState(recovering) → processing', () => {
+    expect(toOrbState(recovering)).toBe('processing')
+  })
+
+  // ---- REDO_METRIC (Pattern D) ----
+
+  it('listening-answer + REDO_METRIC → speaking-question for the SAME metric', () => {
+    const next = reducer(listeningAnswer, {
+      type: 'REDO_METRIC',
+      text: 'Sure — one more time. Anything flaring today?',
+    })
+    expect(next).toEqual({
+      kind: 'speaking-question',
+      metric: 'flare',
+      text: 'Sure — one more time. Anything flaring today?',
+      ...loopPayload,
+      transcript: baseTranscript,
+    })
+  })
+
+  it('extracting-answer + REDO_METRIC → speaking-question for the SAME metric', () => {
+    const next = reducer(extractingAnswer, {
+      type: 'REDO_METRIC',
+      text: 'Sure — one more time. Anything flaring today?',
+    })
+    expect(next).toEqual({
+      kind: 'speaking-question',
+      metric: 'flare',
+      text: 'Sure — one more time. Anything flaring today?',
+      ...loopPayload,
+      transcript: baseTranscript,
+    })
+  })
+
+  it('REDO_METRIC keeps prior captures — nothing dropped from metrics/declined', () => {
+    const next = reducer(listeningAnswer, {
+      type: 'REDO_METRIC',
+      text: 'Sure — one more time. Anything flaring today?',
+    })
+    if (next.kind !== 'speaking-question') throw new Error('wrong state')
+    expect(next.metrics).toEqual({ pain: 4, mood: null })
+    expect(next.declined).toEqual(['mood'])
+    expect(next.missing).toEqual(['flare', 'energy'])
+  })
+
+  it('REDO_METRIC from a non-loop state is ignored', () => {
+    const idle: State = { kind: 'idle' }
+    expect(
+      reducer(idle, { type: 'REDO_METRIC', text: 'Sure — one more time.' }),
+    ).toBe(idle)
   })
 })
 
@@ -1042,6 +1209,8 @@ describe('reducer: voice C1 dialog states (Wave 2 transitions)', () => {
 interface FakeProvider extends VoiceProvider {
   start: VoiceProvider['start'] & { mock: { calls: unknown[][] } }
   stop: VoiceProvider['stop'] & { mock: { calls: unknown[][] } }
+  /** Pattern B+D (2026-07-12): mic-abort seam. */
+  abort: ((reason?: string) => void) & { mock: { calls: unknown[][] } }
   /** Test seam: fire the captured silence listener (Fix F.1). */
   fireSilence: () => void
   /** Test seam: flip the isStarted() return value (Fix F.3). */
@@ -1064,9 +1233,11 @@ function makeFakeProvider(): FakeProvider {
   // timing) keep passing — the guard only swallows taps when the adapter
   // explicitly reports !started.
   let startedFlag = true
+  const abort = vi.fn<(reason?: string) => void>()
   return {
     start: start as FakeProvider['start'],
     stop: stop as FakeProvider['stop'],
+    abort: abort as FakeProvider['abort'],
     onPartial: vi.fn(),
     onError: vi.fn(),
     onSilence: vi.fn((cb: () => void) => {
@@ -1390,5 +1561,217 @@ describe('useCheckinMachine — Fix F.3 tap-during-rearm race (listening-answer)
     if (result.current.state.kind === 'extracting-answer') {
       expect(result.current.state.answerTranscript.text).toBe('pain is 5')
     }
+  })
+})
+
+describe('useCheckinMachine — Pattern B+D mic-abort (2026-07-12)', () => {
+  /**
+   * The mic-abort fix: BAIL_TO_TAPS / REDO_METRIC from a live listening
+   * turn, and route-change unmount, must hard-cancel the provider via
+   * `abort()` — the old path only cancelled TTS, leaving the mic hot
+   * behind the Stage 2 tap form (or recording into the void after
+   * navigation). Dispatch ordering matters: the reducer leaves the
+   * listening state BEFORE abort's error emission can dispatch
+   * VOICE_ERROR, so the post-transition state ignores it.
+   */
+  function driveToListeningAnswer(
+    result: { current: ReturnType<typeof useCheckinMachine> },
+  ): void {
+    act(() => {
+      result.current.dispatch({ type: 'TAP_ORB' })
+    })
+    act(() => {
+      result.current.dispatch({ type: 'PERMISSION_GRANTED' })
+    })
+    act(() => {
+      result.current.dispatch({
+        type: 'PROVIDER_STOPPED',
+        transcript: { text: 'freeform turn', durationMs: 2000 } as Transcript,
+      })
+    })
+    act(() => {
+      result.current.dispatch({ type: 'EXTRACTION_START' })
+    })
+    act(() => {
+      result.current.dispatch({
+        type: 'ASK_QUESTION',
+        metric: 'pain',
+        text: 'How is your pain today?',
+        seed: { metrics: {}, missing: ['pain', 'flare'], declined: [] },
+      })
+    })
+    act(() => {
+      result.current.dispatch({ type: 'QUESTION_PLAYED' })
+    })
+  }
+
+  it('BAIL_TO_TAPS from listening-answer aborts the armed provider and lands in stage-2', async () => {
+    const provider = makeFakeProvider()
+    const { result } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined)),
+    )
+    driveToListeningAnswer(result)
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('listening-answer')
+    })
+
+    act(() => {
+      result.current.dispatch({ type: 'BAIL_TO_TAPS' })
+    })
+
+    expect(result.current.state.kind).toBe('stage-2')
+    expect(provider.abort).toHaveBeenCalledTimes(1)
+    // No stop() fired for the discarded turn — abort is not stop.
+    expect(provider.stop).not.toHaveBeenCalled()
+  })
+
+  it('REDO_METRIC from listening-answer aborts the capture and re-enters speaking-question', async () => {
+    const provider = makeFakeProvider()
+    const { result } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined)),
+    )
+    driveToListeningAnswer(result)
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('listening-answer')
+    })
+
+    act(() => {
+      result.current.dispatch({
+        type: 'REDO_METRIC',
+        text: 'Sure — one more time. How is your pain today?',
+      })
+    })
+
+    expect(result.current.state.kind).toBe('speaking-question')
+    if (result.current.state.kind === 'speaking-question') {
+      expect(result.current.state.metric).toBe('pain')
+      expect(result.current.state.text).toBe(
+        'Sure — one more time. How is your pain today?',
+      )
+    }
+    expect(provider.abort).toHaveBeenCalledTimes(1)
+    expect(provider.stop).not.toHaveBeenCalled()
+  })
+
+  it('a VOICE_ERROR emitted by abort() after the transition does not dead-end the flow', async () => {
+    const provider = makeFakeProvider()
+    // Wire abort to synchronously emit an aborted error through the
+    // captured onError listener — matching SarvamAdapter behaviour.
+    let errorCb: ((err: VoiceError) => void) | null = null
+    ;(provider.onError as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      (cb: (err: VoiceError) => void) => {
+        errorCb = cb
+      },
+    )
+    ;(provider.abort as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      () => {
+        errorCb?.({ kind: 'aborted', message: 'aborted by caller' })
+      },
+    )
+    const { result } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined)),
+    )
+    driveToListeningAnswer(result)
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('listening-answer')
+    })
+
+    act(() => {
+      result.current.dispatch({ type: 'BAIL_TO_TAPS' })
+    })
+
+    // The late VOICE_ERROR landed in stage-2, which ignores it — the
+    // user keeps the tap form, not a dead-end error screen.
+    expect(result.current.state.kind).toBe('stage-2')
+  })
+
+  it('BAIL_TO_TAPS with a stop() already in flight skips abort (turn is ending anyway)', async () => {
+    const provider = makeFakeProvider()
+    // Pin stop() in-flight so the stop-initiated guard is set.
+    let resolveStop!: (t: Transcript) => void
+    ;(provider.stop as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      () =>
+        new Promise<Transcript>((resolve) => {
+          resolveStop = resolve
+        }),
+    )
+    const { result } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined)),
+    )
+    driveToListeningAnswer(result)
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('listening-answer')
+    })
+
+    // User taps stop → stop() in flight.
+    act(() => {
+      result.current.dispatch({ type: 'TAP_ORB' })
+    })
+    expect(provider.stop).toHaveBeenCalledTimes(1)
+
+    // Bail while the stop is still resolving — abort must be skipped.
+    act(() => {
+      result.current.dispatch({ type: 'BAIL_TO_TAPS' })
+    })
+    expect(result.current.state.kind).toBe('stage-2')
+    expect(provider.abort).not.toHaveBeenCalled()
+
+    // Late PROVIDER_STOPPED lands in stage-2 and is ignored.
+    act(() => {
+      resolveStop({ text: 'late transcript', durationMs: 1 } as Transcript)
+    })
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('stage-2')
+    })
+  })
+
+  it('BAIL_TO_TAPS from non-listening states does not abort (nothing capturing)', async () => {
+    const provider = makeFakeProvider()
+    const { result } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined)),
+    )
+    // speaking-opener: TTS is playing but the mic is not armed.
+    act(() => {
+      result.current.dispatch({ type: 'TAP_ORB' })
+    })
+    act(() => {
+      result.current.dispatch({
+        type: 'PERMISSION_GRANTED',
+        opener: { text: 'Hey.', variantKey: 'first-ever' },
+      })
+    })
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('speaking-opener')
+    })
+    act(() => {
+      result.current.dispatch({ type: 'BAIL_TO_TAPS' })
+    })
+    expect(result.current.state.kind).toBe('stage-2')
+    expect(provider.abort).not.toHaveBeenCalled()
+  })
+
+  it('unmount aborts a live capture (route-change mic release)', async () => {
+    const provider = makeFakeProvider()
+    provider.setStarted(true)
+    const { result, unmount } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined)),
+    )
+    driveToListeningAnswer(result)
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('listening-answer')
+    })
+
+    unmount()
+    expect(provider.abort).toHaveBeenCalled()
+  })
+
+  it('unmount does NOT abort when the adapter reports not-started', () => {
+    const provider = makeFakeProvider()
+    provider.setStarted(false)
+    const { unmount } = renderHook(() =>
+      useCheckinMachine(provider, vi.fn().mockResolvedValue(undefined)),
+    )
+    unmount()
+    expect(provider.abort).not.toHaveBeenCalled()
   })
 })

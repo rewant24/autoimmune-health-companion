@@ -82,6 +82,7 @@ import { Day1Tutorial } from '@/components/check-in/Day1Tutorial'
 import { MilestoneCelebration } from '@/components/check-in/MilestoneCelebration'
 import { SwitchToTapsButton } from '@/components/check-in/SwitchToTapsButton'
 import { StopButton } from '@/components/check-in/StopButton'
+import { RedoMetricButton } from '@/components/check-in/RedoMetricButton'
 import { selectOpener } from '@/lib/saha/opener-engine'
 import { selectCloser } from '@/lib/saha/closer-engine'
 import { readProfile } from '@/lib/profile/storage'
@@ -94,6 +95,10 @@ import {
   selectAcknowledgement,
   selectFreeformAcknowledgement,
 } from '@/lib/saha/ack-engine'
+import {
+  selectRecoveryNarration,
+  selectRedoAcknowledgement,
+} from '@/lib/saha/recovery-engine'
 import { detectDecline } from '@/lib/saha/decline-detector'
 import { extractMetrics } from '@/lib/checkin/extract-metrics'
 import {
@@ -984,10 +989,30 @@ export default function CheckinPage({
         })
       } catch (err) {
         if (runId !== extractionRunIdRef.current) return
-        // Both error classes fall through to a fully-scripted Stage 2 so
-        // the user can still complete the check-in — but the failure kind
-        // drives honest copy there (daily cap ≠ generic hiccup).
-        setExtractFailureKind(classifyExtractError(err))
+        const failure = classifyExtractError(err)
+        // The failure kind drives honest Stage-2 copy either way
+        // (daily cap ≠ generic hiccup).
+        setExtractFailureKind(failure)
+        // Voice Pattern B (2026-07-12): in voice mode, narrate the
+        // failure in the same channel the conversation was happening in.
+        //  - transient → `recovering` choice state ("ask one at a time,
+        //    or switch to taps?") with an all-5-missing seed.
+        //  - daily-cap / rate-limited → voice-continue would fail
+        //    identically, so speak the bail narration (best-effort) over
+        //    the scripted Stage 2 the EXTRACTION_FAILED route renders.
+        if (ttsAvailable) {
+          const narration = selectRecoveryNarration(failure)
+          if (narration.offersContinue) {
+            dispatch({
+              type: 'EXTRACT_RECOVERY',
+              failure,
+              text: narration.text,
+              seed: { metrics: {}, missing: coverage({}).missing, declined: [] },
+            })
+            return
+          }
+          void tts.speak(narration.text).catch(() => {})
+        }
         dispatch({ type: 'EXTRACTION_FAILED' })
       }
     })()
@@ -997,6 +1022,7 @@ export default function CheckinPage({
     userId,
     todayIso,
     ttsAvailable,
+    tts,
     continuityState,
     existingTodayRow,
   ])
@@ -1136,14 +1162,32 @@ export default function CheckinPage({
         // Extraction *failed* — this is our failure, not the user's
         // answer. It must never fall through to the re-ask/decline path:
         // that used to save metrics as "declined" after two failures,
-        // and a daily-cap 429 fails every subsequent call. Bail to taps
-        // (captured metrics carry over; the rest stay missing, not
-        // declined) — or re-ask once for a transient blip.
+        // and a daily-cap 429 fails every subsequent call. Transient
+        // blips get one silent re-ask; at the bail threshold, voice
+        // Pattern B (2026-07-12) narrates the failure out loud instead
+        // of a silent carry to taps:
+        //  - transient → `recovering` choice state (captured metrics
+        //    ride the carried payload either way).
+        //  - daily-cap / rate-limited → speak the bail narration
+        //    (best-effort), then BAIL_TO_TAPS — voice-continue would
+        //    burn a failing extract call per turn.
         answerExtractFailureCountRef.current += 1
         if (
           shouldBailAnswerLoop(failure, answerExtractFailureCountRef.current)
         ) {
           setExtractFailureKind(failure)
+          if (ttsAvailable) {
+            const narration = selectRecoveryNarration(failure)
+            if (narration.offersContinue) {
+              dispatch({
+                type: 'EXTRACT_RECOVERY',
+                failure,
+                text: narration.text,
+              })
+              return
+            }
+            void tts.speak(narration.text).catch(() => {})
+          }
           dispatch({ type: 'BAIL_TO_TAPS' })
           return
         }
@@ -1242,6 +1286,7 @@ export default function CheckinPage({
     userId,
     todayIso,
     tts,
+    ttsAvailable,
     dispatch,
     continuityState,
   ])
@@ -1275,6 +1320,24 @@ export default function CheckinPage({
     continuityState,
     dispatch,
   ])
+
+  // 3f. Recovering narration TTS (voice Pattern B, 2026-07-12). On
+  //     `recovering` entry, speak the locked narration line once —
+  //     best-effort (the same text is captioned on the choice screen, so
+  //     a TTS failure degrades to read-only, matching the opener
+  //     convention). No dispatch on resolve: the state waits for the
+  //     user's explicit choice (continue / switch to taps). The text is
+  //     hoisted to a plain variable so the dependency array is fully
+  //     static (unlike the older 3a–3c effects' inline ternaries).
+  const recoveringNarration =
+    state.kind === 'recovering' ? state.text : null
+  useEffect(() => {
+    if (recoveringNarration === null) return
+    void tts.speak(recoveringNarration).catch(() => {})
+    return () => {
+      tts.cancel()
+    }
+  }, [recoveringNarration, tts])
 
   // 4. On save success: detect milestone first (chunk 2.F). When the
   //    save completes a streak day worth celebrating (or it was the
@@ -1551,6 +1614,77 @@ export default function CheckinPage({
     )
   }
 
+  // Voice Pattern B (2026-07-12): recovering choice screen. The locked
+  // narration is captioned (it is also being spoken by effect 3f) with
+  // the explicit choice below it: continue the per-metric voice loop or
+  // switch to taps. Captured metrics survive either choice — they ride
+  // the reducer's carried payload.
+  if (state.kind === 'recovering') {
+    const recoveringState = state
+    const onRecoveryContinue = (): void => {
+      tts.cancel()
+      const next = recoveringState.missing[0]
+      if (next === undefined) {
+        // Defensive: nothing left to ask — the tap form recap is the
+        // only sensible surface.
+        dispatch({ type: 'BAIL_TO_TAPS' })
+        return
+      }
+      // Fresh transient allowance for the retried loop; the Stage-2
+      // failure notice no longer applies unless a new failure sets it.
+      answerExtractFailureCountRef.current = 0
+      setExtractFailureKind(null)
+      const q = selectFollowUpQuestion(next, 1, continuityState)
+      dispatch({ type: 'ASK_QUESTION', metric: next, text: q.text })
+    }
+    return (
+      <ScreenShell>
+        <div
+          data-testid="recovery-choice"
+          className="flex flex-col items-center gap-6"
+        >
+          <p className="text-center text-base text-ink">
+            {recoveringState.text}
+          </p>
+          <div className="flex flex-col items-center gap-3">
+            <button
+              type="button"
+              data-testid="recovery-continue"
+              onClick={onRecoveryContinue}
+              className={
+                'inline-flex min-h-11 items-center justify-center ' +
+                'rounded-full bg-sage-deep px-6 py-2 text-sm font-medium ' +
+                'text-bg-elevated shadow-md hover:bg-sage ' +
+                'focus-visible:outline-none focus-visible:ring-2 ' +
+                'focus-visible:ring-sage focus-visible:ring-offset-2'
+              }
+            >
+              Ask me one at a time
+            </button>
+            <button
+              type="button"
+              data-testid="recovery-switch-to-taps"
+              onClick={() => {
+                tts.cancel()
+                dispatch({ type: 'BAIL_TO_TAPS' })
+              }}
+              className={
+                'inline-flex min-h-11 items-center justify-center ' +
+                'rounded-full border border-rule bg-bg-elevated/95 px-5 ' +
+                'py-2 text-sm font-medium text-ink-muted shadow-md ' +
+                'backdrop-blur hover:bg-sage-soft ' +
+                'focus-visible:outline-none focus-visible:ring-2 ' +
+                'focus-visible:ring-sage focus-visible:ring-offset-2'
+              }
+            >
+              Switch to taps
+            </button>
+          </div>
+        </div>
+      </ScreenShell>
+    )
+  }
+
   // Render ConfirmSummary for `confirming`, `saving`, AND `speaking-closer`
   // (voice-mode closer playback happens on the confirm screen — UI stays
   // visible while TTS plays). `saved` is handled by the router push above;
@@ -1682,6 +1816,24 @@ export default function CheckinPage({
         // automatically after trailing silence; this button is the
         // deterministic fallback for noisy environments.
         <StopButton onStop={() => dispatch({ type: 'TAP_ORB' })} />
+      ) : null}
+
+      {state.kind === 'listening-answer' ? (
+        // Voice Pattern D (2026-07-12): "ask that again" — re-asks the
+        // CURRENT metric without losing prior captures. The hook
+        // intercepts REDO_METRIC and aborts the armed provider so the
+        // re-ask turn re-arms cleanly. Redo-ack + attempt-1 question ride
+        // one TTS call (same zero-extra-POST trick as Pattern A acks).
+        <RedoMetricButton
+          onRedo={() => {
+            const q = selectFollowUpQuestion(state.metric, 1, continuityState)
+            const redo = selectRedoAcknowledgement()
+            dispatch({
+              type: 'REDO_METRIC',
+              text: `${redo.text} ${q.text}`,
+            })
+          }}
+        />
       ) : null}
 
       {showBailButton ? (
