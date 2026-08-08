@@ -2,7 +2,7 @@
 number: 02
 name: Memory
 slug: memory
-status: chunked
+status: shipped
 depends_on: [01-daily-checkin]
 blocks: [06-doctor-report, 08-journey]
 owner: rewant

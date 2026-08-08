@@ -15,11 +15,11 @@ Shows what depends on what, and which features are parallel-safe. Arrows flow fr
 
 ```mermaid
 graph TD
-    F01[01 Daily Check-in<br/>voice + 5 metrics<br/>C1 shipped · C2 in-flight]:::shipped
+    F01[01 Daily Check-in<br/>voice + 5 metrics<br/>shipped incl. voice C1 + quick-wins]:::shipped
     F02[02 Memory<br/>30d scroll + filters<br/>C1 shipped]:::shipped
     F03[03 Patterns<br/>14d+ chart]
-    F04[04 Medications<br/>regimen + adherence]
-    F05[05 Doctor Visits<br/>events + bloods]
+    F04[04 Medications<br/>regimen + adherence<br/>C1 shipped]:::shipped
+    F05[05 Doctor Visits<br/>events + bloods<br/>C1 shipped]:::shipped
     F06[06 Doctor Report<br/>hybrid PDF]
     F07[07 Prep-for-Visit<br/>checklists + Qs]
     F08[08 Journey<br/>aggregation]
