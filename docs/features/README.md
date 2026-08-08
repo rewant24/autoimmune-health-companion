@@ -29,7 +29,7 @@
 | 03 | Patterns | [`03-patterns.md`](03-patterns.md) | scoped | 01 (≥14d data) | 05, 06 |
 | 04 | Medications | [`04-medications.md`](04-medications.md) | scoped | 01 | 05 |
 | 05 | Doctor Visits & Blood Work | [`05-doctor-visits.md`](05-doctor-visits.md) | scoped | 01 | 06, 08 |
-| 06 | Doctor Report (Hybrid PDF) | [`06-doctor-report.md`](06-doctor-report.md) | scoped | 01, 02, 03, 04, 05 | 08 |
+| 06 | Doctor Report (Hybrid PDF) | [`06-doctor-report.md`](06-doctor-report.md) | chunked | 01, 02, 03 (soft — fork-proofed), 04, 05 | 07, 08 |
 | 07 | Prepare-for-Visit | [`07-prepare-for-visit.md`](07-prepare-for-visit.md) | scoped | 05, 06 | — |
 | 08 | Journey | [`08-journey.md`](08-journey.md) | scoped | 02, 03, 05, 06 | — |
 | 09 | Community | [`09-community.md`](09-community.md) | scoped | — | — |
