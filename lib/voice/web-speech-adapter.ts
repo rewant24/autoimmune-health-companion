@@ -192,6 +192,38 @@ export class WebSpeechAdapter implements VoiceProvider {
     })
   }
 
+  /**
+   * Hard-cancel the current recognition session without producing a
+   * transcript (VoiceProvider.abort contract, Pattern B+D 2026-07-12).
+   * Detaches handlers first so the native `onend` fired by
+   * `recognition.abort()` can't resolve a discarded turn, rejects any
+   * pending stop() so awaiters don't hang, and clears turn state so a
+   * fresh start() re-arms cleanly. No-op when nothing is capturing.
+   */
+  abort(reason?: string): void {
+    const recognition = this.recognition
+    if (recognition === null) return
+    this.recognition = null
+    recognition.onresult = null
+    recognition.onerror = null
+    recognition.onend = null
+    try {
+      recognition.abort()
+    } catch {
+      // Some implementations throw if already stopped — the turn is
+      // discarded either way.
+    }
+    if (this.stopPromise) {
+      this.stopPromise.reject({
+        kind: 'aborted',
+        message: reason ?? 'WebSpeechAdapter: aborted by caller',
+      })
+      this.stopPromise = null
+    }
+    this.finalText = ''
+    this.lastConfidence = undefined
+  }
+
   // --- Internal event handlers --------------------------------------------
 
   private handleResult(ev: SpeechRecognitionEventLike): void {

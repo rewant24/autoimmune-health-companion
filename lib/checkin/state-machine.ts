@@ -28,6 +28,7 @@
 import { useEffect, useLayoutEffect, useReducer, useRef } from 'react'
 import { voiceLog } from '@/lib/voice/log'
 import type { Transcript, VoiceError, VoiceProvider } from '@/lib/voice/types'
+import type { ExtractFailureKind } from './extract-failure'
 import type {
   CheckinMetrics,
   Metric,
@@ -153,6 +154,23 @@ export type State =
       declined: Metric[]
       transcript: Transcript
     }
+  // Voice Pattern B (2026-07-12) — graceful-failure recovery. Entered via
+  // EXTRACT_RECOVERY when a TRANSIENT extract failure knocks the user out
+  // of the voice loop. The page speaks `text` (the locked Pattern B
+  // narration) and renders the explicit choice: continue with per-metric
+  // questions (ASK_QUESTION → speaking-question) or switch to taps
+  // (BAIL_TO_TAPS → stage-2). Terminal failures (daily-cap /
+  // rate-limited) never enter this state — voice-continue would fail
+  // identically, so the page narrates and bails directly.
+  | {
+      kind: 'recovering'
+      failure: ExtractFailureKind
+      text: string
+      metrics: Partial<CheckinMetrics>
+      missing: Metric[]
+      declined: Metric[]
+      transcript: Transcript
+    }
   // `speaking-closer`: TTS plays the closer line before save commits.
   // Wave 2 bridges this to `saving` on `CLOSER_PLAYED`.
   | {
@@ -254,6 +272,26 @@ export type Event =
       declined: boolean
     }
   | { type: 'BAIL_TO_TAPS' }
+  // Voice Pattern B (2026-07-12) — routes a transient extract failure
+  // into the `recovering` choice state instead of a silent bail. Like
+  // ASK_QUESTION, the `seed` is required when dispatched from
+  // `extracting` (the reducer has no loop payload to inherit there) and
+  // omitted from `extracting-answer` (carried payload is used).
+  | {
+      type: 'EXTRACT_RECOVERY'
+      failure: ExtractFailureKind
+      text: string
+      seed?: {
+        metrics: Partial<CheckinMetrics>
+        missing: Metric[]
+        declined: Metric[]
+      }
+    }
+  // Voice Pattern D (2026-07-12) — re-ask the CURRENT metric without
+  // losing prior captures. `text` is the redo-ack + attempt-1 question
+  // line the page composed from the locked catalogs. The hook intercepts
+  // this event to `abort()` the armed provider before the re-ask turn.
+  | { type: 'REDO_METRIC'; text: string }
   | { type: 'CLOSER_PLAYED' }
   // F04 chunk 4.C — voice medication extraction signals. Pre-flight-style
   // additive seam: the events ride alongside the existing union but the
@@ -442,6 +480,19 @@ export function reducer(state: State, event: Event): State {
           transcript: state.transcript,
         }
       }
+      // Voice Pattern B: the page routes a transient freeform-extract
+      // failure here (seed required — this state carries no loop payload).
+      if (event.type === 'EXTRACT_RECOVERY' && event.seed) {
+        return {
+          kind: 'recovering',
+          failure: event.failure,
+          text: event.text,
+          metrics: event.seed.metrics,
+          missing: event.seed.missing,
+          declined: event.seed.declined,
+          transcript: state.transcript,
+        }
+      }
       if (event.type === 'BAIL_TO_TAPS') {
         return emptyStage2(state.transcript)
       }
@@ -613,6 +664,20 @@ export function reducer(state: State, event: Event): State {
       if (event.type === 'BAIL_TO_TAPS') {
         return carryToStage2(state)
       }
+      // Voice Pattern D: "ask that again" during the answer turn — the
+      // hook aborts the armed provider; the reducer re-enters
+      // speaking-question for the SAME metric with the redo-ack text.
+      if (event.type === 'REDO_METRIC') {
+        return {
+          kind: 'speaking-question',
+          metric: state.metric,
+          text: event.text,
+          metrics: state.metrics,
+          missing: state.missing,
+          declined: state.declined,
+          transcript: state.transcript,
+        }
+      }
       if (event.type === 'VOICE_ERROR') {
         return { kind: 'error', error: event.error }
       }
@@ -683,6 +748,56 @@ export function reducer(state: State, event: Event): State {
           transcript: state.transcript,
         }
       }
+      // Voice Pattern B: the answer-loop extract failed transiently at
+      // the bail threshold — enter the recovery choice with the loop's
+      // carried payload (captured metrics survive either choice).
+      if (event.type === 'EXTRACT_RECOVERY') {
+        return {
+          kind: 'recovering',
+          failure: event.failure,
+          text: event.text,
+          metrics: state.metrics,
+          missing: state.missing,
+          declined: state.declined,
+          transcript: state.transcript,
+        }
+      }
+      // Voice Pattern D: redo arriving while the answer extract is
+      // in-flight — same transition as from listening-answer; the page's
+      // run-id token discards the superseded extract result.
+      if (event.type === 'REDO_METRIC') {
+        return {
+          kind: 'speaking-question',
+          metric: state.metric,
+          text: event.text,
+          metrics: state.metrics,
+          missing: state.missing,
+          declined: state.declined,
+          transcript: state.transcript,
+        }
+      }
+      if (event.type === 'BAIL_TO_TAPS') {
+        return carryToStage2(state)
+      }
+      return state
+    }
+    case 'recovering': {
+      // Voice Pattern B choice state. "Ask me one at a time" — the page
+      // dispatches ASK_QUESTION with the next missing metric; carried
+      // payload is used (seed ignored, same convention as
+      // extracting-answer). "Switch to taps" — BAIL_TO_TAPS carries the
+      // loop payload into Stage 2.
+      if (event.type === 'ASK_QUESTION') {
+        return {
+          kind: 'speaking-question',
+          metric: event.metric,
+          text: event.text,
+          metrics: state.metrics,
+          missing: state.missing,
+          declined: state.declined,
+          transcript: state.transcript,
+        }
+      }
       if (event.type === 'BAIL_TO_TAPS') {
         return carryToStage2(state)
       }
@@ -743,6 +858,7 @@ export function toOrbState(state: State): OrbVisualState {
     case 'speaking-opener':
     case 'speaking-question':
     case 'extracting-answer':
+    case 'recovering':
     case 'speaking-closer':
       return 'processing'
     case 'error':
@@ -976,8 +1092,67 @@ export function useCheckinMachine(
     }
   }, [state.kind])
 
+  // Voice Pattern B+D mic-abort fix (2026-07-12): route change / page
+  // unmount must never leave the mic hot. If the provider is mid-capture
+  // when the hook unmounts (user navigated away from /check-in during a
+  // listening turn), hard-cancel it — abort() releases the tracks and
+  // resets the adapter so nothing records into the void.
+  useEffect(() => {
+    return () => {
+      const adapter = providerRef.current
+      if (typeof adapter.abort !== 'function') return
+      if (typeof adapter.isStarted === 'function' && !adapter.isStarted()) {
+        return
+      }
+      adapter.abort('useCheckinMachine unmounted')
+    }
+  }, [])
+
+  /**
+   * Hard-cancel the provider for an intent that discards the current
+   * capture turn (BAIL_TO_TAPS, REDO_METRIC). Skips cleanly when a
+   * stop() is already in flight (the turn is ending anyway — its late
+   * PROVIDER_STOPPED lands in a state that ignores it) or when the
+   * adapter isn't capturing.
+   */
+  const abortActiveCapture = (reason: string): void => {
+    if (stopInitiatedRef.current) return
+    const adapter = providerRef.current
+    if (typeof adapter.abort !== 'function') return
+    if (typeof adapter.isStarted === 'function' && !adapter.isStarted()) {
+      voiceLog('guard', {
+        event: 'abort_skipped_not_started',
+        source: 'useCheckinMachine',
+      })
+      return
+    }
+    adapter.abort(reason)
+  }
+
   const wrappedDispatch = (event: Event): void => {
     const current = stateRef.current
+
+    // Voice Pattern B+D mic-abort fix (2026-07-12): bailing out of (or
+    // redoing) a live listening turn must hard-cancel the capture — the
+    // old path only cancelled TTS, leaving the mic hot behind the Stage 2
+    // tap form. Dispatch FIRST so the reducer leaves the listening state
+    // before abort()'s error emission can dispatch VOICE_ERROR — the
+    // post-transition state ignores it (stage-2 / speaking-question have
+    // no VOICE_ERROR case), whereas listening-answer would route to a
+    // dead-end error screen.
+    if (event.type === 'BAIL_TO_TAPS' || event.type === 'REDO_METRIC') {
+      const wasListening =
+        current.kind === 'listening' || current.kind === 'listening-answer'
+      dispatch(event)
+      if (wasListening) {
+        abortActiveCapture(
+          event.type === 'REDO_METRIC'
+            ? 'redo metric — discarding capture turn'
+            : 'bail to taps — discarding capture turn',
+        )
+      }
+      return
+    }
 
     // Intent interception for TAP_ORB — fire side effects, then dispatch.
     if (event.type === 'TAP_ORB') {
@@ -1130,14 +1305,16 @@ function emptyStage2(transcript?: Transcript): Extract<State, { kind: 'stage-2' 
 
 /**
  * Construct the `stage-2` state from a voice loop's running payload. Used
- * when the user bails from `speaking-question`, `listening-answer`, or
- * `extracting-answer` — Stage 2 picks up exactly where the loop left off.
+ * when the user bails from `speaking-question`, `listening-answer`,
+ * `extracting-answer`, or `recovering` — Stage 2 picks up exactly where
+ * the loop left off.
  */
 function carryToStage2(
   state:
     | Extract<State, { kind: 'speaking-question' }>
     | Extract<State, { kind: 'listening-answer' }>
-    | Extract<State, { kind: 'extracting-answer' }>,
+    | Extract<State, { kind: 'extracting-answer' }>
+    | Extract<State, { kind: 'recovering' }>,
 ): Extract<State, { kind: 'stage-2' }> {
   return {
     kind: 'stage-2',

@@ -86,6 +86,20 @@ export interface VoiceProvider {
    * holds its own `recognition` handle internally).
    */
   isStarted?(): boolean
+  /**
+   * Optional. Hard-cancel the current capture turn WITHOUT producing a
+   * transcript: stop the recorder, release mic tracks, cancel any
+   * in-flight upload, and reset turn state so a fresh `start()` can
+   * re-arm. Unlike `stop()` (which finalises the turn and resolves a
+   * transcript), `abort()` discards it. Safe to call from any state —
+   * a no-op when nothing is capturing.
+   *
+   * Callers (voice Pattern B+D, 2026-07-12): the check-in hook aborts on
+   * BAIL_TO_TAPS / REDO_METRIC from a listening turn and on unmount
+   * (route change), so the mic can never stay hot after the user leaves
+   * the voice loop.
+   */
+  abort?(reason?: string): void
   capabilities: VoiceCapabilities
 }
 
