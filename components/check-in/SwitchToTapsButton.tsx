@@ -13,7 +13,10 @@
  *     bottom-[calc(5rem+env(safe-area-inset-bottom))] z-50` so it sits
  *     above the BottomNav (`z-40`, ~64px tall + safe area). Pre-fix-B
  *     versions used `sticky bottom-4 z-10`, which left the button
- *     hidden under the BottomNav on every voice-c1 smoke.
+ *     hidden under the BottomNav on every voice-c1 smoke. This button
+ *     owns the bottom slot; when StopButton mounts alongside it
+ *     (`listening-answer`) the page renders StopButton `stacked` one
+ *     slot higher so the two never overlap (housekeeping #17).
  *   - On click, calls the supplied `onBail` handler. The page is
  *     responsible for cancelling in-flight TTS + STT and dispatching
  *     `{ type: 'BAIL_TO_TAPS' }` to the state machine.

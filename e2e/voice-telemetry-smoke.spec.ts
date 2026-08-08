@@ -429,13 +429,14 @@ async function enterListening(page: Page): Promise<void> {
  * orb tap has the same TAP_ORB → provider.stop() intent as the
  * "Tap when done" button.
  *
- * Why the orb and not `stop-button`: in `listening-answer` the
- * SwitchToTapsButton overlay and the StopButton are BOTH
- * `fixed inset-x-0 [bottom:calc(5rem+env(safe-area-inset-bottom))] z-50`,
- * so "Switch to taps" fully covers "Tap when done" and intercepts its
- * pointer events (real product finding, documented in the A2 PR — not
- * fixed here). The silence VAD may also beat the tap — the catch
- * tolerates that race; either path drives `SarvamAdapter.stop()`.
+ * Why the orb and not `stop-button`: historically, in `listening-answer`
+ * the SwitchToTapsButton overlay fully covered the StopButton (both at
+ * the same fixed offset + z-50) and intercepted its pointer events
+ * (real product finding, documented in the A2 PR; since fixed as
+ * housekeeping #17 — StopButton now renders `stacked` one slot higher).
+ * The orb tap is kept because it exercises the same TAP_ORB path and
+ * stays valid either way. The silence VAD may also beat the tap — the
+ * catch tolerates that race; either path drives `SarvamAdapter.stop()`.
  */
 async function completeListeningTurn(page: Page): Promise<void> {
   const stop = page.getByTestId('stop-button')
